@@ -16,7 +16,7 @@ export class BattleScene extends Phaser.Scene {
 
   create() {
     this.bus = this.registry.get('bus');
-    const { foe, r, equip } = this.payload;
+    const { foe, r, equip, look } = this.payload;
     this.r = r;
 
     const g = this.add.graphics();
@@ -26,7 +26,7 @@ export class BattleScene extends Phaser.Scene {
     for (let x = 0; x < W; x += 16) g.fillRect(x, GROUND, 8, 2);
 
     this.hero = new Hero(this, 96, HERO_Y, HERO_SCALE);
-    this.hero.setEquip(equip);
+    this.hero.setLook(equip, look);
     this.heroX = this.hero.box.x;
     this.tweens.add({ targets: this.hero.box, y: '-=2', duration: 600, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
 

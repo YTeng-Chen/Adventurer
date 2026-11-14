@@ -172,3 +172,15 @@ test('魔物狩獵：擊敗頭目解鎖下一張地圖，消耗狩獵券', () =>
   W.refreshTickets(s, NOW + W.HUNT_REFILL_MS);
   assert.equal(s.hunt.tickets, 1);
 });
+
+test('新遊戲還沒有外觀，舊存檔也會補上空的外觀欄位（第一次進遊戲時讓玩家選）', async () => {
+  const { save } = await import('../src/core/save.js');
+  const s = W.newGame(NOW, 1);
+  assert.equal(s.appearance, null);
+  const old = JSON.parse(JSON.stringify(s));
+  delete old.appearance;
+  const migrated = save.migrate(old, NOW);
+  assert.equal(migrated.appearance, null);
+  migrated.appearance = { gender: '女', style: '高馬尾', color: '粉紅' };
+  assert.deepEqual(save.migrate(JSON.parse(JSON.stringify(migrated)), NOW).appearance, { gender: '女', style: '高馬尾', color: '粉紅' });
+});

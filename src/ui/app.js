@@ -65,7 +65,8 @@ export function startUI(bus) {
     const st = h.stats;
     const mechs = h.cls.mechs.map(([t, f]) => `<li>${esc(S.mechText(t, f))}</li>`).join('');
     $('#heroInfo').innerHTML = `
-      <div><p class="cls-name">${esc(h.cls.name)}<span class="cls-kind">${esc(h.cls.kind)}</span></p>
+      <div><div class="row spread"><p class="cls-name">${esc(h.cls.name)}<span class="cls-kind">${esc(h.cls.kind)}</span></p>
+        <button class="btn ghost small" data-act="look">更換外觀</button></div>
         <ul class="mechs">${mechs || '<li>武器、頭飾、上衣、鞋子中有 2 件同流派，就會有職業</li>'}</ul></div>
       <div class="power"><span class="hud-label">戰力</span><span class="num">${fmt(S.power(st))}</span></div>
       <dl class="stats">${D.STATS.map((x) => `<div><dt>${x.n}</dt><dd class="num">${fmtV(x.k, st[x.k])}</dd></div>`).join('')}</dl>`;
@@ -347,7 +348,7 @@ export function startUI(bus) {
     $('#stageWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
     renderAll();
     // 戰鬥畫面交給 Phaser；沒有人接（例如畫面還沒準備好）就直接顯示結果
-    if (!bus.emit('battle:start', { foe, r, equip: { ...s.equip } })) endBattle();
+    if (!bus.emit('battle:start', { foe, r, equip: { ...s.equip }, look: s.appearance })) endBattle();
   }
   function battleLine({ line }) {
     if (!battle || battle.done) return;
@@ -400,6 +401,56 @@ export function startUI(bus) {
       <ul class="sum-list">${rows.map(([a, b]) => `<li><span>${a}</span><span>${b}</span></li>`).join('')}</ul>${itemHtml}${notes}
       <div class="row"><button class="btn" data-act="modal-close">收下</button>${items.length ? '<button class="btn ghost" data-act="modal-gear">去看裝備</button>' : ''}</div></div>`;
   }
+  // ---------- 外觀（角色建立） ----------
+  let lookDraft = null, lookFirst = false, pendingSummary = null;
+  function drawLook(cv, look, equip, scale) {
+    const g = SP.heroGrid(equip || {}, look);
+    const ctx = setupCanvas(cv, SP.HERO_W * scale, SP.HERO_H * scale);
+    SP.draw(ctx, g, 0, 0, scale);
+  }
+  function openLook(first) {
+    lookFirst = first;
+    lookDraft = SP.normalizeLook(s.appearance);
+    renderLook();
+  }
+  function renderLook() {
+    const d = lookDraft, m = $('#modal');
+    m.hidden = false;
+    const colors = Object.entries(SP.HAIR_COLORS).map(([k, v]) => `<button type="button" class="swatch" data-act="look-c" data-k="${k}" aria-pressed="${d.color === k}"><i style="background:${v[1]}"></i>${k}</button>`).join('');
+    const styles = SP.GENDER_STYLES[d.gender].map((st) => `<button type="button" class="style-card" data-act="look-s" data-k="${st}" aria-pressed="${d.style === st}"><canvas data-style="${st}"></canvas><span>${st}</span></button>`).join('');
+    m.innerHTML = `<div class="modal-card look-card" role="dialog" aria-modal="true" aria-labelledby="lookTitle">
+      <h2 id="lookTitle">${lookFirst ? '建立你的冒險者' : '更換外觀'}</h2>
+      ${lookFirst ? '<p class="hint">選性別、髮型和髮色，之後可以在角色面板的「更換外觀」修改。</p>' : ''}
+      <div class="look-grid">
+        <div class="look-preview"><canvas id="lookBig" aria-label="角色預覽"></canvas>
+          ${Object.values(s.equip).some(Boolean) ? '<div class="look-small"><canvas id="lookGear" aria-label="穿上目前裝備的樣子"></canvas><span class="hint">穿上裝備</span></div>' : ''}</div>
+        <div class="look-options">
+          <span class="mini-h">性別</span>
+          <div class="row">${['男', '女'].map((k) => `<button type="button" class="btn ghost small" data-act="look-g" data-k="${k}" aria-pressed="${d.gender === k}">${k === '男' ? '男生' : '女生'}</button>`).join('')}</div>
+          <span class="mini-h">髮型</span><div class="style-cards">${styles}</div>
+          <span class="mini-h">髮色</span><div class="row swatches">${colors}</div>
+        </div>
+      </div>
+      <div class="row"><button class="btn" data-act="look-ok">${lookFirst ? '開始冒險' : '儲存外觀'}</button>${lookFirst ? '' : '<button class="btn ghost" data-act="look-cancel">取消</button>'}</div></div>`;
+    drawLook($('#lookBig'), d, null, 4);
+    const gear = $('#lookGear');
+    if (gear) drawLook(gear, d, s.equip, 2);
+    m.querySelectorAll('canvas[data-style]').forEach((cv) => {
+      const g = SP.heroGrid({}, { ...d, style: cv.dataset.style }).slice(0, 34);
+      const ctx = setupCanvas(cv, SP.HERO_W * 2, 34 * 2);
+      SP.draw(ctx, g, 0, 0, 2);
+    });
+  }
+  function closeLook(saveIt) {
+    if (saveIt) { s.appearance = { ...lookDraft }; persist(); toast(lookFirst ? '冒險開始！' : '外觀已更新'); }
+    lookDraft = null;
+    const wasFirst = lookFirst;
+    lookFirst = false;
+    $('#modal').hidden = true; $('#modal').innerHTML = '';
+    renderAll();
+    if (wasFirst && pendingSummary) { const sum = pendingSummary; pendingSummary = null; showSummary(sum, '離線期間的收穫'); }
+  }
+
   function confirmBox(title, text, act, label) {
     const m = $('#modal');
     m.hidden = false;
@@ -423,7 +474,7 @@ export function startUI(bus) {
     const now = Date.now();
     const sum = W.catchUp(s, now);
     if (sum) {
-      if (sum.ticks > 3) showSummary(sum, '離線期間的收穫');
+      if (sum.ticks > 3) { if (lookDraft) pendingSummary = sum; else showSummary(sum, '離線期間的收穫'); }
       onTick(sum);
       persist();
     }
@@ -476,6 +527,12 @@ export function startUI(bus) {
       case 'b-skip': skipBattle(); return;
       case 'b-close': closeBattle(); return;
       case 'modal-close': $('#modal').hidden = true; $('#modal').innerHTML = ''; break;
+      case 'look': openLook(false); return;
+      case 'look-g': if (lookDraft.gender !== k) { lookDraft.gender = k; lookDraft.style = SP.GENDER_STYLES[k][0]; } renderLook(); return;
+      case 'look-s': lookDraft.style = k; renderLook(); return;
+      case 'look-c': lookDraft.color = k; renderLook(); return;
+      case 'look-ok': closeLook(true); return;
+      case 'look-cancel': closeLook(false); return;
       case 'modal-gear': $('#modal').hidden = true; $('#modal').innerHTML = ''; tab = 'gear'; break;
       case 'ff': {
         s.lastTick -= 3600e3;
@@ -485,7 +542,7 @@ export function startUI(bus) {
         break;
       }
       case 'reset-ask': confirmBox('重新開始？', '目前的角色、裝備和進度都會刪除，無法復原。', 'reset', '刪除並重新開始'); return;
-      case 'reset': store.clear(); s = W.newGame(Date.now()); T.ensure(s, Date.now()); $('#modal').hidden = true; toast('開始新的冒險'); break;
+      case 'reset': store.clear(); s = W.newGame(Date.now()); T.ensure(s, Date.now()); $('#modal').hidden = true; persist(); renderAll(); openLook(true); return;
       default: return;
     }
     persist();
@@ -509,6 +566,8 @@ export function startUI(bus) {
     });
     document.addEventListener('keydown', (e) => {
       if (e.key !== 'Escape') return;
+      if (lookFirst) return;
+      if (lookDraft) { closeLook(false); return; }
       if (!$('#modal').hidden) { $('#modal').hidden = true; return; }
       if (battle) battle.done ? closeBattle() : skipBattle();
     });
@@ -525,8 +584,11 @@ export function startUI(bus) {
     bind();
     const sum = W.catchUp(s, now);
     renderAll();
-    if (sum && sum.ticks > 3) showSummary(sum, '離線期間的收穫');
     if (sum) lastTickSum = sum;
+    if (!s.appearance) {
+      if (sum && sum.ticks > 3) pendingSummary = sum;
+      openLook(true);
+    } else if (sum && sum.ticks > 3) showSummary(sum, '離線期間的收穫');
     persist();
     setInterval(loop, 1000);
   }

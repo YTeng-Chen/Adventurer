@@ -34,17 +34,21 @@ function section(title) {
   const r = document.createElement('div'); r.className = 'row'; out.append(r); return r;
 }
 const set = (tag, tier, rarity) => Object.fromEntries(['weapon', 'head', 'body', 'feet'].map((k) => [k, { type: k, tag, tier, rarity }]));
+const LOOKS = [{ gender: '男', style: '中分', color: '栗棕' }, { gender: '女', style: '高馬尾', color: '粉紅' }];
 
-show(S.heroGrid({}), 4, '沒穿裝備', section('身體'));
-for (const tag of D.TAG_KEYS) {
-  const r1 = section(`${D.TAGS[tag].n}：稀有度（階級 3）`);
-  for (let r = 0; r < 5; r++) show(S.heroGrid(set(tag, 3, r)), 4, D.RARITY[r].n, r1);
-  const r2 = section(`${D.TAGS[tag].n}：材料階級（精良）`);
-  for (let t = 1; t <= 5; t++) show(S.heroGrid(set(tag, t, 1)), 3, 'T' + t, r2);
+const bodies = section('身體與髮型（沒穿裝備）');
+for (const [g, styles] of Object.entries(S.GENDER_STYLES)) for (const st of styles) show(S.heroGrid({}, { gender: g, style: st, color: g === '男' ? '栗棕' : '粉紅' }), 3, `${g}・${st}`, bodies);
+for (const look of LOOKS) {
+  for (const tag of D.TAG_KEYS) {
+    const r1 = section(`${look.gender}・${D.TAGS[tag].n}：稀有度（階級 3）`);
+    for (let r = 0; r < 5; r++) show(S.heroGrid(set(tag, 3, r), look), 3, D.RARITY[r].n, r1);
+  }
 }
+const tiers = section('材料階級（劍士、精良）');
+for (let t = 1; t <= 5; t++) show(S.heroGrid(set('blade', t, 1), LOOKS[0]), 3, 'T' + t, tiers);
 const mix = section('混搭');
-show(S.heroGrid({ weapon: { tag: 'blade', tier: 2, rarity: 3 }, head: { tag: 'arcane', tier: 2, rarity: 2 }, body: { tag: 'guard', tier: 3, rarity: 1 }, feet: { tag: 'blade', tier: 1, rarity: 0 } }), 4, '劍＋法帽＋板甲', mix);
-show(S.heroGrid({ weapon: { tag: 'arcane', tier: 4, rarity: 4 }, body: { tag: 'blade', tier: 4, rarity: 4 }, feet: { tag: 'guard', tier: 5, rarity: 2 } }), 4, '法杖＋皮甲', mix);
+show(S.heroGrid({ weapon: { tag: 'blade', tier: 2, rarity: 3 }, head: { tag: 'arcane', tier: 2, rarity: 2 }, body: { tag: 'guard', tier: 3, rarity: 1 }, feet: { tag: 'blade', tier: 1, rarity: 0 } }, LOOKS[1]), 4, '劍＋法帽＋板甲', mix);
+show(S.heroGrid({ weapon: { tag: 'arcane', tier: 4, rarity: 4 }, body: { tag: 'blade', tier: 4, rarity: 4 }, feet: { tag: 'guard', tier: 5, rarity: 2 } }, { gender: '女', style: '長直髮', color: '藍黑' }), 4, '法杖＋皮甲', mix);
 const icons = section('背包圖示');
 for (const type of ['weapon', 'head', 'body', 'feet']) for (const tag of D.TAG_KEYS) show(S.itemIconGrid({ type, tag, tier: 3, rarity: 3 }), 3, type + '/' + tag, icons);
 for (const n of ['戒指', '項鍊', '手鍊', '耳飾', '護符']) for (const r of [1, 4]) show(S.itemIconGrid({ type: 'acc', tag: null, tier: 3, rarity: r, name: n }), 3, n + D.RARITY[r].n, icons);

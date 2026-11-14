@@ -1,5 +1,6 @@
 # 髮型系統原型（需要 Pillow）：身體（男、女，不含頭髮）＋ 男女各 3 種髮型（前層、後層）。
-# 執行 python3 tools/art/hairstyles.py 會輸出比較圖 hairstyles.png 與資料 hairstyles.json。
+# 執行 python3 tools/art/hairstyles.py 會輸出比較圖 hairstyles.png 與資料 hairstyles.json；
+# 加上 --export 會輸出遊戲用的分層資料 src/art/chibi-data.js。
 import math, os, sys, json
 from PIL import Image, ImageDraw, ImageFont
 
@@ -396,6 +397,34 @@ def render(g, hair, S, img=None, ox=0, oy=0):
             if c != '.':
                 d.rectangle([ox + x * S, oy + y * S, ox + x * S + S - 1, oy + y * S + S - 1], fill=pal[c])
     return img
+
+def layer_grid(px):
+    """{(x,y): 色階} → 字母陣列，外面描一圈黑線（遊戲裡每個圖層各自有輪廓）"""
+    g = blank()
+    for (x, y), c in px.items():
+        g[y][x] = 'K' if c == 'X' else c
+    return outline(g, None)
+
+def export_layers(path):
+    """輸出給遊戲用的分層資料：身體（男、女，不含頭髮）、每種髮型的前層與後層"""
+    out = {
+        'W': W, 'H': H, 'OY': OY, 'pal': PAL, 'hairColors': HAIR_COLORS, 'genderStyles': GENDER_STYLES,
+        'bodies': {'男': [''.join(r) for r in outline(body(), None)], '女': [''.join(r) for r in outline(body_female(), None)]},
+        'hair': {},
+    }
+    for name, fn in STYLES:
+        back, front = fn()
+        out['hair'][name] = {'back': [''.join(r) for r in layer_grid(back)] if back else None,
+                             'front': [''.join(r) for r in layer_grid(front)]}
+    js = ("// 由 tools/art/hairstyles.py 產生（python3 tools/art/hairstyles.py --export）：手繪 Q 版角色的身體與髮型圖層。\n"
+          "// 每個字母是一種顏色（pal），'.' 透明；D/H/M/L 是頭髮四階，依髮色替換。\n"
+          "export const CHIBI = " + json.dumps(out, ensure_ascii=False) + ";\n")
+    open(path, 'w').write(js)
+
+if __name__ == '__main__' and '--export' in sys.argv:
+    export_layers(os.path.join(HERE, '..', '..', 'src', 'art', 'chibi-data.js'))
+    print('exported')
+    sys.exit(0)
 
 if __name__ == '__main__':
     font = ImageFont.truetype('/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc', 20)

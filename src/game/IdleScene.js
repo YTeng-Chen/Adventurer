@@ -38,7 +38,7 @@ export class IdleScene extends Phaser.Scene {
   refresh() {
     const s = this.getState();
     if (!s) return;
-    this.hero.setEquip(s.equip);
+    this.hero.setLook(s.equip, s.appearance);
     const sig = `${s.location}|${s.areaIdx}`;
     if (sig === this.sig) return;
     this.sig = sig;

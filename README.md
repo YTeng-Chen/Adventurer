@@ -19,9 +19,10 @@ npm run dev
 - `npm run build`：打包到 `dist/`，整個資料夾放到任何網頁空間都能開。
 - `npm run preview`：在本機預覽打包結果。
 - `npm test`：執行遊戲規則的測試。
-- 開發時打開 `/tools/sprites.html`：一次看所有流派、稀有度、材料階級的角色與裝備像素圖。
+- 開發時打開 `/tools/sprites.html`：一次看男女角色、所有流派、稀有度、材料階級的裝備像素圖。
+- 開發時打開 `/tools/hairstyles.html`：髮型挑選頁（男女各 3 種髮型、6 種髮色）。
 
-進度存在瀏覽器裡。頁面底部的「快轉 1 小時」是測試用的，可以馬上看到離線收穫。
+第一次進遊戲會先建立角色（性別、髮型、髮色），之後可以在角色面板按「更換外觀」修改。進度存在瀏覽器裡。頁面底部的「快轉 1 小時」是測試用的，可以馬上看到離線收穫。
 
 ## 怎麼玩
 
@@ -42,8 +43,9 @@ npm run dev
 
 - 戰鬥結果由 `core` 先算好，Phaser 只負責把戰鬥紀錄播出來，所以「跳過」不會改變結果。
 - HTML 介面和 Phaser 不直接互相呼叫，而是透過 `src/bus.js` 的事件（`state`、`tick`、`battle:start` 等，說明寫在檔案開頭）。
-- 角色是紙娃娃：披風、身體、鞋子、上衣、頭飾、武器各一張貼圖疊在一起，換裝備只換那一層。
-- 像素圖在 `src/art/` 用程式畫：角色 48×56、Q 版粗壯比例（大手、大靴、寬護肩），自動加上圓柱狀明暗、輪廓與色相偏移。角色會呼吸、眨眼、披風飄動，攻擊時武器以右手為支點揮動。裝備外觀由三件事決定：流派決定款式（劍士冒險帽與皮甲、守衛發光護目鏡機甲、術士法袍），材料階級決定材質（青銅、苔皮、鋼、冥骨、龍鱗），稀有度決定滾邊、寶石與裝飾（羽飾、角、披風）。之後換成美術畫的 spritesheet，只需要改 `src/game/textures.js`。
+- 角色是手繪的動漫迷你 Q 版紙娃娃：後髮、披風、身體、鞋子、上衣、前髮、頭飾、武器各一層，換裝備或換髮型只換那一層。角色會呼吸、眨眼、披風會飄，攻擊時武器以右手為支點揮動。
+- 身體與髮型是手繪的：`tools/art/hairstyles.py` 用 Python（需要 Pillow）畫出來，執行 `python3 tools/art/hairstyles.py --export` 輸出 `src/art/chibi-data.js`。髮色用四階色票替換，所以每種髮型都能換色。
+- 裝備在 `src/art/chibi.js` 用程式照同樣的畫風（黑色輪廓、卡通平塗）畫：流派決定款式（劍士冒險帽與皮甲、守衛騎士盔與板甲、術士法帽與法袍），材料階級決定材質，稀有度決定滾邊、寶石與裝飾（羽毛、角、披風）。之後換成美術畫的圖，只需要改 `src/art/chibi.js` 與 `src/game/textures.js`。
 
 ```
 index.html          頁面骨架
@@ -53,10 +55,12 @@ src/style.css       樣式
 src/core/           遊戲規則（data.js 是所有平衡數值）
 src/ui/app.js       HTML 介面
 src/ui/sprites.js   像素圖入口（魔物資料）
-src/art/            角色、裝備、圖示的像素繪製
+src/art/            角色（chibi.js、chibi-data.js）、裝備、圖示的像素繪製
 src/game/           Phaser：IdleScene、BattleScene、textures
 tests/              遊戲規則測試
 tools/sprites.html  像素圖預覽（開發用）
+tools/hairstyles.html 髮型挑選頁（開發用）
+tools/art/          手繪角色的產生工具（Python）
 ```
 
 ## 點子苗圃同步

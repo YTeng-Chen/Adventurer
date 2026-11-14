@@ -38,7 +38,7 @@ export function enemyTexture(scene, shape, color) {
 
 const hex = (c) => parseInt(c.slice(1), 16);
 
-// 紙娃娃角色：Container 裡每個部位一張圖，同樣大小疊在一起。
+// 紙娃娃角色：Container 裡每個部位一張圖（後髮、披風、身體、鞋、上衣、前髮、頭飾、武器），同樣大小疊在一起。
 // 會動：呼吸起伏、隨機眨眼、披風飄動；攻擊時武器以右手為支點揮動。
 export class Hero {
   constructor(scene, x, y, scale) {
@@ -63,8 +63,9 @@ export class Hero {
     return gridTexture(this.scene, key, p.frames(o));
   }
 
-  setEquip(equip) {
-    const parts = sprites.heroParts(equip);
+  // 換外觀或裝備：look = { gender, style, color }
+  setLook(equip, look) {
+    const parts = sprites.heroParts(equip, look);
     const glow = sprites.glow(equip);
     const sig = parts.map((p) => p.key).join('|') + (glow ? glow.rarity : '');
     if (sig === this.sig) return;

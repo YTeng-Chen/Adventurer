@@ -30,6 +30,7 @@ function newGame(now, seed = (now ^ 0x5eed) >>> 0) {
     mats: {}, bag: [], equip: { weapon: null, head: null, body: null, feet: null, acc1: null, acc2: null },
     itemSeq: 1,
     trial: null,
+    appearance: null, // 外觀（性別、髮型、髮色）；第一次進遊戲時由玩家選
     hunt: { tickets: HUNT_MAX, refillAt: now },
     log: [],
   };

@@ -1,7 +1,7 @@
 // 裝備圖示：武器、頭飾、上衣、鞋子直接用角色身上那一層裁切；飾品另外畫。
 import { Layer, render, crop } from './pixel.js';
 import { gearMats } from './palette.js';
-import { gearGrid } from './hero.js';
+import { gearGrid } from './chibi.js';
 
 const S = 20;
 
@@ -51,6 +51,6 @@ function accLayer(it) {
 }
 
 export function itemIconGrid(it) {
-  if (it.type === 'acc') return render(accLayer(it), gearMats(it));
+  if (it.type === 'acc') return render(accLayer(it), gearMats(it), { shade: 'cel', outlineColor: '#120d12' });
   return crop(gearGrid(it.type, it), 1);
 }
