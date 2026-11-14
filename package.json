@@ -2,8 +2,18 @@
   "name": "adventurer",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "冒險者 ADVENTURE：像素風放置養成 RPG 原型",
   "scripts": {
-    "test": "node --test tests/core.test.js"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "phaser": "4.2.1"
+  },
+  "devDependencies": {
+    "vite": "8.3.5"
   }
 }

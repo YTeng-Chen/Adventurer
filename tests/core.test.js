@@ -1,7 +1,12 @@
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const A = require('./load');
-const { data: D, world: W, stats: S, items: I, combat: C, trial: T, rng: R } = A;
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { data as D } from '../src/core/data.js';
+import { world as W } from '../src/core/world.js';
+import { stats as S } from '../src/core/stats.js';
+import { items as I } from '../src/core/items.js';
+import { combat as C } from '../src/core/combat.js';
+import { trial as T } from '../src/core/trial.js';
+import { rng as R } from '../src/core/rng.js';
 
 const NOW = Date.UTC(2026, 10, 16, 2, 0, 0); // 2026-11-16（週一）
 

@@ -1,6 +1,13 @@
-// 畫面：讀取 state、畫出來、把玩家的操作交給 core。遊戲規則都在 js/core。
-(function (A) {
-  const D = A.data, W = A.world, T = A.trial, I = A.items, S = A.stats, SP = A.sprites;
+// HTML 介面：選單、表格、背包、任務這些文字多的畫面。遊戲規則都在 src/core，會動的畫面交給 Phaser（src/game）。
+import { data as D } from '../core/data.js';
+import { world as W } from '../core/world.js';
+import { trial as T } from '../core/trial.js';
+import { items as I } from '../core/items.js';
+import { stats as S } from '../core/stats.js';
+import { save as store } from '../core/save.js';
+import { sprites as SP } from './sprites.js';
+
+export function startUI(bus) {
   const $ = (q) => document.querySelector(q);
   const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmt = (n) => Math.round(n).toLocaleString('zh-TW');
@@ -11,8 +18,6 @@
   let viewLoc = null;       // 正在查看的地點（預設是掛機中的地點）
   let bagFilter = 'all';
   let battle = null;        // 播放中的戰鬥
-  let tickFx = 0;           // 場景上的結算特效時間
-  let sceneFoe = null;
   let lastTickSum = null;
 
   // ---------- 工具 ----------
@@ -22,7 +27,7 @@
     el.textContent = msg; el.hidden = false;
     clearTimeout(toastT); toastT = setTimeout(() => (el.hidden = true), 3000);
   }
-  function persist() { A.save.save(s); }
+  function persist() { store.save(s); }
   function dur(ms) {
     const m = Math.floor(ms / 60000), h = Math.floor(m / 60);
     if (h) return `${h} 小時 ${m % 60} 分`;
@@ -313,102 +318,46 @@
     if (l.kind === 'burn') return `${l.who === 'p' ? eName : pName}受到燃燒（${l.stacks} 層）${fmt(l.dmg)} 傷害${l.crit ? '・暴擊' : ''}`;
     return `${who}${KIND[l.kind]}，造成 ${fmt(l.dmg)} 傷害${l.crit ? '・暴擊' : ''}`;
   }
-  function playBattle({ title, foe, r, onDone, resultHtml }) {
-    const m = $('#modal');
-    m.hidden = false;
-    m.innerHTML = `<div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="bTitle">
-      <h2 id="bTitle">${esc(title)}</h2>
-      <canvas class="battle-canvas" id="bCanvas"></canvas>
-      <ul class="blog" id="bLog"></ul>
-      <div id="bResult"></div>
-      <div class="row"><button class="btn ghost" data-act="b-skip" id="bSkip">跳過</button></div></div>`;
-    const cv = $('#bCanvas');
-    const W0 = 320, H0 = 160;
-    const ctx = setupCanvas(cv, W0, H0);
-    const heroG = SP.heroGrid(s.equip);
-    const foeG = SP.enemyGrid(foe.shape, foe.c);
-    const log = r.log;
-    const step = Math.max(60, Math.min(320, 11000 / Math.max(1, log.length)));
-    battle = { i: 0, t0: performance.now(), last: 0, floats: [], done: false, hpP: r.maxHpP, hpE: r.maxHpE, flashP: 0, flashE: 0, lungeP: 0, lungeE: 0 };
-    const lines = [];
-    function finish() {
-      if (battle.done) return;
-      battle.done = true;
-      battle.i = log.length;
-      const last = log[log.length - 1];
-      if (last) { battle.hpP = last.hpP; battle.hpE = last.hpE; }
-      $('#bLog').innerHTML = log.slice(-60).map((l) => `<li class="${l.who}">${esc(logText(l, '冒險者', foe.name))}</li>`).join('');
-      $('#bLog').scrollTop = 1e6;
-      $('#bResult').innerHTML = resultHtml;
-      $('#bSkip').textContent = '關閉';
-      $('#bSkip').dataset.act = 'b-close';
-      onDone && onDone();
-    }
-    battle.finish = finish;
-    function frame(now) {
-      if (!battle || battle.ctx !== ctx) return;
-      const b = battle;
-      if (!b.done && now - b.last >= step) {
-        b.last = now;
-        const l = log[b.i++];
-        if (l) {
-          b.hpP = l.hpP; b.hpE = l.hpE;
-          const target = l.kind === 'burn' ? (l.who === 'p' ? 'e' : 'p') : l.who === 'p' ? 'e' : 'p';
-          if (l.kind === 'undying') { /* 沒有傷害數字 */ } else {
-            b.floats.push({ side: target, txt: (l.crit ? '!' : '') + fmt(l.dmg), kind: l.kind, crit: l.crit, t: now });
-            if (target === 'e') { b.flashE = now; if (l.kind !== 'burn') b.lungeP = now; } else { b.flashP = now; if (l.kind !== 'burn') b.lungeE = now; }
-          }
-          lines.push(`<li class="${l.who}">${esc(logText(l, '冒險者', foe.name))}</li>`);
-          const bl = $('#bLog'); if (bl) { bl.innerHTML = lines.slice(-30).join(''); bl.scrollTop = 1e6; }
-        } else finish();
-      }
-      drawBattle(ctx, W0, H0, now, heroG, foeG, foe, r);
-      requestAnimationFrame(frame);
-    }
-    battle.ctx = ctx;
-    requestAnimationFrame(frame);
+  function playBattle({ title, foe, r, resultHtml }) {
+    battle = { foe, r, resultHtml, done: false, lines: [] };
+    $('#battleBar').hidden = false;
+    $('#bTitle').textContent = title;
+    $('#bLog').innerHTML = '';
+    $('#bResult').innerHTML = '';
+    const btn = $('#bSkip');
+    btn.textContent = '跳過'; btn.dataset.act = 'b-skip';
+    $('#stageWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    renderAll();
+    // 戰鬥畫面交給 Phaser；沒有人接（例如畫面還沒準備好）就直接顯示結果
+    if (!bus.emit('battle:start', { foe, r, equip: { ...s.equip } })) endBattle();
   }
-  const FLOAT_COL = { attack: '#ffffff', double: '#9fe0ff', chain: '#7af0ff', counter: '#d0d6e0', burn: '#ffa040' };
-  function drawBattle(ctx, w, h, now, heroG, foeG, foe, r) {
-    const b = battle;
-    ctx.fillStyle = '#1d2740'; ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = '#2a3554'; ctx.fillRect(0, h * 0.68, w, h);
-    ctx.fillStyle = '#34416a'; for (let x = 0; x < w; x += 16) ctx.fillRect(x, h * 0.68, 8, 2);
-    const lp = Math.max(0, 1 - (now - b.lungeP) / 180), le = Math.max(0, 1 - (now - b.lungeE) / 180);
-    const fp = Math.max(0, 1 - (now - b.flashP) / 160), fe = Math.max(0, 1 - (now - b.flashE) / 160);
-    const hs = 3.2, es = foe.boss || r.maxHpE > 2000 ? 5 : 4;
-    const hx = 50 + lp * 14, hy = h * 0.68 - 22 * hs + 4;
-    const ex = w - 50 - 16 * es - le * 14, ey = h * 0.68 - 16 * es + 6;
-    SP.draw(ctx, heroG, hx, hy + Math.sin(now / 300) * 1.5, hs, { flash: fp * 0.7 });
-    SP.sparkles(ctx, s.equip, hx, hy, hs, now);
-    SP.draw(ctx, foeG, ex, ey + Math.sin(now / 350 + 1) * 1.5, es, { flash: fe * 0.7, alpha: b.done && b.hpE <= 0 ? 0.35 : 1 });
-    // 血條
-    const bar = (x, y, ww, v, max, col) => {
-      ctx.fillStyle = '#0a0d13'; ctx.fillRect(x - 1, y - 1, ww + 2, 8);
-      ctx.fillStyle = '#3a2228'; ctx.fillRect(x, y, ww, 6);
-      ctx.fillStyle = col; ctx.fillRect(x, y, Math.max(0, (v / max) * ww), 6);
-    };
-    bar(16, 12, 120, b.hpP, r.maxHpP, '#6cc77a');
-    bar(w - 136, 12, 120, b.hpE, r.maxHpE, '#e66a5e');
-    ctx.fillStyle = '#ece4d2'; ctx.font = '600 9px "Pixelify Sans", monospace';
-    ctx.fillText(`${fmt(b.hpP)} / ${fmt(r.maxHpP)}`, 16, 30);
-    ctx.textAlign = 'right'; ctx.fillText(`${fmt(b.hpE)} / ${fmt(r.maxHpE)}`, w - 16, 30); ctx.textAlign = 'left';
-    // 傷害數字
-    b.floats = b.floats.filter((f) => now - f.t < 900);
-    for (const f of b.floats) {
-      const k = (now - f.t) / 900;
-      const x = f.side === 'e' ? ex + 8 * es : hx + 10 * hs;
-      const y = (f.side === 'e' ? ey : hy) + 10 - k * 26;
-      ctx.globalAlpha = 1 - k;
-      ctx.font = `700 ${f.crit ? 14 : 11}px "Pixelify Sans", monospace`;
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#0a0d13'; ctx.fillText(f.txt, x + 1, y + 1);
-      ctx.fillStyle = f.crit && f.kind === 'attack' ? '#f2b84b' : FLOAT_COL[f.kind] || '#fff';
-      ctx.fillText(f.txt, x, y);
-      ctx.textAlign = 'left'; ctx.globalAlpha = 1;
-    }
+  function battleLine({ line }) {
+    if (!battle || battle.done) return;
+    battle.lines.push(`<li class="${line.who}">${esc(logText(line, '冒險者', battle.foe.name))}</li>`);
+    const bl = $('#bLog');
+    bl.innerHTML = battle.lines.slice(-30).join('');
+    bl.scrollTop = 1e6;
   }
-  function closeBattle() { battle = null; $('#modal').hidden = true; $('#modal').innerHTML = ''; renderAll(); }
+  function endBattle() {
+    if (!battle || battle.done) return;
+    battle.done = true;
+    const bl = $('#bLog');
+    bl.innerHTML = battle.r.log.slice(-60).map((l) => `<li class="${l.who}">${esc(logText(l, '冒險者', battle.foe.name))}</li>`).join('');
+    bl.scrollTop = 1e6;
+    $('#bResult').innerHTML = battle.resultHtml;
+    const btn = $('#bSkip');
+    btn.textContent = '關閉'; btn.dataset.act = 'b-close';
+  }
+  function skipBattle() {
+    if (battle && !battle.done && !bus.emit('battle:skip')) endBattle();
+  }
+  function closeBattle() {
+    if (!battle) return;
+    battle = null;
+    $('#battleBar').hidden = true;
+    bus.emit('battle:close');
+    renderAll();
+  }
 
   // ---------- 離線收穫 ----------
   function showSummary(sum, title) {
@@ -440,76 +389,11 @@
       <div class="row"><button class="btn danger" data-act="${act}">${esc(label)}</button><button class="btn ghost" data-act="modal-close">取消</button></div></div>`;
   }
 
-  // ---------- 場景 ----------
-  const SCENE_W = 320, SCENE_H = 180;
-  let sceneCtx = null;
-  function drawScene(now) {
-    if (!sceneCtx) return;
-    const ctx = sceneCtx, w = SCENE_W, h = SCENE_H, gy = h * 0.72;
-    const L = s.location;
-    const area = D.AREAS[s.areaIdx];
-    const pal = {
-      training: ['#4a3a2c', '#6b5240'], battle: [area.sky, area.ground], forge: ['#2a1c18', '#4a3226'],
-      market: ['#6a8fb0', '#8a7a5a'], guild: ['#3a2c22', '#5a4434'],
-    }[L];
-    ctx.fillStyle = pal[0]; ctx.fillRect(0, 0, w, gy);
-    ctx.fillStyle = pal[1]; ctx.fillRect(0, gy, w, h - gy);
-    ctx.fillStyle = 'rgba(0,0,0,.18)'; for (let x = 0; x < w; x += 20) ctx.fillRect(x, gy, 10, 3);
-    // 地點道具
-    if (L === 'training') {
-      ctx.fillStyle = '#8a5a2a'; ctx.fillRect(220, gy - 60, 12, 60); ctx.fillRect(206, gy - 46, 40, 8);
-      ctx.fillStyle = '#5a3a1a'; ctx.fillRect(218, gy - 66, 16, 8);
-    } else if (L === 'forge') {
-      const glow = 0.5 + Math.sin(now / 200) * 0.2;
-      ctx.fillStyle = `rgba(255,140,40,${glow})`; ctx.fillRect(230, gy - 70, 50, 40);
-      ctx.fillStyle = '#3a3a44'; ctx.fillRect(222, gy - 30, 66, 30); ctx.fillStyle = '#5a5a66'; ctx.fillRect(196, gy - 22, 24, 10); ctx.fillRect(202, gy - 12, 12, 12);
-    } else if (L === 'market') {
-      for (let i = 0; i < 6; i++) { ctx.fillStyle = i % 2 ? '#f2e2c0' : '#d0584a'; ctx.fillRect(196 + i * 16, gy - 74, 16, 14); }
-      ctx.fillStyle = '#8a5a2a'; ctx.fillRect(198, gy - 60, 6, 60); ctx.fillRect(286, gy - 60, 6, 60); ctx.fillRect(196, gy - 26, 98, 8);
-      ctx.fillStyle = '#e0564a'; ctx.fillRect(214, gy - 34, 8, 8); ctx.fillStyle = '#62c46a'; ctx.fillRect(232, gy - 34, 8, 8); ctx.fillStyle = '#a565e0'; ctx.fillRect(250, gy - 34, 8, 8);
-    } else if (L === 'guild') {
-      ctx.fillStyle = '#7a5a3a'; ctx.fillRect(206, gy - 80, 80, 54); ctx.fillStyle = '#e8dcc0';
-      for (let i = 0; i < 4; i++) ctx.fillRect(214 + (i % 2) * 36, gy - 72 + Math.floor(i / 2) * 24, 26, 18);
-    } else if (L === 'battle') {
-      ctx.fillStyle = 'rgba(255,255,255,.15)'; ctx.fillRect(30, 26, 40, 8); ctx.fillRect(170, 40, 56, 8);
-      if (!sceneFoe) { const mm = area.monsters[Math.floor(now / 5000) % area.monsters.length]; sceneFoe = SP.enemyGrid(mm.shape, mm.c); }
-      const k = Math.max(0, 1 - (now - tickFx) / 250);
-      SP.draw(ctx, sceneFoe, 214, gy - 64 + 4 + Math.sin(now / 320) * 1.5, 4, { flash: k * 0.8 });
-    }
-    // 角色
-    const hs = 4;
-    const k = Math.max(0, 1 - (now - tickFx) / 250);
-    const hx = 64 + (L === 'battle' || L === 'training' ? k * 16 : 0);
-    const hy = gy - 22 * hs + 4 + Math.sin(now / 300) * 1.5 - (L !== 'battle' && L !== 'training' ? k * 6 : 0);
-    const grid = SP.heroGrid(s.equip);
-    SP.draw(ctx, grid, hx, hy, hs);
-    SP.sparkles(ctx, s.equip, hx, hy, hs, now);
-    // 結算後的浮動文字
-    if (lastTickSum && now - tickFx < 1600) {
-      const t = (now - tickFx) / 1600;
-      const parts = [];
-      if (lastTickSum.exp) parts.push(`+${lastTickSum.exp} EXP`);
-      if (lastTickSum.gold) parts.push(`+${lastTickSum.gold} G`);
-      for (const kk in lastTickSum.train) parts.push(`+${lastTickSum.train[kk]} ${D.STAT_NAME[kk]}`);
-      if (lastTickSum.items.length) parts.push('裝備 +' + lastTickSum.items.length);
-      ctx.globalAlpha = 1 - t;
-      ctx.font = '700 11px "Pixelify Sans", "Noto Sans TC", monospace';
-      ctx.fillStyle = '#0a0d13'; ctx.fillText(parts.join('  '), hx + 1, hy - 6 - t * 18 + 1);
-      ctx.fillStyle = '#f2b84b'; ctx.fillText(parts.join('  '), hx, hy - 6 - t * 18);
-      ctx.globalAlpha = 1;
-    }
-  }
-  function animate(now) {
-    drawScene(now);
-    requestAnimationFrame(animate);
-  }
-
   // ---------- 主迴圈 ----------
-  function renderAll() { renderHud(); renderHero(); renderPanel(); }
+  function renderAll() { renderHud(); renderHero(); renderPanel(); bus.emit('state'); }
   function onTick(sum) {
     lastTickSum = sum;
-    tickFx = performance.now();
-    if (s.location === 'battle') sceneFoe = null;
+    bus.emit('tick', sum);
     if (sum.levels) toast(`升到 ${s.hero.level} 級！`);
     const good = sum.items.filter((it) => it.rarity >= 3);
     if (good.length) toast(`得到${D.RARITY[good[0].rarity].n}裝備「${good[0].name}」`);
@@ -534,11 +418,11 @@
     const k = el.dataset.k, id = el.dataset.id, i = el.dataset.i;
     switch (a) {
       case 'view-loc': viewLoc = k; break;
-      case 'go': W.setLocation(s, k); viewLoc = null; sceneFoe = null; toast(`改到${D.LOCATIONS.find((l) => l.k === k).n}掛機`); break;
+      case 'go': W.setLocation(s, k); viewLoc = null; toast(`改到${D.LOCATIONS.find((l) => l.k === k).n}掛機`); break;
       case 'unlock': if (W.unlockDevice(s, k)) toast('設備已解鎖'); break;
       case 'dev-up': if (W.upgradeDevice(s, k)) toast('設備升級了，訓練上限提高'); break;
       case 'train': s.trainDevice = k; break;
-      case 'area': s.areaIdx = +i; sceneFoe = null; break;
+      case 'area': s.areaIdx = +i; break;
       case 'forge-up': if (W.upgradeForge(s)) toast(`鍛造室升級為${D.FORGE[s.forge.level].n}`); break;
       case 'claim': { const q = W.claimQuest(s, id, now); if (q) toast(`領到 ${fmt(q.reward.gold)} 金幣`); break; }
       case 'equip': W.equip(s, id, slotFor(s.bag.find((x) => x.id === id))); break;
@@ -547,6 +431,7 @@
       case 'sell-cheap': { const r = W.sellBelow(s, 2); toast(`賣出 ${r.n} 件，得到 ${fmt(r.total)} 金幣`); break; }
       case 'bag-filter': bagFilter = k; break;
       case 'hunt': {
+        if (battle) { toast('先看完或關閉目前的戰鬥'); return; }
         const out = W.hunt(s, +i, now);
         if (!out) { toast('狩獵券用完了'); break; }
         persist();
@@ -558,6 +443,7 @@
         return;
       }
       case 'trial-fight': {
+        if (battle) { toast('先看完或關閉目前的戰鬥'); return; }
         const out = T.fightFloor(s, now);
         if (!out) break;
         persist();
@@ -569,7 +455,7 @@
       }
       case 'bless': if (T.choose(s, id)) toast(`得到祝福「${D.BLESSINGS.find((b) => b.id === id).n}」`); break;
       case 'trial-restart': T.restart(s, now); break;
-      case 'b-skip': battle && battle.finish(); return;
+      case 'b-skip': skipBattle(); return;
       case 'b-close': closeBattle(); return;
       case 'modal-close': $('#modal').hidden = true; $('#modal').innerHTML = ''; break;
       case 'modal-gear': $('#modal').hidden = true; $('#modal').innerHTML = ''; tab = 'gear'; break;
@@ -581,7 +467,7 @@
         break;
       }
       case 'reset-ask': confirmBox('重新開始？', '目前的角色、裝備和進度都會刪除，無法復原。', 'reset', '刪除並重新開始'); return;
-      case 'reset': A.save.clear(); s = W.newGame(Date.now()); T.ensure(s, Date.now()); $('#modal').hidden = true; toast('開始新的冒險'); break;
+      case 'reset': store.clear(); s = W.newGame(Date.now()); T.ensure(s, Date.now()); $('#modal').hidden = true; toast('開始新的冒險'); break;
       default: return;
     }
     persist();
@@ -604,19 +490,20 @@
       persist(); renderPanel();
     });
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && !$('#modal').hidden) {
-        if (battle) { battle.done ? closeBattle() : battle.finish(); } else { $('#modal').hidden = true; }
-      }
+      if (e.key !== 'Escape') return;
+      if (!$('#modal').hidden) { $('#modal').hidden = true; return; }
+      if (battle) battle.done ? closeBattle() : skipBattle();
     });
     document.addEventListener('visibilitychange', () => { if (!document.hidden) loop(); });
     window.addEventListener('beforeunload', persist);
+    bus.on('battle:line', battleLine);
+    bus.on('battle:end', endBattle);
   }
 
   function boot() {
     const now = Date.now();
-    s = A.save.load(now) || W.newGame(now);
+    s = store.load(now) || W.newGame(now);
     T.ensure(s, now);
-    sceneCtx = setupCanvas($('#scene'), SCENE_W, SCENE_H);
     bind();
     const sum = W.catchUp(s, now);
     renderAll();
@@ -624,9 +511,8 @@
     if (sum) lastTickSum = sum;
     persist();
     setInterval(loop, 1000);
-    requestAnimationFrame(animate);
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
-  else boot();
-})(globalThis.ADV = globalThis.ADV || {});
+  boot();
+  return { getState: () => s };
+}

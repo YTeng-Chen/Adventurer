@@ -8,7 +8,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Pixelify+Sans:wght@400;600;700&display=swap">
-<link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 <header class="top">
@@ -19,8 +18,16 @@
 </header>
 
 <main class="layout">
+  <section class="stage-wrap" id="stageWrap" aria-label="遊戲畫面">
+    <div class="stage" id="stage"></div>
+    <div class="battle-bar" id="battleBar" hidden>
+      <div class="row spread"><h2 id="bTitle">戰鬥</h2><button class="btn ghost small" data-act="b-skip" id="bSkip">跳過</button></div>
+      <ul class="blog" id="bLog" aria-live="polite"></ul>
+      <div id="bResult"></div>
+    </div>
+  </section>
+
   <section class="hero-panel" aria-label="角色">
-    <div class="scene-wrap"><canvas id="scene" aria-label="角色目前所在的地點"></canvas></div>
     <div id="heroInfo"></div>
     <div class="log-box">
       <h2 class="mini-h">最近發生的事</h2>
@@ -40,7 +47,7 @@
 </main>
 
 <footer class="foot">
-  <span>第一版原型・進度存在這個瀏覽器</span>
+  <span>Phaser 版原型・進度存在這個瀏覽器</span>
   <button class="btn ghost small" data-act="ff" id="ffBtn">快轉 1 小時（測試用）</button>
   <button class="btn ghost small" data-act="reset-ask" id="resetBtn">重新開始</button>
 </footer>
@@ -48,15 +55,6 @@
 <div class="modal" id="modal" hidden></div>
 <div class="toast" id="toast" role="status" hidden></div>
 
-<script src="js/core/rng.js"></script>
-<script src="js/core/data.js"></script>
-<script src="js/core/stats.js"></script>
-<script src="js/core/items.js"></script>
-<script src="js/core/combat.js"></script>
-<script src="js/core/world.js"></script>
-<script src="js/core/trial.js"></script>
-<script src="js/core/save.js"></script>
-<script src="js/ui/sprites.js"></script>
-<script src="js/ui/app.js"></script>
+<script type="module" src="/src/main.js"></script>
 </body>
 </html>
