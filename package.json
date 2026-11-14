@@ -1,0 +1,9 @@
+{
+  "name": "adventurer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "冒險者 ADVENTURE：像素風放置養成 RPG 原型",
+  "scripts": {
+    "test": "node --test tests/core.test.js"
+  }
+}
