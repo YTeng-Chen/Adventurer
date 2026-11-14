@@ -1,363 +1,405 @@
-// 3D 像素風角色：用方塊組成的 Q 版模型，臉與衣服正面直接用 2D 手繪像素圖當貼圖。
-// 單位：1 單位 = 1 格像素；腳底在 y=0，臉朝 +Z。部位：腿、軀幹（含手臂、頭）、頭髮殼、裝備。
-// 動作：待機呼吸、眨眼、走路、攻擊揮擊（程式動畫，不需要美術做動作檔）。
+// 3D 像素風角色（第二版）：用圓滑曲面組成的 Q 版模型，不是方塊。
+// 頭是下巴收窄的橢圓球，臉畫在球面貼圖上；身體、手腳用旋轉曲面與膠囊形；頭髮是髮殼加上一撮撮立體的髮束。
+// 單位：1 單位約等於 1.7 格像素；腳底在 y=0，臉朝 +Z。全身約 97 單位高，頭（含頭髮）約佔一半。
 import * as THREE from 'three';
 import { CHIBI } from '../art/chibi-data.js';
-import { gearMats } from '../art/palette.js';
-import { normalizeLook, blinkRows } from '../art/chibi.js';
 
-const NEAR = THREE.NearestFilter;
+export const HAIR_COLORS = { ...CHIBI.hairColors, 深棕: ['#2e262e', '#453a43', '#63545e', '#827079'], 藍黑: ['#202840', '#34406a', '#4c5c90', '#7484bc'] };
+const SKIN = '#f8ceb7', SKIN_SH = '#e6ae97', INK = '#17141b';
+const TAU = Math.PI * 2, RAD = Math.PI / 180;
+
+// ---------- 材質 ----------
 const GRADIENT = (() => {
-  const t = new THREE.DataTexture(new Uint8Array([120, 195, 255]), 3, 1, THREE.RedFormat);
-  t.minFilter = t.magFilter = NEAR; t.needsUpdate = true;
+  const t = new THREE.DataTexture(new Uint8Array([105, 165, 218, 255]), 4, 1, THREE.RedFormat);
+  t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true;
   return t;
 })();
-const HIDE = new THREE.MeshBasicMaterial({ visible: false });
-
-// ---------- 貼圖工具 ----------
-function canvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
-function tex(c) {
+const mat = (color, extra = {}) => new THREE.MeshToonMaterial({ color: new THREE.Color(color), gradientMap: GRADIENT, ...extra });
+function texMat(c) {
   const t = new THREE.CanvasTexture(c);
-  t.magFilter = t.minFilter = NEAR; t.generateMipmaps = false; t.colorSpace = THREE.SRGBColorSpace;
-  return t;
+  t.colorSpace = THREE.SRGBColorSpace; t.magFilter = t.minFilter = THREE.NearestFilter; t.generateMipmaps = false;
+  return new THREE.MeshToonMaterial({ map: t, gradientMap: GRADIENT });
 }
-const toon = (map, alpha = false) => new THREE.MeshToonMaterial({ map, gradientMap: GRADIENT, alphaTest: alpha ? 0.5 : 0 });
-const tint = (hex) => new THREE.MeshToonMaterial({ color: new THREE.Color(hex), gradientMap: GRADIENT });
-const SKIN_SET = 'SlsrEegWKbm';
-// 從 2D 手繪圖裁一塊；only：只複製這些字母；fill：其他地方填的顏色
-function crop(rows, x0, y0, w, h, pal, { fill = null, only = null } = {}) {
-  const c = canvas(w, h), ctx = c.getContext('2d');
-  if (fill) { ctx.fillStyle = fill; ctx.fillRect(0, 0, w, h); }
-  for (let y = 0; y < h; y++) {
-    const row = rows[y0 + y] || '';
-    for (let x = 0; x < w; x++) {
-      const ch = row[x0 + x];
-      if (!ch || ch === '.' || (only && !only.includes(ch))) continue;
-      ctx.fillStyle = pal[ch]; ctx.fillRect(x, y, 1, 1);
+function canvas(w, h, fill) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const x = c.getContext('2d');
+  if (fill) { x.fillStyle = fill; x.fillRect(0, 0, w, h); }
+  return [c, x];
+}
+const mesh = (geo, m, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); return o; };
+
+// ---------- 幾何工具 ----------
+// 球面的接縫（第一欄與最後一欄）法線取平均，卡通光影才不會出現一條線
+function fixSeam(geo, wSeg, hSeg) {
+  const n = geo.attributes.normal;
+  for (let iy = 0; iy <= hSeg; iy++) {
+    const a = iy * (wSeg + 1), b = a + wSeg;
+    const x = n.getX(a) + n.getX(b), y = n.getY(a) + n.getY(b), z = n.getZ(a) + n.getZ(b);
+    const l = Math.hypot(x, y, z) || 1;
+    n.setXYZ(a, x / l, y / l, z / l); n.setXYZ(b, x / l, y / l, z / l);
+  }
+}
+// 球（貼圖中央 u=0.5 對準正面 +Z，接縫在背面），可以用 shape(x,y,z,t) 改變每個頂點，t = y/r
+function ball(r, shape, wSeg = 40, hSeg = 28) {
+  const g = new THREE.SphereGeometry(r, wSeg, hSeg, -Math.PI / 2);
+  if (shape) {
+    const p = g.attributes.position, v = new THREE.Vector3();
+    for (let i = 0; i < p.count; i++) {
+      v.fromBufferAttribute(p, i);
+      shape(v, v.y / r);
+      p.setXYZ(i, v.x, v.y, v.z);
     }
+    g.computeVertexNormals();
+    fixSeam(g, wSeg, hSeg);
   }
-  return c;
+  return g;
 }
-// 純色貼圖，可以在上面加幾條色帶：bands = [[y0, y1, color], ...]
-function plain(w, h, color, bands = [], extra) {
-  const c = canvas(w, h), ctx = c.getContext('2d');
-  ctx.fillStyle = color; ctx.fillRect(0, 0, w, h);
-  for (const [a, b, col] of bands) { ctx.fillStyle = col; ctx.fillRect(0, a, w, b - a + 1); }
-  if (extra) extra(ctx, w, h);
-  return c;
-}
-function box(w, h, d, mats, x = 0, y = 0, z = 0) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mats);
-  m.position.set(x, y, z);
-  return m;
-}
-// 六面材質順序：右(+X)、左(-X)、上、下、前(+Z)、後(-Z)
-const six = (r, l, t, b, f, k) => [r, l, t, b, f, k];
-const same = (m) => six(m, m, m, m, m, m);
-
-// ---------- 頭髮貼圖 ----------
-function hairTexture(w, h, pal, { rowsWithHair = null, light = true, strands = 7 } = {}) {
-  const c = canvas(w, h), ctx = c.getContext('2d');
-  for (let x = 0; x < w; x++) {
-    let bottom = h - 1;
-    if (rowsWithHair) bottom = rowsWithHair - ((x * 5) % 3);     // 下緣鋸齒
-    for (let y = 0; y <= Math.min(h - 1, bottom); y++) {
-      let col = pal.H;
-      if (light && y < 3) col = pal.M;
-      if (light && y < 1 && x % 4 !== 0) col = pal.L;
-      if (x % strands === 3 && y > 2) col = pal.D;
-      if (y >= bottom - 1) col = pal.D;
-      ctx.fillStyle = col; ctx.fillRect(x, y, 1, 1);
+// 旋轉曲面：profile = [[半徑, 高度], ...]（由下往上），重新取樣成等高間距，貼圖正面在 u=0.5
+function lathe(profile, { sx = 1, sz = 1, steps = 22, segs = 32 } = {}) {
+  const y0 = profile[0][1], y1 = profile[profile.length - 1][1];
+  const rAt = (y) => {
+    for (let i = 0; i < profile.length - 1; i++) {
+      const [ra, ya] = profile[i], [rb, yb] = profile[i + 1];
+      if (y >= ya && y <= yb) return ra + ((rb - ra) * (y - ya)) / (yb - ya || 1);
     }
-  }
-  return c;
+    return profile[profile.length - 1][0];
+  };
+  const pts = [new THREE.Vector2(0.001, y0)];
+  for (let i = 0; i <= steps; i++) { const y = y0 + ((y1 - y0) * i) / steps; pts.push(new THREE.Vector2(Math.max(0.001, rAt(y)), y)); }
+  pts.push(new THREE.Vector2(0.001, y1));
+  const g = new THREE.LatheGeometry(pts, segs, Math.PI, TAU);
+  g.scale(sx, 1, sz);
+  return g;
 }
-function hairTop(w, d, pal) {
-  const c = canvas(w, d), ctx = c.getContext('2d');
-  ctx.fillStyle = pal.H; ctx.fillRect(0, 0, w, d);
-  // 天使光環：一圈亮色
-  for (let y = 0; y < d; y++) for (let x = 0; x < w; x++) {
-    const r = Math.hypot((x - w / 2) / (w / 2), (y - d / 2) / (d / 2));
-    if (r > 0.45 && r < 0.65) { ctx.fillStyle = (x + y) % 3 ? pal.M : pal.L; ctx.fillRect(x, y, 1, 1); }
-  }
-  ctx.fillStyle = pal.D; ctx.fillRect(Math.floor(w / 2), d / 2, 1, d / 2);
-  return c;
-}
+const capsule = (r, len) => new THREE.CapsuleGeometry(r, len, 6, 16);
 
-// 2D 座標對應：2D 畫布第 R 列 ↔ 3D 高度 y ≈ 100.5 − R（臉的位置對齊）
-const yOf = (R) => 100.5 - R;
-const HAIR_TOP_R = 10;
-
-// 髮型：髮殼（包住頭）＋長髮、馬尾、丸子頭的立體頭髮塊
-function buildHair(style, pal) {
-  const g = new THREE.Group();
-  const front = CHIBI.hair[style].front;
-  const isHair = (ch) => 'DHML'.includes(ch);
-  const buzz = style === '平頭';
-  const W = buzz ? 37 : 39, D = buzz ? 32 : 33, Hh = 44;
-  const topY = buzz ? 88 : 91;
-  // 側面：2D 圖左側（x 10–17）有頭髮的最低一列
-  let sideLast = 0;
-  for (let r = 0; r < Hh; r++) {
-    const row = front[HAIR_TOP_R + r] || '';
-    for (let x = 10; x <= 17; x++) if (isHair(row[x])) sideLast = r;
+// 髮束：水滴形（根部圓、尖端收細），壓扁，並往外側彎
+function tuftGeometry(L, R, bend = 0.18, flat = 0.5) {
+  const pts = [];
+  const N = 12;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const rad = R * Math.pow(Math.sin(Math.PI * Math.pow(t, 0.62)), 0.85);
+    pts.push(new THREE.Vector2(Math.max(0.02, rad), t * L));
   }
-  sideLast = Math.min(sideLast, Hh - 1);
-  const backLast = buzz ? Math.min(sideLast + 4, Hh - 1) : Math.max(sideLast, 40);
-  const frontTex = toon(tex(crop(front, buzz ? 13 : 12, HAIR_TOP_R + (topY === 91 ? 0 : 3), W, Hh, pal)), true);
-  const sideTex = toon(tex(hairTexture(D, Hh, pal, { rowsWithHair: sideLast })), true);
-  const backTex = toon(tex(hairTexture(W, Hh, pal, { rowsWithHair: backLast })), true);
-  const topTex = toon(tex(hairTop(W, D, pal)));
-  g.add(box(W, Hh, D, six(sideTex, sideTex, topTex, HIDE, frontTex, backTex), 0, topY - Hh / 2, 15.6 - D / 2));
-
-  const hairMat = tint(pal.H), darkMat = tint(pal.D), lightMat = tint(pal.M), tieMat = tint('#17141b');
-  if (style === '長直髮') {
-    const panel2 = toon(tex(hairTexture(40, 62, pal, { light: false, strands: 5 })));
-    g.add(box(40, 62, 5, six(hairMat, hairMat, hairMat, darkMat, hairMat, panel2), 0, 55, -19.5));
-    for (const sx of [-1, 1]) g.add(box(5, 34, 5, six(hairMat, hairMat, hairMat, darkMat, toon(tex(hairTexture(5, 34, pal, { light: false, strands: 3 }))), hairMat), sx * 18, 46, 8));
+  const g = new THREE.LatheGeometry(pts, 12, Math.PI, TAU);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const y = p.getY(i), t = y / L;
+    p.setZ(i, p.getZ(i) * flat + bend * L * t * t);
   }
-  if (style === '高馬尾') {
-    const tail = new THREE.Group();
-    tail.position.set(12, 84, -17);
-    tail.add(box(7, 6, 7, same(tieMat), 0, 0, 0));
-    tail.add(box(10, 14, 9, six(hairMat, hairMat, lightMat, darkMat, hairMat, hairMat), 3, -9, -2));
-    tail.add(box(9, 14, 8, same(hairMat), 5, -22, -2));
-    tail.add(box(6, 10, 6, six(hairMat, hairMat, hairMat, darkMat, hairMat, hairMat), 6, -33, -1));
-    g.add(tail);
-    g.userData.sway = tail;
-  }
-  if (style === '丸子頭') {
-    g.add(box(18, 2, 18, same(tieMat), 0, 92, -3));
-    g.add(box(16, 11, 16, six(hairMat, hairMat, lightMat, darkMat, hairMat, hairMat), 0, 98.5, -3));
-  }
-  if (style === '長直髮') g.userData.sway = null;
+  g.computeVertexNormals();
   return g;
 }
 
-// ---------- 身體 ----------
-function buildBody(look) {
-  const pal = (() => { const [D, Hc, M, L] = CHIBI.hairColors[look.color]; return { ...CHIBI.pal, D, H: Hc, M, L }; })();
+// ---------- 臉（畫在球面貼圖上：512×256，正面中央在 x=256） ----------
+function faceCanvas({ female, blink }) {
+  const [c, x] = canvas(512, 256, SKIN);
+  const cx = 256, eyeY = 116, eyeW = 30, eyeH = 47, gap = 33;
+  const rr = (px, py, w, h, r) => { x.beginPath(); x.roundRect(px, py, w, h, r); x.fill(); };
+  for (const s of [-1, 1]) {
+    const ex = cx + s * gap - eyeW / 2;
+    if (blink) {
+      x.fillStyle = INK; rr(ex - 2, eyeY + eyeH * 0.55, eyeW + 4, 5, 2);
+      x.fillRect(s < 0 ? ex - 5 : ex + eyeW + 1, eyeY + eyeH * 0.55 - 3, 5, 5);
+      continue;
+    }
+    x.fillStyle = INK;
+    rr(ex - 3, eyeY - 6, eyeW + 6, 9, 3);                                    // 上睫毛
+    x.fillRect(s < 0 ? ex - 8 : ex + eyeW + 2, eyeY - 4, 6, female ? 5 : 7);  // 眼尾
+    if (female) { x.fillRect(s < 0 ? ex - 12 : ex + eyeW + 7, eyeY - 9, 5, 6); x.fillRect(ex + 4, eyeY + eyeH + 1, eyeW - 8, 2); }
+    x.fillStyle = '#29232d'; rr(ex, eyeY, eyeW, eyeH, 7);                    // 瞳孔
+    x.fillStyle = '#5a4a58'; rr(ex + 3, eyeY + eyeH * 0.6, eyeW - 6, eyeH * 0.32, 4);
+    x.fillStyle = '#a294a0'; rr(ex + 6, eyeY + eyeH * 0.78, eyeW - 12, eyeH * 0.15, 3);
+    x.fillStyle = '#ffffff';
+    rr(ex + 3, eyeY + 4, 9, 13, 3);                                           // 大高光
+    x.fillRect(ex + eyeW - 9, eyeY + eyeH * 0.55, 5, 5);                      // 小高光
+  }
+  // 嘴、腮紅
+  x.fillStyle = female ? '#e5737d' : '#d99e88';
+  rr(cx - (female ? 7 : 6), 183, female ? 14 : 12, female ? 5 : 4, 2);
+  if (female) {
+    x.fillStyle = '#ffb0aa';
+    for (const s of [-1, 1]) { x.beginPath(); x.ellipse(cx + s * 47, 171, 13, 6, 0, 0, TAU); x.fill(); }
+  }
+  return c;
+}
+
+// ---------- 頭 ----------
+const HEAD_R = 19;
+const LEG = 5;   // 腿比最初的設計加長幾個單位
+function headGeometry() {
+  return ball(HEAD_R, (v, t) => {
+    let sx = 1.1, sz = 1.0;
+    if (t < 0) { const k = -t; sx *= 1 - 0.3 * k * k; sz *= 1 - 0.22 * k * k; }   // 下巴收窄
+    sx *= 1 + 0.07 * Math.exp(-(((t + 0.32) / 0.3) ** 2));                        // 臉頰鼓一點
+    v.x *= sx; v.y *= 0.92; v.z *= sz * (v.z > 0 ? 0.95 : 1);
+  });
+}
+
+// 頭髮：髮殼（頭頂＋後腦與兩側）＋髮束。座標以頭的中心為原點。
+const HR = { x: 22.3, y: 19.3, z: 20.9 };
+const scalp = (az, el, k = 1) => new THREE.Vector3(
+  HR.x * Math.sin(az * RAD) * Math.cos(el * RAD) * k, HR.y * Math.sin(el * RAD) * k, HR.z * Math.cos(az * RAD) * Math.cos(el * RAD) * k);
+function hairShell(m, backTheta = 0.72) {
+  const g = new THREE.Group();
+  const top = new THREE.SphereGeometry(1, 32, 12, 0, TAU, 0, Math.PI * 0.4);
+  top.scale(HR.x, HR.y, HR.z);
+  g.add(mesh(top, m));
+  // 後腦與兩側（正面留給臉）：phi 以背面為中心左右各 128 度
+  const back = new THREE.SphereGeometry(1, 32, 12, (270 - 128) * RAD, 256 * RAD, Math.PI * 0.3, Math.PI * (backTheta - 0.3));
+  back.scale(HR.x, HR.y, HR.z);
+  g.add(mesh(back, m));
+  return g;
+}
+// 一撮髮束：從 base（方位角、仰角）長到 tip（方位角、仰角、往外的倍數）
+function addTuft(group, m, [az, el], [az2, el2, k2 = 1.05], R = 4.5, { bend = 0.16, flat = 0.5, k = 1.01 } = {}) {
+  const a = scalp(az, el, k), b = scalp(az2, el2, k2);
+  const dir = b.clone().sub(a), L = dir.length();
+  const y = dir.clone().normalize();
+  const mid = a.clone().add(b).multiplyScalar(0.5).normalize();
+  const z = mid.clone().sub(y.clone().multiplyScalar(mid.dot(y))).normalize();
+  const x = new THREE.Vector3().crossVectors(y, z);
+  const o = mesh(tuftGeometry(L, R, bend, flat), m);
+  o.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+  o.position.copy(a);
+  group.add(o);
+  return o;
+}
+
+// 在兩個點之間放一撮髮束，normal 是壓扁的方向（通常是往外）
+function addTuftPts(group, m, a, b, R, normal, { bend = 0.16, flat = 0.6 } = {}) {
+  const dir = b.clone().sub(a), L = dir.length();
+  const y = dir.clone().normalize();
+  const z = normal.clone().sub(y.clone().multiplyScalar(normal.dot(y))).normalize();
+  const x = new THREE.Vector3().crossVectors(y, z);
+  const o = mesh(tuftGeometry(L, R, bend, flat), m);
+  o.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+  o.position.copy(a);
+  group.add(o);
+  return o;
+}
+
+// 有種子的亂數：每次產生的亂髮都一樣
+function rng(seed) { let v = seed >>> 0; return () => { v = (v + 0x6d2b79f5) >>> 0; let t = v; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+// 男生：蓬鬆亂翹的短髮（參考圖的髮型）。由下往上三層厚髮束＋頭頂一圈＋瀏海，每撮都有一點隨機的方向與深淺。
+function hairMale(pal) {
+  const g = new THREE.Group();
+  const H = mat(pal[1], { side: THREE.DoubleSide }), M = mat(pal[2]), Dk = mat(pal[0]);
+  const shell = hairShell(H); shell.scale.setScalar(1.07);
+  g.add(shell);
+  const r = rng(11);
+  const j = (n) => (r() - 0.5) * 2 * n;
+  const pick = () => (r() < 0.62 ? H : M);                         // 上面兩層只用基本色與亮色
+  const pickLow = pick;
+  const T = (m, a, b, R, o) => addTuft(g, m, a, b, R, { flat: 0.6, k: 1.05, ...o });
+  // 下層：後腦與兩側往下，尖端往外翹（正面留給臉）
+  for (const az of [70, 98, 126, 154, 182, 210, 238, 266, 294]) {
+    const side = az > 180 ? 1 : -1;
+    T(pickLow(), [az + j(5), 20 + j(5)], [az + side * 8 + j(5), -28 + j(6), 1.18 + j(0.03)], 8, { bend: 0.26 });
+  }
+  // 中層：錯開方位，蓋住下層的根部
+  for (const az of [56, 84, 112, 140, 168, 196, 224, 252, 280, 308]) {
+    const side = az > 180 ? 1 : -1;
+    T(pick(), [az + j(6), 52 + j(4)], [az + side * 10 + j(6), 10 + j(6), 1.17 + j(0.04)], 8.5, { bend: 0.22 });
+  }
+  // 頭頂：從髮旋往四周蓋下來，貼著頭型，只有尖端微翹
+  for (const az of [10, 55, 100, 145, 190, 235, 280, 325]) {
+    T(pick(), [az + j(8), 86 + j(3)], [az + 12 + j(10), 44 + j(5), 1.13 + j(0.03)], 8.5, { bend: 0.18 });
+  }
+  // 幾撮翹出來的呆毛，打破圓圓的輪廓
+  T(M, [-30, 70], [-58, 62, 1.3], 5, { bend: 0.4 });
+  T(H, [40, 74], [72, 66, 1.3], 5, { bend: 0.4 });
+  T(H, [5, 84], [-20, 80, 1.34], 4.5, { bend: 0.45 });
+  T(H, [150, 70], [178, 56, 1.3], 5, { bend: 0.4 });
+  T(M, [-115, 44], [-130, 22, 1.3], 5, { bend: 0.4 });
+  T(H, [112, 40], [128, 16, 1.3], 5, { bend: 0.4 });
+  // 瀏海：一撮撮蓋在額頭上，兩眼中間那撮最長
+  const bang = { bend: 0.05, k: 1.05, flat: 0.55 };
+  T(H, [-50, 48], [-58, 10, 1.09], 6.5, bang);
+  T(M, [-30, 52], [-37, 13, 1.09], 6.2, bang);
+  T(H, [-11, 55], [-18, 15, 1.09], 5.6, bang);
+  T(Dk, [5, 57], [1, 1, 1.08], 4.6, bang);
+  T(H, [20, 55], [25, 14, 1.09], 5.8, bang);
+  T(H, [38, 52], [46, 12, 1.09], 6.2, bang);
+  T(M, [56, 47], [66, 9, 1.09], 6.5, bang);
+  return g;
+}
+
+// 女生：齊瀏海、兩側鬢髮、高馬尾（往一側垂下，正面也看得到）
+function hairFemale(pal) {
+  const g = new THREE.Group();
+  const H = mat(pal[1], { side: THREE.DoubleSide }), M = mat(pal[2]), Dk = mat(pal[0]);
+  const shell = hairShell(H, 0.72); shell.scale.setScalar(1.05);
+  g.add(shell);
+  const T = (m, a, b, R, o) => addTuft(g, m, a, b, R, o);
+  const bang = { bend: 0.04, k: 1.05, flat: 0.5 };
+  T(H, [-44, 50], [-49, 9, 1.08], 7, bang);
+  T(M, [-23, 54], [-27, 12, 1.08], 6.6, bang);
+  T(H, [-2, 56], [-3, 13, 1.08], 6.6, bang);
+  T(H, [19, 54], [23, 12, 1.08], 6.6, bang);
+  T(M, [40, 50], [46, 9, 1.08], 7, bang);
+  for (const s of [-1, 1]) {
+    T(H, [s * 63, 44], [s * 69, -38, 1.07], 5.5, { bend: 0.03, k: 1.04, flat: 0.55 });   // 鬢髮垂到下巴
+  }
+  // 側馬尾：髮圈在後腦側上方，頭髮先蓬起再垂到肩膀，掛在可以晃動的支點上
+  const AZ = 218, tie = scalp(AZ, 56, 1.06);
+  const out = new THREE.Vector3(Math.sin(AZ * RAD), 0, Math.cos(AZ * RAD)), up = new THREE.Vector3(0, 1, 0);
+  const at = (o, u) => out.clone().multiplyScalar(o).add(up.clone().multiplyScalar(u));
+  const tail = new THREE.Group();
+  tail.position.copy(tie);
+  tail.add(mesh(new THREE.SphereGeometry(4.4, 14, 10), mat('#e5737d')));
+  tail.add(mesh(new THREE.SphereGeometry(7.5, 16, 12), H, ...at(7, 3).toArray()));              // 蓬起的髮根
+  addTuftPts(tail, H, at(6, 6), at(15, -32), 9, out, { bend: 0.14, flat: 0.75 });
+  addTuftPts(tail, M, at(11, -12), at(17, -44), 6.5, out, { bend: 0.1, flat: 0.75 });
+  g.add(tail);
+  g.userData.sway = tail;
+  return g;
+}
+
+// ---------- 衣服貼圖 ----------
+function hoodieCanvas() {
+  const J = '#484049', JD = '#2f2a33', JL = '#62566300'.slice(0, 7);
+  const [c, x] = canvas(256, 128, J);
+  x.fillStyle = JL; x.fillRect(70, 0, 22, 128);                // 左前襟的亮面
+  x.fillStyle = JD; x.fillRect(166, 0, 26, 128);               // 右側暗面
+  x.fillStyle = '#e9e6e5'; x.fillRect(114, 0, 28, 128);        // 白色內搭
+  x.fillStyle = '#c4bdc0'; x.fillRect(134, 0, 8, 128); x.fillRect(114, 100, 28, 28);
+  x.fillStyle = INK; x.fillRect(110, 0, 4, 128); x.fillRect(142, 0, 4, 128);   // 拉鍊邊
+  x.fillStyle = '#f2eff0'; x.fillRect(102, 24, 3, 42); x.fillRect(151, 24, 3, 46);   // 帽繩
+  x.fillStyle = JD;
+  x.fillRect(74, 84, 26, 3); x.fillRect(156, 84, 26, 3);       // 口袋
+  x.fillRect(0, 114, 256, 14);                                 // 下襬
+  x.fillRect(84, 44, 3, 22); x.fillRect(172, 56, 3, 20);       // 皺褶
+  return c;
+}
+function teeCanvas() {
+  const [c, x] = canvas(256, 128, '#ebe8e7');
+  x.fillStyle = '#c9c2c5'; x.fillRect(160, 0, 40, 128);        // 右側陰影
+  x.fillRect(0, 116, 256, 12);                                 // 下襬
+  x.fillStyle = '#a69ca3'; x.fillRect(0, 0, 256, 7);           // 領口
+  x.fillStyle = '#c9c2c5'; x.fillRect(96, 52, 3, 18); x.fillRect(150, 66, 3, 16);
+  return c;
+}
+function shoeCanvas(female) {
+  const upper = female ? '#f2eff0' : '#3a3540';
+  const [c, x] = canvas(128, 64, upper);
+  if (!female) { x.fillStyle = '#f2eff0'; x.fillRect(44, 22, 40, 22); }   // 白色鞋頭
+  x.fillStyle = female ? '#d9d4d8' : '#f2eff0'; x.fillRect(0, 38, 128, 10);   // 鞋底側邊
+  x.fillStyle = '#aaa5ad'; x.fillRect(0, 48, 128, 16);
+  x.fillStyle = female ? '#aaa5ad' : '#f2eff0';
+  x.fillRect(56, 8, 16, 3); x.fillRect(56, 14, 16, 3);                    // 鞋帶
+  return c;
+}
+
+// ---------- 組裝 ----------
+function build(look) {
   const female = look.gender === '女';
-  const rows = CHIBI.bodies[look.gender];
-  const P = CHIBI.pal;
-  const parts = {};
-
-  // 臉（正面貼圖）＋眨眼版本
-  const faceCanvas = (blink) => {
-    const r = blink ? blinkRows(rows) : rows;
-    const c = canvas(34, 44), ctx = c.getContext('2d');
-    ctx.fillStyle = P.S; ctx.fillRect(0, 0, 34, 44);
-    ctx.drawImage(crop(r, 16, 32, 32, 24, P, { only: SKIN_SET }), 1, 16);
-    ctx.fillStyle = P.s; ctx.fillRect(0, 42, 34, 2);
-    return c;
-  };
-  parts.faceOpen = toon(tex(faceCanvas(false)));
-  parts.faceBlink = toon(tex(faceCanvas(true)));
-  const skin = tint(P.S), skinShade = tint(P.s);
-
+  const pal = HAIR_COLORS[look.color] || HAIR_COLORS['深棕'];
   const root = new THREE.Group();
-  const legs = [], arms = [];
-  // 腿與鞋（左右）
-  const pants = female ? P.B : P.P;
-  for (const side of [-1, 1]) {
+  const skin = mat(SKIN), skinSh = mat(SKIN_SH);
+  const pants = female ? '#4c72ac' : '#322d37';
+
+  // 腿與鞋
+  const legs = [];
+  for (const s of [-1, 1]) {
     const hip = new THREE.Group();
-    hip.position.set(side * 6, 19, 0);
-    const legFront = toon(tex(crop(rows, side < 0 ? 20 : 34, 84, 10, 14, P, { fill: pants })));
-    const legSide = toon(tex(plain(10, 14, pants, female ? [[12, 13, P.h]] : [])));
-    hip.add(box(10, 14, 10, six(legSide, legSide, legSide, legSide, legFront, legSide), 0, -7, 0));
-    const shoeTop = female ? P.w : P.O;
-    const shoeFront = toon(tex(plain(11, 6, shoeTop, female ? [[5, 5, P.n]] : [[3, 4, P.w], [5, 5, P.n]])));
-    const shoeSide = toon(tex(plain(15, 6, shoeTop, female ? [[5, 5, P.n]] : [[4, 4, P.w], [5, 5, P.n]])));
-    const shoeTopM = tint(shoeTop);
-    const shoe = box(11, 6, 15, six(shoeSide, shoeSide, shoeTopM, tint(P.n), shoeFront, shoeSide), 0, -16, 2);
-    hip.add(shoe);
-    hip.userData.shoe = shoe;
+    hip.position.set(s * 5.3, 21 + LEG, 0);
+    hip.add(mesh(capsule(female ? 4.6 : 5.1, 6.5 + LEG), mat(pants), 0, -8 - LEG / 2, 0));
+    if (female) hip.add(mesh(new THREE.CylinderGeometry(5.1, 5.1, 3, 16), mat('#7398cc'), 0, -13.5 - LEG, 0));   // 反摺褲管
+    const shoeGeo = ball(1, (v) => { v.x *= 5.9; v.y = Math.max(v.y * 4.6, -2.6); v.z *= 8.6; }, 28, 16);
+    hip.add(mesh(shoeGeo, texMat(shoeCanvas(female)), 0, -17.4 - LEG, 2.6));
     root.add(hip);
     legs.push(hip);
   }
-  // 軀幹（會隨呼吸上下）：衣服、手臂、脖子、頭
+  // 上半身整體（腿加長後往上移）
+  const upper = new THREE.Group();
+  upper.position.y = LEG;
+  root.add(upper);
+  // 骨盆（褲子上半）
+  upper.add(mesh(lathe([[9.6, 14], [10.2, 17], [10, 23]], { sx: 1.08, sz: 0.8, steps: 6 }), mat(pants)));
+
+  // 軀幹（隨呼吸起伏）
   const torso = new THREE.Group();
-  root.add(torso);
-  const top = female ? P.T : P.J;
-  const torsoFront = toon(tex(crop(rows, 18, 62, 28, 22, P, { fill: top })));
-  const torsoBands = female ? [[18, 19, P.S], [20, 21, P.d]] : [[20, 21, P.j]];
-  const torsoSide = toon(tex(plain(14, 22, top, torsoBands)));
-  const torsoBack = toon(tex(plain(28, 22, top, torsoBands, female ? null : (ctx) => { ctx.fillStyle = P.j; ctx.fillRect(8, 0, 12, 6); })));
-  torso.add(box(28, 22, 14, six(torsoSide, torsoSide, tint(top), tint(top), torsoFront, torsoBack), 0, 30, 0));
-  if (!female) torso.add(box(22, 6, 8, same(tint(P.J)), 0, 42, -5));     // 帽兜
-  torso.add(box(10, 5, 10, same(skinShade), 0, 42, 0));                   // 脖子
-  // 手臂（肩膀為支點）
-  for (const side of [-1, 1]) {
+  upper.add(torso);
+  if (female) {
+    torso.add(mesh(lathe([[8.2, 22], [8.2, 26]], { sx: 1.06, sz: 0.78, steps: 3 }), skin));           // 露出的腰
+    torso.add(mesh(new THREE.CylinderGeometry(10.4, 10.4, 2.2, 24).scale(1.08, 1, 0.8), mat('#34527f'), 0, 22.6, 0));   // 褲頭
+    torso.add(mesh(new THREE.BoxGeometry(2.2, 2.2, 1), mat('#d8ac4a'), 0, 22.6, 8.2));
+    torso.add(mesh(lathe([[9.4, 25.5], [9.8, 27], [9.3, 33], [9.2, 39], [9.6, 43.5], [7.6, 47.5], [4.6, 49.5]], { sx: 1.1, sz: 0.8 }), texMat(teeCanvas())));
+  } else {
+    torso.add(mesh(lathe([[10.4, 20.5], [11.6, 23], [11.6, 31], [11.1, 38], [10.6, 43.5], [8.2, 47.5], [4.8, 49.5]], { sx: 1.15, sz: 0.82 }), texMat(hoodieCanvas())));
+    // 帽兜：圍在脖子後面的一圈
+    const hood = mesh(new THREE.TorusGeometry(8.4, 4.2, 10, 24, Math.PI * 1.4), mat('#484049'), 0, 48.6, -2.6);
+    hood.rotation.set(Math.PI / 2 - 0.38, 0, 144 * RAD); hood.scale.set(1.25, 1.1, 1.05);
+    torso.add(hood);
+    const bag = mesh(new THREE.SphereGeometry(8, 16, 12), mat('#484049'), 0, 43.5, -8.5);
+    bag.scale.set(1.35, 0.95, 0.62);
+    torso.add(bag);
+  }
+  torso.add(mesh(new THREE.CylinderGeometry(4.4, 4.8, 7, 16), skinSh, 0, 50.5, 0));   // 脖子
+
+  // 手臂（肩膀為支點，自然往外垂）
+  const arms = [];
+  for (const s of [-1, 1]) {
     const shoulder = new THREE.Group();
-    shoulder.position.set(side * 16.5, 40, 0);
-    const armFront = toon(tex(crop(rows, side < 0 ? 12 : 47, 64, 5, 16, P, { fill: female ? P.S : top })));
-    const armSideC = female ? plain(6, 16, P.S, [[0, 7, P.T]]) : plain(6, 16, top, [[14, 15, P.j]]);
-    const armSide = toon(tex(armSideC));
-    shoulder.add(box(5, 16, 6, six(armSide, armSide, tint(top), tint(top), armFront, armSide), 0, -8, 0));
-    const hand = new THREE.Group();
-    hand.position.set(0, -19, 0);
-    hand.add(box(6, 6, 7, same(skin)));
-    shoulder.add(hand);
-    shoulder.userData.hand = hand;
+    shoulder.position.set(s * (female ? 11.6 : 14.6), 44.2, 0);
+    const arm = new THREE.Group();
+    arm.rotation.z = s * (female ? 0.16 : 0.2);
+    shoulder.add(arm);
+    if (female) {
+      arm.add(mesh(capsule(3.9, 3), mat('#ebe8e7'), 0, -4.6, 0));      // 短袖
+      arm.add(mesh(capsule(3.2, 9), skin, 0, -11.5, 0));
+      arm.add(mesh(new THREE.SphereGeometry(3.7, 14, 10), skin, 0, -19.2, 0.4));
+    } else {
+      arm.add(mesh(capsule(4.6, 9.5), mat('#484049'), 0, -8.4, 0));      // 外套袖子
+      arm.add(mesh(new THREE.CylinderGeometry(4.9, 4.9, 2.4, 16), mat('#2f2a33'), 0, -16.2, 0));   // 袖口
+      arm.add(mesh(new THREE.SphereGeometry(4.2, 14, 10), skin, 0, -20.2, 0.5));
+    }
+    shoulder.userData.arm = arm;
     torso.add(shoulder);
     arms.push(shoulder);
   }
+
   // 頭（脖子為支點）
   const head = new THREE.Group();
-  head.position.set(0, 41, 0);
+  head.position.set(0, 50.5, 0);
   torso.add(head);
-  const headMats = six(skin, skin, skin, skin, parts.faceOpen, skin);
-  const headMesh = box(34, 44, 30, headMats, 0, 22, 0);
+  const faceOpen = texMat(faceCanvas({ female, blink: false })), faceBlink = texMat(faceCanvas({ female, blink: true }));
+  const headMesh = mesh(headGeometry(), faceOpen, 0, 17.5, 0);
   head.add(headMesh);
-  for (const side of [-1, 1]) head.add(box(3, 9, 6, same(side < 0 ? skin : skinShade), side * 18.5, 15, 0));
-  const hair = buildHair(look.style, pal);
-  hair.position.set(0, -41, 0);
+  for (const s of [-1, 1]) {
+    const ear = mesh(new THREE.SphereGeometry(3.6, 12, 10), s < 0 ? skin : skinSh, s * 21.3, 15, 0.5);
+    ear.scale.set(0.55, 1, 0.8);
+    head.add(ear);
+  }
+  const hair = female ? hairFemale(pal) : hairMale(pal);
+  hair.position.set(0, 17.5, 0);
   head.add(hair);
-  return { root, torso, head, headMesh, legs, arms, hair, parts };
-}
 
-// ---------- 裝備（簡化版：流派決定款式，材料階級決定顏色，稀有度決定滾邊與裝飾） ----------
-function colorsOf(it) {
-  const m = gearMats(it);
-  const c = (k) => m[k].ramp[2];
-  return { metal: c('metal'), leather: c('leather'), cloth: c('cloth'), wood: c('wood'), trim: c('trim'), gem: c('gem'),
-    gold: c('gold'), orb: c('orb'), cape: c('cape'), belt: c('belt'), r: it.rarity };
-}
-function weapon3d(it) {
-  const C = colorsOf(it), g = new THREE.Group();
-  const trim = C.r >= 1 ? C.trim : C.metal;
-  if (it.tag === 'blade') {
-    g.add(box(2, 7, 2, same(tint(C.leather)), 0, 0, 0));
-    g.add(box(C.r >= 4 ? 14 : 10, 2, 3, same(tint(C.r >= 4 ? C.gold : trim)), 0, 4.5, 0));
-    g.add(box(C.r >= 3 ? 4 : 3, 22, 1.5, same(tint(C.metal)), 0, 16.5, 0));
-    if (C.r >= 3) g.add(box(1, 18, 1.8, same(tint(C.trim)), 0, 16, 0));
-    g.add(box(3, 2, 3, same(tint(C.r >= 2 ? C.gem : C.metal)), 0, -4.5, 0));
-  } else if (it.tag === 'guard') {
-    g.add(box(2, 28, 2, same(tint(C.wood)), 0, 8, 0));
-    g.add(box(13, 9, 9, same(tint(C.metal)), 0, 24, 0));
-    g.add(box(13.5, 2, 9.5, same(tint(trim)), 0, 24, 0));
-    if (C.r >= 2) g.add(box(3, 5, 3, same(tint(C.metal)), 0, 31, 0));
-    if (C.r >= 3) for (const s of [-1, 1]) g.add(box(4, 3, 3, same(tint(C.metal)), s * 8.5, 24, 0));
-  } else {
-    g.add(box(2, 40, 2, same(tint(C.wood)), 0, 12, 0));
-    const orb = new THREE.Mesh(new THREE.BoxGeometry(7, 7, 7), new THREE.MeshToonMaterial({ color: new THREE.Color(C.orb), gradientMap: GRADIENT, emissive: new THREE.Color(C.orb), emissiveIntensity: 0.35 }));
-    orb.position.set(0, 35, 0);
-    g.add(orb);
-    g.add(box(9, 2, 9, same(tint(C.r >= 4 ? C.gold : C.metal)), 0, 31, 0));
-  }
-  return g;
-}
-function head3d(it) {
-  const C = colorsOf(it), g = new THREE.Group();
-  const trim = C.r >= 1 ? C.trim : null;
-  if (it.tag === 'blade') {
-    // 寬沿冒險帽：帽沿壓在頭髮上，帽冠套住頭頂
-    g.add(box(52, 2, 46, same(tint(C.leather)), 0, 80, 0));
-    g.add(box(42, 13, 36, same(tint(C.leather)), 0, 87.5, -1));
-    g.add(box(42.5, 3, 36.5, same(tint(trim || C.belt)), 0, 82.5, -1));
-    g.add(box(7, 4, 1, same(tint(C.r >= 4 ? C.gold : C.metal)), 0, 83, 17.5));
-    if (C.r >= 3) g.add(box(2, 14, 2, same(tint(C.trim)), 18, 92, -8));
-  } else if (it.tag === 'guard') {
-    const M = tint(C.metal);
-    g.add(box(44, 12, 38, same(M), 0, 87, -1));                       // 頭頂
-    g.add(box(42, 30, 4, same(M), 0, 70, -19));                       // 後面
-    for (const s of [-1, 1]) {
-      g.add(box(4, 30, 34, same(M), s * 20, 70, -1));                 // 兩側
-      g.add(box(6, 14, 4, same(M), s * 16, 62, 17));                  // 護頰
-    }
-    g.add(box(42, 4, 4, same(tint(trim || C.metal)), 0, 80, 17));     // 眉帶
-    g.add(box(3, 8, 3, same(M), 0, 74, 18.5));                        // 鼻樑
-    if (C.r >= 2) g.add(box(4, 10, 16, same(tint(C.trim)), 0, 97, -4));
-    if (C.r >= 3) for (const s of [-1, 1]) g.add(box(3, 10, 3, same(tint(C.wood)), s * 23, 93, -2));
-    if (C.r >= 4) for (const s of [-1, 0, 1]) g.add(box(3, 4, 3, same(tint(C.gold)), s * 12, 95, 12));
-  } else {
-    // 法師帽：帽沿壓在頭髮上，帽尖往後彎
-    const M = tint(C.cloth);
-    g.add(box(54, 2, 48, same(M), 0, 80, 0));
-    g.add(box(42, 10, 36, same(M), 0, 86, -1));
-    g.add(box(42.5, 3, 36.5, same(tint(trim || C.leather)), 0, 82.5, -1));
-    g.add(box(28, 9, 24, same(M), -1, 95, -3));
-    g.add(box(17, 8, 15, same(M), -3, 103, -6));
-    g.add(box(9, 6, 8, same(M), -6, 109, -10));
-    if (C.r >= 2) g.add(box(4, 4, 1, same(tint(C.gem)), 0, 83, 17.5));
-  }
-  return g;
-}
-function body3d(it) {
-  const C = colorsOf(it), g = new THREE.Group();
-  const trim = C.r >= 1 ? C.trim : null;
-  if (it.tag === 'blade') {
-    g.add(box(30, 18, 16, same(tint(C.leather)), 0, 32, 0));
-    g.add(box(30.5, 3, 16.5, same(tint(C.belt)), 0, 24, 0));
-    if (trim) g.add(box(30.5, 1.5, 16.5, same(tint(trim)), 0, 22, 0));
-    if (C.r >= 2) g.add(box(10, 5, 10, same(tint(C.metal)), -16.5, 42, 0));
-    if (C.r >= 3) g.add(box(10, 5, 10, same(tint(C.metal)), 16.5, 42, 0));
-  } else if (it.tag === 'guard') {
-    g.add(box(30, 22, 16, same(tint(C.metal)), 0, 30, 0));
-    for (const s of [-1, 1]) {
-      g.add(box(11, 7, 12, same(tint(C.metal)), s * 16.5, 42, 0));
-      if (trim) g.add(box(11.5, 1.5, 12.5, same(tint(trim)), s * 16.5, 38.5, 0));
-    }
-    if (trim) g.add(box(30.5, 2, 16.5, same(tint(trim)), 0, 40, 0));
-    if (C.r >= 2) g.add(box(4, 4, 1, same(tint(C.gem)), 0, 34, 8.5));
-  } else {
-    g.add(box(30, 22, 16, same(tint(C.cloth)), 0, 30, 0));
-    g.add(box(32, 18, 18, same(tint(C.cloth)), 0, 11, 0));
-    g.add(box(30.5, 3, 16.5, same(tint(C.leather)), 0, 24, 0));
-    g.add(box(3, 38, 1, same(tint(trim || C.cloth)), 0, 22, 9.2));
-    if (trim) g.add(box(32.5, 1.5, 18.5, same(tint(trim)), 0, 2.5, 0));
-    if (C.r >= 2) g.add(box(4, 4, 1, same(tint(C.gem)), 0, 24, 9.5));
-  }
-  return g;
-}
-function feet3d(it) {
-  const C = colorsOf(it);
-  const col = it.tag === 'guard' ? C.metal : it.tag === 'blade' ? C.leather : C.cloth;
-  const h = it.tag === 'arcane' ? 6.5 : 11;
-  const mk = () => {
-    const g = new THREE.Group();
-    g.add(box(12, h, 16, same(tint(col)), 0, -16 + (h - 6) / 2, 2));
-    if (C.r >= 1) g.add(box(12.5, 1.5, 16.5, same(tint(C.trim)), 0, -16 + h - 3.5, 2));
-    return g;
-  };
-  return [mk(), mk()];
+  // 腳下的影子
+  const shadow = mesh(new THREE.CircleGeometry(15, 24), new THREE.MeshBasicMaterial({ color: 0x0a0d13, transparent: true, opacity: 0.32, depthWrite: false }), 0, 0.2, 1);
+  shadow.rotation.x = -Math.PI / 2; shadow.scale.set(1, 0.7, 1);
+  root.add(shadow);
+  return { root, torso, head, headMesh, legs, arms, hair, faceOpen, faceBlink, shadow };
 }
 
 // ---------- 角色 ----------
 export class Character3D {
-  constructor(look, equip = {}) {
+  constructor(look) {
     this.group = new THREE.Group();
-    this.t = 0;
+    this.t = Math.random() * 3;
     this.action = 'idle';
     this.attackT = -1;
-    this.blinkAt = 2;
-    this.setLook(look, equip);
+    this.blinkAt = this.t + 1.5;
+    this.setLook(look);
   }
 
-  setLook(look, equip = {}) {
+  setLook(look) {
     if (this.model) this.group.remove(this.model.root);
-    const l = normalizeLook(look);
-    this.model = buildBody(l);
-    const M = this.model;
-    // 裝備
-    if (equip.body) {
-      const b = body3d(equip.body);
-      M.torso.add(b);
-      if (equip.body.rarity >= 3) {
-        const cape = box(26, 34, 1.5, same(tint(colorsOf(equip.body).cape)), 0, 24, -8.5);
-        M.torso.add(cape);
-        M.cape = cape;
-      }
-    }
-    if (equip.feet) feet3d(equip.feet).forEach((f, i) => { M.legs[i].userData.shoe.visible = false; M.legs[i].add(f); });
-    if (equip.head) { const h = head3d(equip.head); h.position.set(0, -41, 0); M.head.add(h); }
-    if (equip.weapon) {
-      const w = weapon3d(equip.weapon);
-      w.position.set(1, 0, 4);
-      w.rotation.set(0.3, 0, -0.42);       // 往前、往外傾，避開頭部，露在身體旁邊
-      M.arms[1].userData.hand.add(w);     // 畫面右側那隻手（和 2D 版一樣）
-    }
-    this.group.add(M.root);
+    this.model = build({ gender: '男', color: '深棕', ...look });
+    this.group.add(this.model.root);
   }
 
   play(action) {
@@ -369,32 +411,33 @@ export class Character3D {
     this.t += dt;
     const M = this.model, t = this.t;
     const walking = this.action === 'walk';
-    // 呼吸／走路的上下起伏（整格移動，像素才不會糊）
-    const bob = walking ? Math.round(Math.abs(Math.sin(t * 8)) * 2) : (Math.sin(t * 2.4) > 0.2 ? 1 : 0);
-    M.torso.position.y = -bob;
-    // 走路：腿和手臂前後擺動
-    const swing = walking ? Math.sin(t * 8) * 0.65 : 0;
+    // 呼吸／走路的起伏
+    M.torso.position.y = walking ? -Math.abs(Math.sin(t * 8)) * 1.2 : Math.sin(t * 2.2) * 0.45;
+    M.head.rotation.z = Math.sin(t * 1.1) * 0.025;
+    M.head.rotation.x = walking ? 0.04 : Math.sin(t * 2.2 + 1) * 0.015;
+    const swing = walking ? Math.sin(t * 8) * 0.6 : 0;
     M.legs[0].rotation.x = swing; M.legs[1].rotation.x = -swing;
-    M.arms[0].rotation.x = swing * 0.8;
-    let armR = -swing * 0.8 - 0.35 + (walking ? 0 : Math.sin(t * 2.4) * 0.03);   // 持武器的手稍微抬起
-    // 攻擊：右手往後舉起，再往前揮下
+    M.arms[0].rotation.x = swing * 0.75;
+    let armR = -swing * 0.75;
+    // 攻擊：畫面右側的手往後舉起，再往前揮下
     if (this.attackT >= 0) {
-      this.attackT += dt / 0.45;
+      this.attackT += dt / 0.5;
       const p = this.attackT;
-      if (p < 0.35) armR = -0.35 - 2.25 * (p / 0.35);
-      else if (p < 0.6) armR = -2.6 + 3.5 * ((p - 0.35) / 0.25);
-      else if (p < 1) armR = 0.9 - 1.25 * ((p - 0.6) / 0.4);
+      if (p < 0.35) armR = -2.7 * (p / 0.35);
+      else if (p < 0.6) armR = -2.7 + 3.6 * ((p - 0.35) / 0.25);
+      else if (p < 1) armR = 0.9 * (1 - (p - 0.6) / 0.4);
       else this.attackT = -1;
-      M.torso.rotation.x = p > 0.35 && p < 0.8 ? 0.12 : 0;
+      M.torso.rotation.x = p > 0.35 && p < 0.8 ? 0.1 : 0;
     } else M.torso.rotation.x = 0;
     M.arms[1].rotation.x = armR;
-    // 頭髮、披風輕輕晃
-    if (M.hair.userData.sway) M.hair.userData.sway.rotation.x = Math.sin(t * 1.8) * 0.06;
-    if (M.cape) M.cape.rotation.x = 0.08 + Math.sin(t * 2.2) * 0.05 + (walking ? 0.15 : 0);
+    if (M.hair.userData.sway) {
+      M.hair.userData.sway.rotation.x = Math.sin(t * 1.9) * 0.07 + (walking ? 0.2 : 0);
+      M.hair.userData.sway.rotation.z = Math.sin(t * 1.3) * 0.05;
+    }
     // 眨眼
     if (t > this.blinkAt) {
-      M.headMesh.material[4] = M.parts.faceBlink;
-      if (t > this.blinkAt + 0.13) { M.headMesh.material[4] = M.parts.faceOpen; this.blinkAt = t + 2.2 + Math.random() * 2.5; }
+      M.headMesh.material = M.faceBlink;
+      if (t > this.blinkAt + 0.13) { M.headMesh.material = M.faceOpen; this.blinkAt = t + 2.2 + Math.random() * 2.5; }
     }
   }
 }

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>冒險者 3D 角色原型</title>
+<title>冒險者 3D 人物設計稿</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -30,7 +30,7 @@ h1 span { font-family: var(--pixel); color: var(--gold); font-size: 1rem; margin
 .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); gap: 16px; align-items: start; }
 @media (max-width: 820px) { .layout { grid-template-columns: minmax(0, 1fr); } }
 .box { background: var(--panel); border: 2px solid var(--line); box-shadow: 4px 4px 0 var(--shadow); padding: 14px; min-width: 0; }
-.stage { position: relative; background: linear-gradient(var(--sky) 0 80%, var(--ground) 80%); border: 2px solid var(--line); aspect-ratio: 240 / 170; width: 100%; overflow: hidden; }
+.stage { position: relative; background: linear-gradient(var(--sky) 0 79%, var(--ground) 79%); border: 2px solid var(--line); aspect-ratio: 400 / 236; width: 100%; overflow: hidden; }
 .stage canvas { position: absolute; image-rendering: pixelated; }
 #c3d { left: 0; top: 0; width: 100%; height: 100%; }
 #c2d { right: 3%; bottom: 20%; }
@@ -52,29 +52,22 @@ label.check { display: flex; gap: 8px; align-items: center; cursor: pointer; fon
 <body>
 <div class="wrap">
   <div>
-    <h1>3D 角色原型 <span>ADVENTURE</span></h1>
-    <p class="hint">方塊組成的 Q 版 3D 模型，用低解析度算繪再放大，描 1 格黑線，看起來像像素圖。鏡頭固定在正面，和遊戲畫面一致；右下角是同樣外觀的 2D 版，方便比較。</p>
+    <h1>3D 人物設計稿 <span>ADVENTURE</span></h1>
+    <p class="hint">圓滑曲面組成的 Q 版 3D 模型，用低解析度算繪再放大並描邊，看起來像像素圖。先看男生、女生各一版；確定後再做其他髮型、裝備，並換進遊戲。</p>
   </div>
   <div class="layout">
     <section class="box" aria-label="舞台">
       <div class="stage" id="stage">
-        <canvas id="c3d" aria-label="3D 角色"></canvas>
-        <canvas id="c2d" aria-label="2D 角色對照"></canvas>
-        <span class="tag l">3D</span><span class="tag r">2D 對照</span>
+        <canvas id="c3d" aria-label="3D 人物：左邊男生、右邊女生"></canvas>
       </div>
     </section>
     <section class="box opts" aria-label="選項">
+      <div class="group"><span class="label">角度</span><div class="seg" id="views"></div>
+        <input type="range" id="yaw" min="-180" max="180" value="18" aria-label="角色轉向"></div>
       <div class="group"><span class="label">動作</span><div class="seg" id="actions"></div></div>
-      <div class="group"><span class="label">性別</span><div class="seg" id="gender"></div></div>
-      <div class="group"><span class="label">髮型</span><div class="seg" id="styles"></div></div>
-      <div class="group"><span class="label">髮色</span><div class="seg" id="colors"></div></div>
-      <div class="group"><span class="label">裝備</span><div class="seg" id="gear"></div></div>
-      <div class="group"><span class="label">稀有度</span><div class="seg" id="rarity"></div></div>
-      <div class="group"><span class="label">材料階級</span><div class="seg" id="tier"></div></div>
-      <div class="group">
-        <label class="check" for="inspect"><input type="checkbox" id="inspect">轉動檢查（只用來看模型側面與背面，遊戲裡不會轉）</label>
-        <input type="range" id="yaw" min="-180" max="180" value="15" aria-label="角色轉向" disabled>
-      </div>
+      <div class="group"><span class="label">男生髮色</span><div class="seg" id="maleColor"></div></div>
+      <div class="group"><span class="label">女生髮色</span><div class="seg" id="femaleColor"></div></div>
+      <p class="hint">遊戲裡鏡頭固定在「遊戲視角」；其他角度只是用來檢查模型。</p>
     </section>
   </div>
 </div>
