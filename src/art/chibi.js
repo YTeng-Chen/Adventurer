@@ -316,4 +316,4 @@ export function heroGrid(equip, look, o = { breath: 0, blink: false, cape: 0 }) 
   return out;
 }
 
-export { normalizeLook };
+export { normalizeLook, blinkRows };
