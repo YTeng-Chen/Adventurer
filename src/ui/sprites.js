@@ -1,139 +1,10 @@
-// 像素圖：角色外觀分層（身體、鞋子、上衣、頭飾、武器），顏色依稀有度、造型依流派。
+// 像素圖入口：角色與裝備在 src/art，魔物在這裡（原本 16×16，用 Scale2x 放大成 32×32，和角色同樣的像素密度）。
 import { data } from '../core/data.js';
+import { scale2x } from '../art/pixel.js';
+import { heroLayers, heroGrid, W as HERO_W, H as HERO_H } from '../art/hero.js';
+import { itemIconGrid } from '../art/icons.js';
+
 const OUT = '#1a1420';
-const BASE_PAL = {
-  k: OUT, s: '#f2c79b', S: '#d49a6a', e: OUT, h: '#6b4423', H: '#4a2e17',
-  c: '#8a7d6a', C: '#6a5f50', p: '#4a4a5a', b: '#5a3a2a',
-  m: '#c8ccd4', M: '#8a8e98', w: '#8a5a2a', g: '#f2c84b',
-};
-
-const HERO = [
-  '....................',
-  '....................',
-  '........kkkk........',
-  '......kkhhhhkk......',
-  '.....khhhhhhhhk.....',
-  '.....khhhhhhhhk.....',
-  '.....khsssssshk.....',
-  '.....kssessessk.....',
-  '.....kssssssssk.....',
-  '......kssSSssk......',
-  '........kssk........',
-  '....kcccccccccck....',
-  '...ksccccccccccsk...',
-  '...ksccccccccccsk...',
-  '...kSccccccccccSk...',
-  '....kppppppppppk....',
-  '....kppppkkppppk....',
-  '....kppppkkppppk....',
-  '....kbbbbkkbbbbk....',
-  '...kbbbbbkkbbbbbk...',
-  '...kkkkkk..kkkkkk...',
-  '....................',
-];
-
-// 各部位的造型，'.' 代表沿用下層
-const GEAR = {
-  feet: {
-    _: { y: 18, rows: ['....kAAAAkkAAAAk....', '...kALAAAkkALAAAk...', '...kkkkkk..kkkkkk...'] },
-  },
-  body: {
-    blade: { y: 11, rows: [
-      '....kAAAAAAAAAAk....',
-      '...ksALAAAAAAAAsk...',
-      '...ksAALAAAAAAAsk...',
-      '...kSAAALAAAAAASk...',
-      '....kaaaagaaaaak....',
-    ] },
-    guard: { y: 11, rows: [
-      '..kmmAAAAAAAAAAmmk..',
-      '..kMMAAAaaaaAAAMMk..',
-      '...ksAAAaaaaAAAsk...',
-      '...kSAAAAAAAAAASk...',
-      '....kMMMMMMMMMMk....',
-    ] },
-    arcane: { y: 11, rows: [
-      '....kAAAALLAAAAk....',
-      '...ksAAAALLAAAAsk...',
-      '...ksAAAALLAAAAsk...',
-      '...kSAAAALLAAAASk...',
-      '....kaaaaLLaaaak....',
-      '....kAAAALLAAAAk....',
-      '...kAAAAALLAAAAAk...',
-      '...kaaaaaaaaaaaak...',
-    ] },
-  },
-  head: {
-    blade: { y: 4, rows: [
-      '.....kAAAAAAAAk.....',
-      '.....kaLaaaaaakAA...',
-      '...............kA...',
-    ] },
-    guard: { y: 1, rows: [
-      '........kkkk........',
-      '......kkmmmmkk......',
-      '.....kmmmmmmmmk.....',
-      '....kmmmmAAmmmmk....',
-      '....kMMMMMMMMMMk....',
-      '....kM........Mk....',
-      '....kM........Mk....',
-      '....kM........Mk....',
-    ] },
-    arcane: { y: 0, rows: [
-      '..........kk........',
-      '.........kAAk.......',
-      '........kAAAak......',
-      '.......kAAAAAak.....',
-      '......kggggggggk....',
-      '...kkAAAAAAAAAAAAkk.',
-    ] },
-  },
-  weapon: {
-    blade: { y: 4, rows: [
-      '..................k.',
-      '.................kmk',
-      '.................kmk',
-      '.................kmk',
-      '.................kmk',
-      '.................kmk',
-      '.................kLk',
-      '...............kgAgk',
-      '................kwk.',
-      '................kwk.',
-      '................kgk.',
-    ] },
-    guard: { y: 6, rows: [
-      '...............kkkkk',
-      '...............kAAAk',
-      '...............kALAk',
-      '...............kAAAk',
-      '...............kkwkk',
-      '................kwk.',
-      '................kwk.',
-      '................kwk.',
-      '................kwk.',
-      '................kkk.',
-    ] },
-    arcane: { y: 1, rows: [
-      '................kkk.',
-      '...............kLook',
-      '...............koook',
-      '................kak.',
-      '................kwk.',
-      '................kwk.',
-      '................kwk.',
-      '................kwk.',
-      '................kwk.',
-      '................kwk.',
-      '................kwk.',
-      '................kwk.',
-      '................kwk.',
-      '................kwk.',
-      '................kwk.',
-      '................kkk.',
-    ] },
-  },
-};
 
 function shade(hex, amt) {
   const n = parseInt(hex.slice(1), 16);
@@ -141,65 +12,6 @@ function shade(hex, amt) {
   const f = (c) => Math.max(0, Math.min(255, Math.round(amt < 0 ? c * (1 + amt) : c + (255 - c) * amt)));
   r = f(r); g = f(g); b = f(b);
   return '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
-}
-
-function paint(grid, layer, pal, yOff = 0) {
-  layer.rows.forEach((row, i) => {
-    const y = layer.y + i + yOff;
-    if (y < 0 || y >= grid.length) return;
-    for (let x = 0; x < row.length; x++) {
-      const ch = row[x];
-      if (ch !== '.') grid[y][x] = pal[ch] || pal.k;
-    }
-  });
-}
-
-const LAYER_ORDER = ['feet', 'body', 'head', 'weapon'];
-function layerPalette(it) {
-  const col = data.RARITY[it.rarity].color;
-  const tagCol = it.tag ? data.TAGS[it.tag].color : col;
-  return { ...BASE_PAL, A: col, a: shade(col, -0.35), L: shade(col, 0.45), o: tagCol };
-}
-function blank() { return HERO.map((r) => r.split('').map(() => null)); }
-
-// 紙娃娃分層：每層一張貼圖，同樣大小，疊起來就是角色。key 相同代表外觀相同，可以共用貼圖。
-function heroLayers(equip) {
-  const out = [{ key: 'hero-base', grid: HERO.map((r) => r.split('').map((ch) => (ch === '.' ? null : BASE_PAL[ch]))) }];
-  for (const slot of LAYER_ORDER) {
-    const it = equip && equip[slot];
-    if (!it) continue;
-    const layer = GEAR[slot][it.tag] || GEAR[slot]._;
-    if (!layer) continue;
-    const grid = blank();
-    paint(grid, layer, layerPalette(it));
-    out.push({ key: `gear-${slot}-${it.tag || 'none'}-${it.rarity}`, grid });
-  }
-  return out;
-}
-
-// 史詩以上的裝備會發光：回傳最高稀有度的顏色
-function glow(equip) {
-  let best = null;
-  for (const slot of LAYER_ORDER) {
-    const it = equip && equip[slot];
-    if (it && it.rarity >= 3 && (!best || it.rarity > best.rarity)) best = it;
-  }
-  return best ? { rarity: best.rarity, color: data.RARITY[best.rarity].color } : null;
-}
-
-// 把角色畫成單一色塊陣列（縮圖用）；equip 為 { weapon, head, body, feet }
-function heroGrid(equip) {
-  const grid = HERO.map((r) => r.split('').map((ch) => (ch === '.' ? null : BASE_PAL[ch])));
-  const order = ['feet', 'body', 'head', 'weapon'];
-  for (const slot of order) {
-    const it = equip && equip[slot];
-    if (!it) continue;
-    const shapes = GEAR[slot];
-    const layer = shapes[it.tag] || shapes._;
-    if (!layer) continue;
-    paint(grid, layer, layerPalette(it));
-  }
-  return grid;
 }
 
 const ENEMY = {
@@ -235,10 +47,27 @@ const ENEMY = {
   ],
 };
 
-function enemyGrid(shape, color) {
+function enemyGrid16(shape, color) {
   const rows = ENEMY[shape] || ENEMY.slime;
   const pal = { k: OUT, B: color, b: shade(color, -0.35), l: shade(color, 0.45), w: '#f4f0e8', E: OUT, t: '#f4f0e8' };
   return rows.map((r) => r.split('').map((ch) => (ch === '.' ? null : pal[ch])));
+}
+
+const enemyCache = new Map();
+function enemyGrid(shape, color) {
+  const key = shape + color;
+  if (!enemyCache.has(key)) enemyCache.set(key, scale2x(enemyGrid16(shape, color)));
+  return enemyCache.get(key);
+}
+
+// 史詩以上的裝備會發光：回傳最高稀有度的顏色
+function glow(equip) {
+  let best = null;
+  for (const slot of ['feet', 'body', 'head', 'weapon']) {
+    const it = equip && equip[slot];
+    if (it && it.rarity >= 3 && (!best || it.rarity > best.rarity)) best = it;
+  }
+  return best ? { rarity: best.rarity, color: data.RARITY[best.rarity].color } : null;
 }
 
 function draw(ctx, grid, x, y, scale, { flip = false, flash = 0, alpha = 1 } = {}) {
@@ -258,4 +87,4 @@ function draw(ctx, grid, x, y, scale, { flip = false, flash = 0, alpha = 1 } = {
   ctx.restore();
 }
 
-export const sprites = { heroGrid, heroLayers, glow, enemyGrid, draw, shade, HERO_W: 20, HERO_H: 22, ENEMY_W: 16 };
+export const sprites = { heroGrid, heroLayers, glow, enemyGrid, itemIconGrid, draw, shade, HERO_W, HERO_H, ENEMY_W: 32 };

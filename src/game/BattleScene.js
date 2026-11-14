@@ -1,7 +1,7 @@
 // 戰鬥播放：把 combat.fight() 回傳的紀錄一行一行播出來。戰鬥結果在播放前就已經算好。
 import * as Phaser from 'phaser';
 import { Hero, enemyTexture } from './textures.js';
-import { W, H, GROUND, FONT } from './config.js';
+import { W, H, GROUND, FONT, HERO_Y, HERO_SCALE, ENEMY_SCALE, BOSS_SCALE } from './config.js';
 
 const FLOAT = { attack: '#ffffff', double: '#9fe0ff', chain: '#7af0ff', counter: '#d0d6e0', burn: '#ffa040' };
 
@@ -25,12 +25,12 @@ export class BattleScene extends Phaser.Scene {
     g.fillStyle(0x34416a);
     for (let x = 0; x < W; x += 16) g.fillRect(x, GROUND, 8, 2);
 
-    this.hero = new Hero(this, 96, GROUND - 22 * 4 + 6, 4);
+    this.hero = new Hero(this, 96, HERO_Y, HERO_SCALE);
     this.hero.setEquip(equip);
     this.heroX = this.hero.box.x;
     this.tweens.add({ targets: this.hero.box, y: '-=2', duration: 600, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
 
-    const es = foe.boss ? 5 : 4;
+    const es = foe.boss ? BOSS_SCALE : ENEMY_SCALE;
     this.foe = this.add.image(W - 70, GROUND + 6, enemyTexture(this, foe.shape, foe.c)).setOrigin(1, 1).setScale(es);
     this.foeX = this.foe.x;
     this.tweens.add({ targets: this.foe, y: '-=2', duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
@@ -96,7 +96,7 @@ export class BattleScene extends Phaser.Scene {
     }
     if (line.crit) this.cameras.main.shake(90, 0.006);
     const color = line.crit && line.kind === 'attack' ? '#f2b84b' : FLOAT[line.kind] || '#ffffff';
-    const t = this.add.text(x, y + 6, (line.crit ? '!' : '') + Math.round(line.dmg).toLocaleString('en-US'), FONT(line.crit ? 15 : 11, color)).setOrigin(0.5, 1);
+    const t = this.add.text(x, y + 26, (line.crit ? '!' : '') + Math.round(line.dmg).toLocaleString('en-US'), FONT(line.crit ? 15 : 11, color)).setOrigin(0.5, 1);
     this.tweens.add({ targets: t, y: t.y - 24, alpha: 0, duration: 850, ease: 'Quad.out', onComplete: () => t.destroy() });
   }
 

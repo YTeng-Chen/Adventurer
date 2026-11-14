@@ -19,6 +19,7 @@ npm run dev
 - `npm run build`：打包到 `dist/`，整個資料夾放到任何網頁空間都能開。
 - `npm run preview`：在本機預覽打包結果。
 - `npm test`：執行遊戲規則的測試。
+- 開發時打開 `/tools/sprites.html`：一次看所有流派、稀有度、材料階級的角色與裝備像素圖。
 
 進度存在瀏覽器裡。頁面底部的「快轉 1 小時」是測試用的，可以馬上看到離線收穫。
 
@@ -41,7 +42,8 @@ npm run dev
 
 - 戰鬥結果由 `core` 先算好，Phaser 只負責把戰鬥紀錄播出來，所以「跳過」不會改變結果。
 - HTML 介面和 Phaser 不直接互相呼叫，而是透過 `src/bus.js` 的事件（`state`、`tick`、`battle:start` 等，說明寫在檔案開頭）。
-- 角色是紙娃娃：身體、鞋子、上衣、頭飾、武器各一張貼圖疊在一起，換裝備只換那一層。貼圖目前由 `src/ui/sprites.js` 的字元陣列產生；之後換成美術畫的 spritesheet，只需要改 `src/game/textures.js`。
+- 角色是紙娃娃：披風、身體、鞋子、上衣、頭飾、武器各一張貼圖疊在一起，換裝備只換那一層。
+- 像素圖在 `src/art/` 用程式畫：角色 40×46，自動加上明暗、輪廓與色相偏移。裝備外觀由三件事決定：流派決定款式（劍士輕甲、守衛板甲、術士法袍），材料階級決定材質（青銅、苔皮、鋼、冥骨、龍鱗），稀有度決定滾邊、寶石與裝飾（羽飾、角、披風）。之後換成美術畫的 spritesheet，只需要改 `src/game/textures.js`。
 
 ```
 index.html          頁面骨架
@@ -50,9 +52,11 @@ src/bus.js          介面與 Phaser 之間的事件
 src/style.css       樣式
 src/core/           遊戲規則（data.js 是所有平衡數值）
 src/ui/app.js       HTML 介面
-src/ui/sprites.js   像素圖資料
+src/ui/sprites.js   像素圖入口（魔物資料）
+src/art/            角色、裝備、圖示的像素繪製
 src/game/           Phaser：IdleScene、BattleScene、textures
 tests/              遊戲規則測試
+tools/sprites.html  像素圖預覽（開發用）
 ```
 
 ## 點子苗圃同步

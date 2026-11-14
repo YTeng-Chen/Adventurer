@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>像素圖預覽</title>
+<style>
+  body { margin: 0; padding: 16px; background: #1d2740; color: #ece4d2; font: 13px/1.5 system-ui, sans-serif; }
+  h2 { margin: 18px 0 6px; font-size: 15px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+  figure { margin: 0; text-align: center; }
+  figcaption { font-size: 11px; color: #9ba5b9; }
+  canvas { image-rendering: pixelated; background: #2a3554; }
+</style>
+</head>
+<body>
+<p>開發用：檢查角色、裝備、魔物像素圖。執行 <code>npm run dev</code> 後開 <code>/tools/sprites.html</code>。</p>
+<div id="out"></div>
+<script type="module">
+import { sprites as S } from '../src/ui/sprites.js';
+import { data as D } from '../src/core/data.js';
+
+const out = document.getElementById('out');
+function show(grid, scale, label, parent) {
+  const c = document.createElement('canvas');
+  c.width = grid[0].length * scale; c.height = grid.length * scale;
+  S.draw(c.getContext('2d'), grid, 0, 0, scale);
+  const f = document.createElement('figure');
+  f.append(c);
+  const cap = document.createElement('figcaption'); cap.textContent = label; f.append(cap);
+  parent.append(f);
+}
+function section(title) {
+  const h = document.createElement('h2'); h.textContent = title; out.append(h);
+  const r = document.createElement('div'); r.className = 'row'; out.append(r); return r;
+}
+const set = (tag, tier, rarity) => Object.fromEntries(['weapon', 'head', 'body', 'feet'].map((k) => [k, { type: k, tag, tier, rarity }]));
+
+show(S.heroGrid({}), 4, '沒穿裝備', section('身體'));
+for (const tag of D.TAG_KEYS) {
+  const r1 = section(`${D.TAGS[tag].n}：稀有度（階級 3）`);
+  for (let r = 0; r < 5; r++) show(S.heroGrid(set(tag, 3, r)), 4, D.RARITY[r].n, r1);
+  const r2 = section(`${D.TAGS[tag].n}：材料階級（精良）`);
+  for (let t = 1; t <= 5; t++) show(S.heroGrid(set(tag, t, 1)), 3, 'T' + t, r2);
+}
+const mix = section('混搭');
+show(S.heroGrid({ weapon: { tag: 'blade', tier: 2, rarity: 3 }, head: { tag: 'arcane', tier: 2, rarity: 2 }, body: { tag: 'guard', tier: 3, rarity: 1 }, feet: { tag: 'blade', tier: 1, rarity: 0 } }), 4, '劍＋法帽＋板甲', mix);
+show(S.heroGrid({ weapon: { tag: 'arcane', tier: 4, rarity: 4 }, body: { tag: 'blade', tier: 4, rarity: 4 }, feet: { tag: 'guard', tier: 5, rarity: 2 } }), 4, '法杖＋皮甲', mix);
+const icons = section('背包圖示');
+for (const type of ['weapon', 'head', 'body', 'feet']) for (const tag of D.TAG_KEYS) show(S.itemIconGrid({ type, tag, tier: 3, rarity: 3 }), 3, type + '/' + tag, icons);
+for (const n of ['戒指', '項鍊', '手鍊', '耳飾', '護符']) for (const r of [1, 4]) show(S.itemIconGrid({ type: 'acc', tag: null, tier: 3, rarity: r, name: n }), 3, n + D.RARITY[r].n, icons);
+const mons = section('魔物（放大後）');
+for (const a of D.AREAS) for (const m of [...a.monsters, a.boss]) show(S.enemyGrid(m.shape, m.c), 3, m.n, mons);
+</script>
+</body>
+</html>

@@ -2,7 +2,7 @@
 import * as Phaser from 'phaser';
 import { data as D } from '../core/data.js';
 import { Hero, enemyTexture } from './textures.js';
-import { W, H, GROUND, FONT } from './config.js';
+import { W, H, GROUND, FONT, HERO_Y, HERO_SCALE, ENEMY_SCALE, BOSS_SCALE } from './config.js';
 
 const SHORT = { hp: 'HP', atk: 'ATK', matk: 'MATK', def: 'DEF', mdef: 'MDEF', spd: 'SPD' };
 
@@ -19,10 +19,10 @@ export class IdleScene extends Phaser.Scene {
     this.tweens.add({ targets: this.glow, alpha: { from: 0.35, to: 0.75 }, duration: 380, yoyo: true, repeat: -1 });
     this.props = this.add.graphics();
 
-    this.foe = this.add.image(332, GROUND + 6, enemyTexture(this, 'slime', '#62c46a')).setOrigin(0, 1).setScale(4).setVisible(false);
+    this.foe = this.add.image(332, GROUND + 6, enemyTexture(this, 'slime', '#62c46a')).setOrigin(0, 1).setScale(ENEMY_SCALE).setVisible(false);
     this.tweens.add({ targets: this.foe, y: '-=2', duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
 
-    this.hero = new Hero(this, 96, GROUND - 22 * 4 + 6, 4);
+    this.hero = new Hero(this, 96, HERO_Y, HERO_SCALE);
     this.heroX = this.hero.box.x;
     this.tweens.add({ targets: this.hero.box, y: '-=2', duration: 600, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
 

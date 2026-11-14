@@ -203,6 +203,24 @@ export function startUI(bus) {
     const eff = it.effect ? `<li class="eff">★ ${esc(it.effect.n)}：${esc(it.effect.d)}</li>` : '';
     return `<ul class="lines">${base}${aff}${eff}</ul>`;
   }
+  // 裝備圖示：畫一次就快取成圖片網址
+  const iconCache = new Map();
+  function iconURL(it) {
+    const key = it.type === 'acc' ? `acc-${(it.name || '').slice(-2)}-${it.tier}-${it.rarity}` : `${it.type}-${it.tag}-${it.tier}-${it.rarity}`;
+    if (!iconCache.has(key)) {
+      const g = SP.itemIconGrid(it);
+      const sc = Math.max(1, Math.floor(48 / Math.max(g.length, g[0].length)));
+      const c = document.createElement('canvas');
+      c.width = g[0].length * sc; c.height = g.length * sc;
+      SP.draw(c.getContext('2d'), g, 0, 0, sc);
+      iconCache.set(key, c.toDataURL());
+    }
+    return iconCache.get(key);
+  }
+  function itemHead(it, label) {
+    return `<div class="item-head"><span class="icon" style="--rc:${D.RARITY[it.rarity].color}"><img src="${iconURL(it)}" alt=""></span>
+      <div class="item-title">${label ? `<span class="slot-name">${label}</span>` : ''}<span class="iname" style="color:${D.RARITY[it.rarity].color}">${esc(it.name)}</span></div></div>`;
+  }
   function itemChips(it) {
     return `<div class="chips"><span class="chip" style="color:${D.RARITY[it.rarity].color}">${D.RARITY[it.rarity].n}</span>
       ${it.tag ? `<span class="chip" style="color:${D.TAGS[it.tag].color}">${D.TAGS[it.tag].n}</span>` : '<span class="chip" style="color:var(--muted)">詞條專用</span>'}
@@ -223,7 +241,7 @@ export function startUI(bus) {
     const slots = D.SLOTS.map((sl) => {
       const it = s.equip[sl.k];
       if (!it) return `<div class="card empty"><span class="slot-name">${sl.n}</span><span>空</span></div>`;
-      return `<div class="card"><span class="slot-name">${sl.n}</span><span class="iname" style="color:${D.RARITY[it.rarity].color}">${esc(it.name)}</span>
+      return `<div class="card">${itemHead(it, sl.n)}
         ${itemChips(it)}${itemLines(it)}<div><button class="btn ghost small" data-act="unequip" data-k="${sl.k}">卸下</button></div></div>`;
     }).join('');
     const filters = [['all', '全部'], ['weapon', '武器'], ['head', '頭飾'], ['body', '上衣'], ['feet', '鞋子'], ['acc', '飾品']];
@@ -233,7 +251,7 @@ export function startUI(bus) {
       .sort((a, b) => b.d - a.d || b.it.rarity - a.it.rarity);
     const bag = list.map(({ it, d }) => `<div class="card"><div class="row spread"><span class="slot-name">${D.TYPE_NAME[it.type]}</span>
         <span class="delta ${d > 0 ? 'up' : d < 0 ? 'down' : ''}">戰力 ${d > 0 ? '+' : ''}${fmt(d)}</span></div>
-        <span class="iname" style="color:${D.RARITY[it.rarity].color}">${esc(it.name)}</span>${itemChips(it)}${itemLines(it)}
+        ${itemHead(it)}${itemChips(it)}${itemLines(it)}
         <div class="row"><button class="btn small" data-act="equip" data-id="${it.id}">穿上</button>
         <button class="btn ghost small" data-act="sell" data-id="${it.id}">賣出 <span class="num">${fmt(I.sellPrice(it))}</span></button></div></div>`).join('');
     const cheap = s.bag.filter((it) => it.rarity < 2).length;
@@ -270,7 +288,7 @@ export function startUI(bus) {
       const a = D.AREAS[+cv.dataset.boss];
       const ctx = setupCanvas(cv, 64, 64);
       const locked = +cv.dataset.boss > s.unlockedArea;
-      SP.draw(ctx, SP.enemyGrid(a.boss.shape, locked ? '#3a4256' : a.boss.c), 0, 0, 4, { alpha: locked ? 0.6 : 1 });
+      SP.draw(ctx, SP.enemyGrid(a.boss.shape, locked ? '#3a4256' : a.boss.c), 0, 0, 64 / SP.ENEMY_W, { alpha: locked ? 0.6 : 1 });
     });
   }
 
