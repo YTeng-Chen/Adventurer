@@ -1,7 +1,7 @@
 // 像素圖入口：角色與裝備在 src/art，魔物在這裡（原本 16×16，用 Scale2x 放大成 32×32，和角色同樣的像素密度）。
 import { data } from '../core/data.js';
 import { scale2x } from '../art/pixel.js';
-import { heroLayers, heroGrid, W as HERO_W, H as HERO_H } from '../art/hero.js';
+import { heroLayers, heroParts, heroGrid, W as HERO_W, H as HERO_H, PIVOT } from '../art/hero.js';
 import { itemIconGrid } from '../art/icons.js';
 
 const OUT = '#1a1420';
@@ -87,4 +87,4 @@ function draw(ctx, grid, x, y, scale, { flip = false, flash = 0, alpha = 1 } = {
   ctx.restore();
 }
 
-export const sprites = { heroGrid, heroLayers, glow, enemyGrid, itemIconGrid, draw, shade, HERO_W, HERO_H, ENEMY_W: 32 };
+export const sprites = { heroGrid, heroLayers, heroParts, PIVOT, glow, enemyGrid, itemIconGrid, draw, shade, HERO_W, HERO_H, ENEMY_W: 32 };

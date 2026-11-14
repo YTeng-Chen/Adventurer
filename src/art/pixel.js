@@ -37,7 +37,7 @@ export function ramp(hex) {
   const [h, s, l] = hexToHsl(hex);
   // 暗部：降一點飽和度、色相微偏冷，避免暖色（皮膚、皮革）的陰影變成刺眼的紅
   const dark = (dl, hs, sm) => hslToHex(shiftHue(h, 245, hs), Math.min(1, s * sm), Math.max(0.05, l - dl));
-  const light = (dl, hs) => hslToHex(shiftHue(h, 50, hs), s * 0.92, Math.min(0.96, l + dl));
+  const light = (dl, hs) => hslToHex(shiftHue(h, 50, hs), Math.min(1, s * 1.02), Math.min(0.96, l + dl));
   return [dark(Math.min(l * 0.68, 0.46), 18, 0.7), dark(Math.min(l * 0.24, 0.13), 8, 0.85), hex, light(0.09, 6), light(0.18, 12)];
 }
 
@@ -97,14 +97,17 @@ export function render(layer, mats, { outline = true } = {}) {
     if (t === null) {
       if (mat.flat) t = 2;
       else {
-        const up = !filled(x, y - 1) || layer.raw(x, y - 1) !== m;
+        // 圓柱狀明暗：同一列連續的同材質像素，左側亮、右側暗；上緣再亮一階、下緣暗一階
+        let a = x, b = x;
+        while (layer.raw(a - 1, y) === m) a--;
+        while (layer.raw(b + 1, y) === m) b++;
+        const n = b - a + 1, i = x - a;
+        if (n >= 4) t = i < Math.max(1, Math.round(n * 0.3)) ? 3 : i >= n - Math.max(1, Math.round(n * 0.28)) ? 1 : 2;
+        else t = n > 1 && i === n - 1 ? 1 : 2;
+        const up = layer.raw(x, y - 1) !== m;
         const down = !filled(x, y + 1);
-        const right = !filled(x + 1, y);
-        const left = !filled(x - 1, y);
-        t = 2;
-        if (up && left) t = 4;
-        else if (up) t = 3;
-        if (down || right) t = 1;
+        if (up && t >= 2) t += 1;
+        if (down) t = Math.min(t, 1);
       }
     }
     out[y][x] = mat.ramp[t];

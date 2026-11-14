@@ -97,8 +97,9 @@ export class IdleScene extends Phaser.Scene {
     // 角色動作：戰鬥、鍛鍊是往前衝，其他地點是小跳一下
     if (L === 'battle' || L === 'training') {
       this.tweens.add({ targets: this.hero.box, x: this.heroX + 18, duration: 110, yoyo: true, ease: 'Quad.out' });
+      this.hero.swing();
     } else {
-      this.tweens.add({ targets: this.hero.layers, y: -5, duration: 120, yoyo: true, ease: 'Quad.out' });
+      this.tweens.add({ targets: this.hero.layers, y: '-=5', duration: 120, yoyo: true, ease: 'Quad.out' });
     }
     if (L === 'battle') {
       this.foe.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);

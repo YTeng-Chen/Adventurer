@@ -80,7 +80,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   lunge(who) {
-    if (who === 'p') this.tweens.add({ targets: this.hero.box, x: this.heroX + 16, duration: 90, yoyo: true, ease: 'Quad.out' });
+    if (who === 'p') { this.tweens.add({ targets: this.hero.box, x: this.heroX + 16, duration: 90, yoyo: true, ease: 'Quad.out' }); this.hero.swing(); }
     else this.tweens.add({ targets: this.foe, x: this.foeX - 16, duration: 90, yoyo: true, ease: 'Quad.out' });
   }
 
