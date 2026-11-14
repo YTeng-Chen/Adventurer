@@ -14,7 +14,7 @@ function sym(L, pts, m, tone = null) { for (const [x, y] of pts) { L.set(x, y, m
 function symMark(L, pts, tone, m) { for (const [x, y] of pts) { L.mark(x, y, tone, m); L.mark(MX(x), y, tone, m); } return L; }
 
 // ---------- 身體 ----------
-function baseLayer(blink) {
+export function baseLayer(blink) {
   const L = mk();
   // 鞋、腿、臀
   L.rows([[47, 12, 18], [48, 12, 18], [49, 12, 18], [50, 11, 18], [51, 11, 18]], 'shoe');

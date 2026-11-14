@@ -84,7 +84,9 @@ export class Layer {
 }
 
 // 圖層 → 色塊陣列。mats: { 材質名稱: { ramp, flat?, noOutline? } }
-export function render(layer, mats, { outline = true } = {}) {
+// shade：'volume'（圓柱狀明暗，預設）、'cel'（卡通三階平塗）、'retro'（復古兩階）
+// outlineColor：指定輪廓顏色（例如純黑）；不指定就用各材質最深的顏色
+export function render(layer, mats, { outline = true, shade = 'volume', outlineColor = null } = {}) {
   const { w, h } = layer;
   const out = Array.from({ length: h }, () => new Array(w).fill(null));
   const filled = (x, y) => layer.raw(x, y) !== null;
@@ -108,6 +110,8 @@ export function render(layer, mats, { outline = true } = {}) {
         const down = !filled(x, y + 1);
         if (up && t >= 2) t += 1;
         if (down) t = Math.min(t, 1);
+        if (shade === 'cel') t = Math.max(1, Math.min(3, t));
+        if (shade === 'retro') t = t <= 1 ? 1 : 2;
       }
     }
     out[y][x] = mat.ramp[t];
@@ -118,7 +122,7 @@ export function render(layer, mats, { outline = true } = {}) {
       // 找相鄰（上下左右）的材質，用它的輪廓色
       for (const [dx, dy] of [[0, 1], [0, -1], [-1, 0], [1, 0]]) {
         const m = layer.raw(x + dx, y + dy);
-        if (m && !mats[m].noOutline) { out[y][x] = mats[m].ramp[0]; break; }
+        if (m && !mats[m].noOutline) { out[y][x] = outlineColor || mats[m].ramp[0]; break; }
       }
     }
   }
