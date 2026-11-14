@@ -18,10 +18,11 @@
 <body>
 <div id="board"></div>
 <script type="module">
-import { STYLES } from './styles.js';
+import { STYLES, ANIME_STYLES } from './styles.js';
+const list = location.hash === '#anime' ? ANIME_STYLES : STYLES;
 import { sprites as S } from '../src/ui/sprites.js';
 const board = document.getElementById('board');
-for (const st of STYLES) {
+for (const st of list) {
   const g = st.make();
   const f = document.createElement('figure');
   const n = document.createElement('div'); n.className = 'num'; n.textContent = st.id; f.append(n);
