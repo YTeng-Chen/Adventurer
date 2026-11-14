@@ -185,7 +185,7 @@ select { background: var(--bg); border: 2px solid var(--line); padding: 5px 8px;
 
 /* ---------- 狩獵、試煉 ---------- */
 .bosses { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
-.boss canvas { width: 64px; height: 64px; image-rendering: pixelated; }
+.boss canvas { width: 64px !important; height: 64px !important; image-rendering: pixelated; }
 .bless-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .bless { border: 2px solid var(--c, var(--line)); padding: 2px 8px; font-size: .82rem; background: var(--panel); }
 .bless b { color: var(--c); }
@@ -229,7 +229,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: .88rem; }
 .look-options [aria-pressed="true"] { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); color: var(--ink); }
 .style-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .style-card { font: inherit; color: var(--ink); background: var(--panel-2); border: 2px solid var(--line); padding: 6px 4px 4px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
-.style-card canvas { image-rendering: pixelated; max-width: 100%; }
+.style-card canvas { image-rendering: pixelated; max-width: 100%; height: auto !important; }
 .style-card span { font-size: .84rem; font-weight: 700; }
 .swatches { gap: 6px; }
 .swatch { font: inherit; color: var(--ink); background: var(--panel-2); border: 2px solid var(--line); padding: 4px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: .86rem; }

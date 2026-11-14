@@ -48,7 +48,7 @@ h1 span { font-family: var(--pixel); color: var(--gold); font-size: 1rem; margin
   font: inherit; color: var(--ink); background: var(--stage); border: 2px solid var(--line); padding: 8px 6px 6px; cursor: pointer;
   display: flex; flex-direction: column; align-items: center; gap: 4px;
 }
-.card canvas { width: 102px; image-rendering: pixelated; }
+.card canvas { width: 102px; height: auto; image-rendering: pixelated; }
 .card[aria-pressed="true"] { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }
 .card span { font-size: .86rem; font-weight: 700; }
 :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
@@ -62,7 +62,7 @@ h1 span { font-family: var(--pixel); color: var(--gold); font-size: 1rem; margin
   </div>
   <div class="layout">
     <section class="box preview" aria-label="預覽">
-      <canvas id="big" width="300" height="420" aria-label="角色預覽"></canvas>
+      <canvas id="big" width="320" height="400" aria-label="角色預覽"></canvas>
       <p id="name"></p>
     </section>
     <section class="box group" aria-label="選項">
@@ -75,7 +75,7 @@ h1 span { font-family: var(--pixel); color: var(--gold); font-size: 1rem; margin
 <script type="module">
 import { HAIR } from './hairstyles-data.js';
 
-const W = 34, H = 54;
+const W = HAIR.W, H = HAIR.H;
 const state = { gender: '男', color: '栗棕', style: HAIR.styles['男'][0] };
 try { Object.assign(state, JSON.parse(localStorage.getItem('hair-pick') || '{}')); } catch (e) { /* 沒有存過就用預設 */ }
 const stylesOf = () => HAIR.styles[state.gender] || HAIR.styles['男'];
@@ -101,11 +101,11 @@ function renderBig() {
   const cv = document.getElementById('big'), ctx = cv.getContext('2d');
   ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = '#2a3554'; ctx.fillRect(0, 0, cv.width, cv.height);
-  ctx.fillStyle = '#4e6a3f'; ctx.fillRect(0, 378, cv.width, 42);
+  ctx.fillStyle = '#4e6a3f'; ctx.fillRect(0, 360, cv.width, 40);
   const rows = sprite(state.style);
-  draw(ctx, rows, 6, (cv.width - W * 6) / 2 - 40, 378 - 50 * 6 + 2);
-  // 遊戲裡的實際大小（2 倍）
-  draw(ctx, rows, 2, cv.width - W * 2 - 18, 378 - 50 * 2 + 2);
+  draw(ctx, rows, 3, 10, 360 - 105 * 3 + 6);
+  // 遊戲裡的實際大小
+  draw(ctx, rows, 1, cv.width - W - 12, 360 - 105 + 2);
   document.getElementById('name').textContent = `${state.style}・${state.color}・${state.gender === '男' ? '男生' : '女生'}`;
 }
 function renderOptions() {
@@ -114,10 +114,10 @@ function renderOptions() {
   const c = document.getElementById('colors');
   c.innerHTML = Object.entries(HAIR.hairColors).map(([k, v]) => `<button type="button" class="swatch" data-c="${k}" aria-pressed="${state.color === k}"><i style="background:${v[1]}"></i>${k}</button>`).join('');
   const cards = document.getElementById('cards');
-  cards.innerHTML = stylesOf().map((s, i) => `<button type="button" class="card" data-s="${s}" aria-pressed="${state.style === s}"><canvas width="${W * 3}" height="${30 * 3}"></canvas><span>${i + 1} ${s}</span></button>`).join('');
+  cards.innerHTML = stylesOf().map((s, i) => `<button type="button" class="card" data-s="${s}" aria-pressed="${state.style === s}"><canvas width="${W * 2}" height="${64 * 2}"></canvas><span>${i + 1} ${s}</span></button>`).join('');
   cards.querySelectorAll('canvas').forEach((cv, i) => {
     const ctx = cv.getContext('2d');
-    draw(ctx, sprite(stylesOf()[i]).slice(0, 30), 3, 0, 0);
+    draw(ctx, sprite(stylesOf()[i]).slice(0, 64), 2, 0, 0);
   });
 }
 function render() {

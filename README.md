@@ -44,8 +44,8 @@ npm run dev
 - 戰鬥結果由 `core` 先算好，Phaser 只負責把戰鬥紀錄播出來，所以「跳過」不會改變結果。
 - HTML 介面和 Phaser 不直接互相呼叫，而是透過 `src/bus.js` 的事件（`state`、`tick`、`battle:start` 等，說明寫在檔案開頭）。
 - 角色是手繪的動漫迷你 Q 版紙娃娃：後髮、披風、身體、鞋子、上衣、前髮、頭飾、武器各一層，換裝備或換髮型只換那一層。角色會呼吸、眨眼、披風會飄，攻擊時武器以右手為支點揮動。
-- 身體與髮型是手繪的：`tools/art/hairstyles.py` 用 Python（需要 Pillow）畫出來，執行 `python3 tools/art/hairstyles.py --export` 輸出 `src/art/chibi-data.js`。髮色用四階色票替換，所以每種髮型都能換色。
-- 裝備在 `src/art/chibi.js` 用程式照同樣的畫風（黑色輪廓、卡通平塗）畫：流派決定款式（劍士冒險帽與皮甲、守衛騎士盔與板甲、術士法帽與法袍），材料階級決定材質，稀有度決定滾邊、寶石與裝飾（羽毛、角、披風）。之後換成美術畫的圖，只需要改 `src/art/chibi.js` 與 `src/game/textures.js`。
+- 身體與髮型是手繪的高解析度像素圖（角色 68×108 格，參考大頭、寬臉、大眼、兩側耳朵、厚帽兜、大球鞋的比例）：`tools/art/character.py` 用 Python（需要 Pillow）畫出來，執行 `python3 tools/art/character.py --export` 輸出 `src/art/chibi-data.js` 與 `tools/hairstyles-data.js`。髮色用四階色票替換，所以每種髮型都能換色。
+- 裝備在 `src/art/chibi.js` 用程式照同樣的畫風（黑色輪廓、卡通平塗）畫，設計座標放大 2 倍後再描 1 格細的輪廓：流派決定款式（劍士冒險帽與皮甲、守衛騎士盔與板甲、術士法帽與法袍），材料階級決定材質，稀有度決定滾邊、寶石與裝飾（羽毛、角、披風）。之後換成美術畫的圖，只需要改 `src/art/chibi.js` 與 `src/game/textures.js`。
 
 ```
 index.html          頁面骨架

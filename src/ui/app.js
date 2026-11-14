@@ -40,6 +40,7 @@ export function startUI(bus) {
   function setupCanvas(cv, w, h) {
     const dpr = Math.min(3, window.devicePixelRatio || 1);
     cv.width = w * dpr; cv.height = h * dpr;
+    cv.style.width = w + 'px'; cv.style.height = h + 'px';
     const ctx = cv.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.imageSmoothingEnabled = false;
@@ -432,12 +433,12 @@ export function startUI(bus) {
         </div>
       </div>
       <div class="row"><button class="btn" data-act="look-ok">${lookFirst ? '開始冒險' : '儲存外觀'}</button>${lookFirst ? '' : '<button class="btn ghost" data-act="look-cancel">取消</button>'}</div></div>`;
-    drawLook($('#lookBig'), d, null, 4);
+    drawLook($('#lookBig'), d, null, 3);
     const gear = $('#lookGear');
-    if (gear) drawLook(gear, d, s.equip, 2);
+    if (gear) drawLook(gear, d, s.equip, 1);
     m.querySelectorAll('canvas[data-style]').forEach((cv) => {
-      const g = SP.heroGrid({}, { ...d, style: cv.dataset.style }).slice(0, 34);
-      const ctx = setupCanvas(cv, SP.HERO_W * 2, 34 * 2);
+      const g = SP.heroGrid({}, { ...d, style: cv.dataset.style }).slice(0, 64).map((row) => row.slice(0, 68));
+      const ctx = setupCanvas(cv, 136, 128);
       SP.draw(ctx, g, 0, 0, 2);
     });
   }

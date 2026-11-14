@@ -1,23 +1,40 @@
 // 手繪 Q 版角色：身體（男、女）＋髮型（前層、後層）＋裝備圖層，黑色輪廓、卡通平塗。
-// 身體與髮型是 tools/art/hairstyles.py 手繪輸出的資料；裝備在這裡用程式畫，照同樣的畫風。
-// 座標說明：圖寬 44、高 54；裝備用「身體座標」（Layer 自動往下平移 OY=4 格）。
+// 身體與髮型是 tools/art/character.py 手繪輸出的資料；裝備在這裡用程式畫，照同樣的畫風。
+// 座標說明：圖寬 88、高 108（手繪角色是 68 寬，右邊留空間給武器）。
+// 裝備沿用原本 34 寬的設計座標（身體座標），由 ScaledLayer 放大 2 倍再描邊、上色，所以輪廓仍是 1 格細線。
 import { Layer, render } from './pixel.js';
 import { gearMats } from './palette.js';
 import { CHIBI } from './chibi-data.js';
 
-export const W = 44, H = CHIBI.H, OY = CHIBI.OY;
+export const W = 88, H = CHIBI.H, OY = CHIBI.OY;
+const OW = 44;                               // 裝備設計座標的寬度（放大前）
 const INK = '#120d12';
-const SPLIT = 37 + OY;                       // 呼吸：腰部以上往下移一格
-export const PIVOT = { x: 27, y: 37.5 + OY }; // 武器揮動的支點：右手握把中心（像素邊界座標）
+const SPLIT = 82;                            // 呼吸：腰部以上往下移一格
+export const PIVOT = { x: 54, y: 83 };       // 武器揮動的支點：右手握把中心（像素邊界座標）
 export const GENDER_STYLES = CHIBI.genderStyles;
 export const HAIR_COLORS = CHIBI.hairColors;
 export const DEFAULT_LOOK = { gender: '男', style: CHIBI.genderStyles['男'][0], color: '栗棕' };
 
-const mk = () => new Layer(W, H, OY);
+// 放大 2 倍的圖層：用設計座標畫，每格變成 2×2；設計座標的 y 先加 4（原本的上方留白）
+class ScaledLayer {
+  constructor() { this.inner = new Layer(W, H, 0); }
+  each(x, y, fn) { for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) fn(2 * x + i, 2 * (y + 4) + j); }
+  set(x, y, m, tone = null) { this.each(x, y, (a, b) => this.inner.set(a, b, m, tone)); return this; }
+  get(x, y) { return this.inner.get(2 * x, 2 * (y + 4)); }
+  erase(x, y) { return this.set(x, y, null); }
+  mark(x, y, tone, m) { this.each(x, y, (a, b) => this.inner.mark(a, b, tone, m)); return this; }
+  rect(x, y, w, h, m, tone = null) { for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) this.set(i, j, m, tone); return this; }
+  rows(list, m, tone = null) { for (const [y, a, b] of list) for (let x = a; x <= b; x++) this.set(x, y, m, tone); return this; }
+  hline(x0, x1, y, m, tone = null) { for (let x = x0; x <= x1; x++) this.set(x, y, m, tone); return this; }
+  vline(x, y0, y1, m, tone = null) { for (let y = y0; y <= y1; y++) this.set(x, y, m, tone); return this; }
+  dots(list, m, tone = null) { for (const [x, y] of list) this.set(x, y, m, tone); return this; }
+  ellipse(cx, cy, rx, ry, m, tone = null) { this.inner.ellipse(2 * cx + 0.5, 2 * (cy + 4) + 0.5, 2 * rx, 2 * ry, m, tone); return this; }
+}
+const mk = () => new ScaledLayer();
 const MX = (x) => 31 - x; // 身體左右對稱軸在 15.5
 function sym(L, pts, m, tone = null) { for (const [x, y] of pts) { L.set(x, y, m, tone); L.set(MX(x), y, m, tone); } return L; }
 function symRows(L, rows, m, tone = null) { for (const [y, a, b] of rows) { L.hline(a, b, y, m, tone); L.hline(MX(b), MX(a), y, m, tone); } return L; }
-const cel = (L, mats) => render(L, mats, { shade: 'cel', outlineColor: INK });
+const cel = (L, mats) => render(L.inner || L, mats, { shade: 'cel', outlineColor: INK });
 
 // ---------- 身體與頭髮（資料 → 色塊陣列） ----------
 function normalizeLook(look) {
@@ -38,13 +55,15 @@ function toGrid(rows, pal) {
     return out;
   });
 }
-// 閉眼：把兩眼換成皮膚，畫一條往下彎的眼線
+// 閉眼：把兩眼換成皮膚（下半是臉頰亮面），畫一條往下彎的眼線
 function blinkRows(rows) {
   const g = rows.map((r) => r.split(''));
-  for (const [a, b] of [[8, 13], [18, 23]]) {
-    for (let y = 18; y <= 22; y++) for (let x = a; x <= b; x++) g[y + OY][x] = 'S';
-    for (let x = a + 1; x <= b - 1; x++) g[21 + OY][x] = 'K';
-    g[20 + OY][a] = 'K'; g[20 + OY][b] = 'K';
+  for (const [a, b] of [[19, 27], [36, 44]]) {
+    for (let y = 32; y <= 44; y++) for (let x = a; x <= b; x++) {
+      if ('KEeWg'.includes(g[y + OY][x]) || (y >= 41 && g[y + OY][x] === 's')) g[y + OY][x] = y >= 41 && x >= 20 && x <= 43 ? 'l' : 'S';
+    }
+    for (let x = a + 1; x <= b - 1; x++) g[40 + OY][x] = 'K';
+    g[39 + OY][a] = 'K'; g[39 + OY][b] = 'K';
   }
   return g.map((r) => r.join(''));
 }
@@ -197,8 +216,8 @@ function cape(it, f = 0) {
     L.hline(left, right, y, 'cape');
     L.set(left, y, 'lining');
   }
-  for (let x = 0; x < W; x++) if ((x + f) % 3 === 0 && L.get(x, 46)) L.set(x, 47, 'cape');
-  if (it.rarity >= 4) for (let x = 0; x < W; x++) if (L.get(x, 46) === 'cape') L.mark(x, 46, 2, 'gold');
+  for (let x = 0; x < OW; x++) if ((x + f) % 3 === 0 && L.get(x, 46)) L.set(x, 47, 'cape');
+  if (it.rarity >= 4) for (let x = 0; x < OW; x++) if (L.get(x, 46) === 'cape') L.mark(x, 46, 2, 'gold');
   return L;
 }
 
