@@ -58,7 +58,7 @@ h1 span { font-family: var(--pixel); color: var(--gold); font-size: 1rem; margin
 <div class="wrap">
   <div>
     <h1>髮型挑選 <span>ADVENTURE</span></h1>
-    <p class="hint">選性別、髮色和髮型，左邊是放大的樣子和遊戲裡的實際大小。這是角色建立畫面的試做。</p>
+    <p class="hint">選性別、髮色和髮型（男生、女生各 3 種），左邊是放大的樣子和遊戲裡的實際大小。這是角色建立畫面的試做。</p>
   </div>
   <div class="layout">
     <section class="box preview" aria-label="預覽">
@@ -76,9 +76,11 @@ h1 span { font-family: var(--pixel); color: var(--gold); font-size: 1rem; margin
 import { HAIR } from './hairstyles-data.js';
 
 const W = 34, H = 54;
-const state = { gender: '男', color: '栗棕', style: HAIR.styles[0] };
+const state = { gender: '男', color: '栗棕', style: HAIR.styles['男'][0] };
 try { Object.assign(state, JSON.parse(localStorage.getItem('hair-pick') || '{}')); } catch (e) { /* 沒有存過就用預設 */ }
-if (!HAIR.styles.includes(state.style)) state.style = HAIR.styles[0];
+const stylesOf = () => HAIR.styles[state.gender] || HAIR.styles['男'];
+if (!HAIR.styles[state.gender]) state.gender = '男';
+if (!stylesOf().includes(state.style)) state.style = stylesOf()[0];
 if (!HAIR.hairColors[state.color]) state.color = '栗棕';
 
 function pal() {
@@ -112,10 +114,10 @@ function renderOptions() {
   const c = document.getElementById('colors');
   c.innerHTML = Object.entries(HAIR.hairColors).map(([k, v]) => `<button type="button" class="swatch" data-c="${k}" aria-pressed="${state.color === k}"><i style="background:${v[1]}"></i>${k}</button>`).join('');
   const cards = document.getElementById('cards');
-  cards.innerHTML = HAIR.styles.map((s, i) => `<button type="button" class="card" data-s="${s}" aria-pressed="${state.style === s}"><canvas width="${W * 3}" height="${30 * 3}"></canvas><span>${i + 1} ${s}</span></button>`).join('');
+  cards.innerHTML = stylesOf().map((s, i) => `<button type="button" class="card" data-s="${s}" aria-pressed="${state.style === s}"><canvas width="${W * 3}" height="${30 * 3}"></canvas><span>${i + 1} ${s}</span></button>`).join('');
   cards.querySelectorAll('canvas').forEach((cv, i) => {
     const ctx = cv.getContext('2d');
-    draw(ctx, sprite(HAIR.styles[i]).slice(0, 30), 3, 0, 0);
+    draw(ctx, sprite(stylesOf()[i]).slice(0, 30), 3, 0, 0);
   });
 }
 function render() {
@@ -125,7 +127,7 @@ function render() {
 document.addEventListener('click', (e) => {
   const b = e.target.closest('button');
   if (!b) return;
-  if (b.dataset.g) state.gender = b.dataset.g;
+  if (b.dataset.g && b.dataset.g !== state.gender) { state.gender = b.dataset.g; state.style = stylesOf()[0]; }
   if (b.dataset.c) state.color = b.dataset.c;
   if (b.dataset.s) state.style = b.dataset.s;
   render();

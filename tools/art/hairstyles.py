@@ -1,4 +1,4 @@
-# 髮型系統原型（需要 Pillow）：身體（男、女，不含頭髮）＋ 6 種髮型（前層、後層）。
+# 髮型系統原型（需要 Pillow）：身體（男、女，不含頭髮）＋ 男女各 3 種髮型（前層、後層）。
 # 執行 python3 tools/art/hairstyles.py 會輸出比較圖 hairstyles.png 與資料 hairstyles.json。
 import math, os, sys, json
 from PIL import Image, ImageDraw, ImageFont
@@ -313,6 +313,8 @@ STYLES = [
     ('長直髮', style_long),
     ('丸子頭', style_bun),
 ]
+# 男女各自可選的髮型
+GENDER_STYLES = {'男': ['中分', '斜瀏海', '平頭'], '女': ['高馬尾', '長直髮', '丸子頭']}
 
 # ---------- 合成 ----------
 def outline(g, protect):
@@ -365,16 +367,17 @@ if __name__ == '__main__':
     font = ImageFont.truetype('/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc', 20)
     S = 5
     rows = [
-        ('男', False, ['栗棕', '銀白', '深棕', '藍黑', '深棕', '栗棕']),
-        ('女', True, ['金色', '粉紅', '深棕', '粉紅', '藍黑', '銀白']),
+        ('男', False, ['栗棕', '銀白', '深棕']),
+        ('女', True, ['粉紅', '藍黑', '金色']),
     ]
+    fns = dict(STYLES)
     cw, rh = W * S + 16, H * S + 36
-    board = Image.new('RGBA', (cw * len(STYLES) + 16, rh * 2 + 10), (246, 244, 248, 255))
+    board = Image.new('RGBA', (cw * 3 + 16, rh * 2 + 10), (246, 244, 248, 255))
     d = ImageDraw.Draw(board)
     data = {}
     for r, (label, fem, colors) in enumerate(rows):
-        for i, (name, fn) in enumerate(STYLES):
-            g = compose(fn, fem)
+        for i, name in enumerate(GENDER_STYLES[label]):
+            g = compose(fns[name], fem)
             data[f'{label}-{name}'] = [''.join(row) for row in g]
             x0, y0 = 8 + i * cw, r * rh
             render(g, colors[i], S, board, x0, y0 + 30)
