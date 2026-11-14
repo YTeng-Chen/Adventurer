@@ -3,6 +3,7 @@
 import { Layer, render, ramp } from '../src/art/pixel.js';
 import { BODY } from '../src/art/palette.js';
 import { baseLayer } from '../src/art/hero.js';
+import * as HAND from './anime-hero.js';
 
 const W = 48, H = 56;
 const m = (hex, o = {}) => ({ ramp: ramp(hex), ...o });
@@ -130,89 +131,9 @@ function retro() {
   return out;
 }
 
-// ---------- 6. 動漫迷你 Q 版：蓬鬆亂髮、動漫大眼、純黑輪廓、低彩度 ----------
-function anime(colors) {
-  const L = new Layer(W, H), A = 23.5;
-  // 球鞋：深色鞋面、白色鞋底
-  L.rows([[49, 17, 22], [50, 17, 22], [51, 16, 22]], 'shoe');
-  L.hline(16, 22, 52, 'sole');
-  L.dots([[18, 49], [19, 50]], 'sole');
-  // 褲子
-  L.hline(18, 23, 43, 'pants').hline(18, 23, 44, 'pants');
-  for (let y = 45; y <= 48; y++) L.hline(18, 22, y, 'pants');
-  // 連帽外套、袖子、手
-  L.hline(17, 23, 32, 'hoodie');
-  for (let y = 33; y <= 42; y++) L.hline(16, 23, y, 'hoodie');
-  for (let y = 33; y <= 40; y++) L.hline(13, 15, y, 'hoodie');
-  L.rows([[41, 13, 15], [42, 13, 15], [43, 14, 15]], 'skin');
-  L.rows([[30, 17, 20], [31, 17, 20]], 'hoodie');
-  L.mirror(A);
-  // 白 T、拉鍊邊、帽繩、口袋
-  for (let y = 33; y <= 42; y++) L.hline(21, 26, y, 'shirt');
-  L.rows([[32, 22, 25]], 'skin', 1);
-  L.vline(20, 33, 42, 'hoodie', 0).vline(27, 33, 42, 'hoodie', 0);
-  L.dots([[21, 34], [21, 35], [21, 36], [26, 34], [26, 35], [26, 36]], 'string');
-  L.hline(17, 19, 39, 'hoodie', 1).hline(28, 30, 39, 'hoodie', 1);
-  L.vline(16, 33, 40, 'hoodie', 0).vline(31, 33, 40, 'hoodie', 0);
-  L.hline(13, 15, 40, 'hoodie', 0).hline(32, 34, 40, 'hoodie', 0);
-  L.vline(23, 44, 48, 'pants', 0).vline(24, 44, 48, 'pants', 0);
-  // 脖子、臉
-  L.rows([[31, 21, 26]], 'skin', 1);
-  L.rows([[18, 14, 33], [19, 13, 34], [20, 13, 34], [21, 13, 34], [22, 13, 34], [23, 13, 34], [24, 13, 34], [25, 13, 34], [26, 13, 34], [27, 13, 34], [28, 14, 33], [29, 15, 32], [30, 17, 30]], 'skin');
-  L.dots([[12, 23], [12, 24], [12, 25], [35, 23], [35, 24], [35, 25]], 'skin');
-  // 蓬鬆亂髮：橢圓加上尖刺（越往上越尖），做出一撮一撮往外翹的輪廓
-  const cx = 23.5, cy = 13.5, rx = 13.5, ry = 11.5;
-  for (let y = 0; y <= 30; y++) for (let x = 4; x <= 43; x++) {
-    const dx = (x - cx) / rx, dy = (y - cy) / ry;
-    const th = Math.atan2(dy, dx);
-    const spike = y > 22 ? 0 : 0.3 * Math.pow(Math.max(0, Math.sin(10 * th + 0.9)), 6);
-    if (Math.hypot(dx, dy) <= 1 + spike) L.set(x, y, 'hair');
-  }
-  // 臉：瀏海以下露出來
-  L.rows([[19, 13, 34], [20, 13, 34], [21, 13, 34], [22, 13, 34], [23, 13, 34], [24, 13, 34], [25, 13, 34], [26, 13, 34], [27, 13, 34], [28, 14, 33], [29, 15, 32], [30, 17, 30]], 'skin');
-  L.dots([[12, 23], [12, 24], [35, 23], [35, 24]], 'skin');
-  // 鬢角
-  for (let y = 19; y <= 24; y++) { L.hline(10, 13, y, 'hair'); L.hline(34, 37, y, 'hair'); }
-  L.rows([[25, 11, 13], [26, 12, 13], [27, 12, 12], [25, 34, 36], [26, 34, 35], [27, 35, 35]], 'hair');
-  // 瀏海：尖尖的一撮撮，兩眼中間垂下一撮
-  const fringe = [20, 21, 19, 20, 21, 20, 19, 20, 21, 23, 24, 22, 20, 19, 20, 21, 20, 19, 20, 21, 20, 19];
-  fringe.forEach((bottom, i) => { const x = 13 + i; for (let y = 17; y <= bottom; y++) L.set(x, y, 'hair'); L.mark(x, bottom, 0); });
-  // 頭髮的亮塊與暗紋
-  L.dots([[15, 6], [16, 6], [17, 6], [15, 7], [16, 7], [14, 8], [29, 8], [30, 8], [30, 9], [31, 9], [22, 4], [23, 4], [24, 4]], 'hair', 3);
-  L.dots([[16, 5], [30, 7], [23, 3]], 'hair', 4);
-  L.dots([[19, 9], [20, 10], [21, 11], [26, 9], [27, 10], [28, 11], [12, 12], [13, 13], [35, 12], [34, 13], [24, 7], [24, 8], [17, 13], [18, 14], [31, 14], [30, 15]], 'hair', 1);
-  // 動漫大眼：粗上睫毛、深色瞳孔、高光、下半部較亮
-  for (const ex of [16, 28]) {
-    L.hline(ex - 1, ex + 4, 22, 'pupil');
-    for (let y = 23; y <= 24; y++) L.hline(ex, ex + 3, y, 'pupil');
-    L.hline(ex, ex + 3, 25, 'iris').hline(ex, ex + 3, 26, 'irisL');
-    L.set(ex + 1, 23, 'white').set(ex + 1, 24, 'white');
-    L.set(ex - 1, 23, 'pupil');
-  }
-  L.dots([[23, 29], [24, 29]], 'skin', 1);
-  const mats = {
-    ...BODY,
-    skin: m(colors.skin || '#ffd6b8'),
-    hair: m(colors.hair),
-    hoodie: m(colors.hoodie),
-    shirt: m(colors.shirt || '#e4dcdc'),
-    string: m('#f4f0f0', { flat: true }),
-    pants: m(colors.pants),
-    shoe: m(colors.shoe || '#35303a'),
-    sole: m('#f0eef4'),
-    pupil: m(colors.pupil || '#2a1e26', { flat: true }),
-    iris: m(colors.iris || '#4e3e4c', { flat: true }),
-    irisL: m(colors.irisL || '#8a7a88', { flat: true }),
-  };
-  return render(L, mats, { shade: 'cel', outlineColor: '#0e0a10' });
-}
-const ANIME = [
-  { id: '6A', name: '動漫迷你 Q 版', note: '照參考圖的方向：深色亂髮、黑框、低彩度', colors: { hair: '#4a3a42', hoodie: '#3c343c', pants: '#3a3238' } },
-  { id: '6B', name: '同樣式・換色', note: '棕髮、藍外套（展示換色）', colors: { hair: '#8a5030', hoodie: '#3c5c9a', pants: '#34364a', pupil: '#1e2a48', iris: '#2f5a9e', irisL: '#6a9ad8' } },
-  { id: '6C', name: '同樣式・換色', note: '銀髮、紅外套（展示換色）', colors: { hair: '#c8c4d4', hoodie: '#a03440', pants: '#2e2a36', pupil: '#3a1a22', iris: '#8a2a3a', irisL: '#d86a7a' } },
-];
-
-export const ANIME_STYLES = ANIME.map((a) => ({ ...a, make: () => anime(a.colors) }));
+// 6：手繪版（tools/anime-hero.js），三種配色
+const ANIME_NOTES = ['照參考圖的深色配色', '在遊戲深色背景上比較顯眼', '在遊戲深色背景上比較顯眼'];
+export const ANIME_STYLES = HAND.COLORWAYS.map((c, i) => ({ id: '6' + 'ABC'[i], name: c.name, note: ANIME_NOTES[i], make: () => HAND.grid({ ...c.pal }) }));
 
 export const STYLES = [
   { id: 1, name: '粗壯 Q 版（目前）', note: '3 頭身、大拳大靴、圓柱狀明暗、彩色輪廓', make: current },
