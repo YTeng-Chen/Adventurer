@@ -78,6 +78,8 @@ import { HAIR } from './hairstyles-data.js';
 const W = 34, H = 54;
 const state = { gender: '男', color: '栗棕', style: HAIR.styles[0] };
 try { Object.assign(state, JSON.parse(localStorage.getItem('hair-pick') || '{}')); } catch (e) { /* 沒有存過就用預設 */ }
+if (!HAIR.styles.includes(state.style)) state.style = HAIR.styles[0];
+if (!HAIR.hairColors[state.color]) state.color = '栗棕';
 
 function pal() {
   const [D, Hc, M, L] = HAIR.hairColors[state.color];

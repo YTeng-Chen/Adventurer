@@ -1,4 +1,4 @@
-# 髮型系統原型（需要 Pillow）：身體（男、女，不含頭髮）＋ 7 種髮型（前層、後層）。
+# 髮型系統原型（需要 Pillow）：身體（男、女，不含頭髮）＋ 6 種髮型（前層、後層）。
 # 執行 python3 tools/art/hairstyles.py 會輸出比較圖 hairstyles.png 與資料 hairstyles.json。
 import math, os, sys, json
 from PIL import Image, ImageDraw, ImageFont
@@ -225,22 +225,6 @@ def face_hole(m, top=13, bottom=24):
 
 # ---------- 髮型 ----------
 # 每種回傳 (back, front)：back 畫在身體後面，front 畫在臉上
-def style_short_messy():
-    m = new_mask()
-    ellipse_fill(m, 16, 10.5, 10.6, 9.2)
-    for p in [
-        [(6.5, 7), (2.5, 4.5), (8.5, 3.5)], [(11, 3.5), (9.5, -0.5), (14.5, 2)], [(16.5, 2), (19, -1), (21.5, 2.5)],
-        [(22.5, 4), (28, 2), (26.5, 7.5)], [(26, 9.5), (30.5, 11), (26, 14)], [(6, 9.5), (1.5, 12), (6, 14.5)],
-        [(7, 14.5), (3.5, 19), (8.5, 18)], [(25, 14.5), (28.5, 18.5), (23.5, 18)],
-    ]:
-        poly_fill(m, p)
-    face_hole(m)
-    poly_fill(m, [(8, 12), (8, 18), (11, 15.5), (13, 12)])
-    poly_fill(m, [(12, 12), (14.2, 17.5), (16.5, 12)])
-    poly_fill(m, [(16, 12), (18.5, 16.5), (20.5, 12)])
-    poly_fill(m, [(19.5, 12), (23.5, 18), (24, 12)])
-    return {}, shade(m, dark=lines((12, 4, 10, 9), (19, 3, 21, 8), (15, 6, 15, 10), (7, 9, 6, 13), (25, 9, 26, 13)))
-
 def style_center_part():
     m = new_mask()
     ellipse_fill(m, 16, 10.5, 10.4, 9.0)
@@ -322,7 +306,6 @@ def style_bun():
     return {}, f
 
 STYLES = [
-    ('短亂髮', style_short_messy),
     ('中分', style_center_part),
     ('斜瀏海', style_side_swept),
     ('平頭', style_buzz),
@@ -382,8 +365,8 @@ if __name__ == '__main__':
     font = ImageFont.truetype('/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc', 20)
     S = 5
     rows = [
-        ('男', False, ['深棕', '栗棕', '銀白', '金色', '藍黑', '深棕', '栗棕']),
-        ('女', True, ['栗棕', '金色', '粉紅', '深棕', '粉紅', '藍黑', '銀白']),
+        ('男', False, ['栗棕', '銀白', '深棕', '藍黑', '深棕', '栗棕']),
+        ('女', True, ['金色', '粉紅', '深棕', '粉紅', '藍黑', '銀白']),
     ]
     cw, rh = W * S + 16, H * S + 36
     board = Image.new('RGBA', (cw * len(STYLES) + 16, rh * 2 + 10), (246, 244, 248, 255))
