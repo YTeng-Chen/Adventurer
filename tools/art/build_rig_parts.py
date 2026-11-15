@@ -1,6 +1,6 @@
 # 把參考圖（tools/art/ref/{m,f}-{front,side}.webp）切成骨架動畫用的零件，輸出 src/rig/parts-data.js（需要 Pillow）。
 # 執行：python3 tools/art/build_rig_parts.py
-# 座標是 extract_ref.py 還原後的像素格（男生 112 列高、女生 120 列高，身體等高）。
+# 座標是 extract_ref.py 還原後的像素格（男女都是 112 列高，肩膀到腳底等高）。
 # 每個零件記錄它在整張圖裡的位置、支點（關節），以及每格的顏色代號。
 import os, json
 from collections import Counter
@@ -11,9 +11,10 @@ LETTERS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
 is_ink = lambda c: sum(c) < 130   # 輪廓線（深褐色）；頭髮在 170 以上
 is_skin = lambda c: c[0] > 190 and c[1] > 140 and c[2] > 110 and c[0] - c[2] > 25
 
-def build(name, parts, hands, synth=None, clear=()):
+def build(name, parts, hands, synth=None, clear=(), k=1):
     """parts: {名稱: (判斷函式, 支點)}；synth(name, pts, ink, skin)：補上被其他零件擋住的像素
-    clear：要清成透明的格子 (x0, y0, x1, y1)（被頭髮圍住、沒被去背的白色背景）"""
+    clear：要清成透明的格子 (x0, y0, x1, y1)（被頭髮圍住、沒被去背的白色背景）
+    k：判斷函式、支點所用的座標是實際像素格的幾倍（女生的切割位置是在 120 列的圖上量的，現在取樣成 112 列，k = 120/112）"""
     im = extract(name)
     W, H = im.size
     px = im.load()
@@ -36,17 +37,17 @@ def build(name, parts, hands, synth=None, clear=()):
         return colors[rgb]
     out = {}
     for pname, (inside, pivot) in parts.items():
-        pts = {(x, y): px[x, y][:3] for y in range(H) for x in range(W) if px[x, y][3] > 0 and inside(x, y)}
+        pts = {(x, y): px[x, y][:3] for y in range(H) for x in range(W) if px[x, y][3] > 0 and inside(int((x + 0.5) * k), int((y + 0.5) * k))}
         if synth:
             synth(pname, pts, ink, skin)
         xs = [p[0] for p in pts]; ys = [p[1] for p in pts]
         x0, y0, x1, y1 = min(xs), min(ys), max(xs), max(ys)
         rows = [''.join(code(pts[(x, y)]) if (x, y) in pts else '.' for x in range(x0, x1 + 1)) for y in range(y0, y1 + 1)]
-        out[pname] = {'x': x0, 'y': y0, 'pivot': [pivot[0] - x0, pivot[1] - y0], 'rows': rows}
+        out[pname] = {'x': x0, 'y': y0, 'pivot': [round(pivot[0] / k * 2) / 2 - x0, round(pivot[1] / k * 2) / 2 - y0], 'rows': rows}
     print(name, (W, H), {k: (v['x'], v['y'], len(v['rows'][0]), len(v['rows'])) for k, v in out.items()})
     print('   colors', sorted((sum(c), c) for c in colors))
     hex_ = lambda c: '#%02x%02x%02x' % c
-    return {'W': W, 'H': H, 'scale': 1, 'unit': 2, 'skin': hex_(skin), 'ink': hex_(ink), 'pal': {c: hex_(rgb) for rgb, c in colors.items()}, 'hands': hands, 'parts': out}
+    return {'W': W, 'H': H, 'scale': 1, 'unit': 2, 'skin': hex_(skin), 'ink': hex_(ink), 'pal': {c: hex_(rgb) for rgb, c in colors.items()}, 'hands': {n: [round(v / k * 2) / 2 for v in h] for n, h in hands.items()}, 'parts': out}
 
 def table(spec):
     """{(y0, y1): x} → {y: x}"""
@@ -120,8 +121,10 @@ def f_head(x, y):
     return (y in F_HAIR_L and x <= F_HAIR_L[y]) or (y in F_HAIR_R and x >= F_HAIR_R[y])
 def f_arm_l(x, y): return y in F_ARM_L and x <= F_ARM_L[y] and not f_head(x, y)
 def f_arm_r(x, y): return y in F_ARM_R and x >= F_ARM_R[y] and not f_head(x, y)
+FK = 120 / 112          # 女生的切割位置是在 120 列的圖上量的
+fy = lambda y: int((y + 0.5) * FK)
 def f_front_synth(name, pts, ink, skin):
-    if name == 'torso': outline(pts, ink, range(62, 93))
+    if name == 'torso': outline(pts, ink, range(round(62 / FK), round(93 / FK)))
 F_FRONT = build('f-front', {
     'head':  (f_head, (35, 60)),
     'torso': (lambda x, y: (f_neck(x, y) or 61 <= y <= 94) and not f_head(x, y) and not f_arm_l(x, y) and not f_arm_r(x, y), (35, 94)),
@@ -129,22 +132,23 @@ F_FRONT = build('f-front', {
     **split(f_arm_r, 77, (46.5, 66), (49.5, 77), 'armR', 'armRf'),
     **split(lambda x, y: y >= 95 and x <= 34, 105, (27, 96), (27.5, 105), 'legL', 'legLf'),
     **split(lambda x, y: y >= 95 and x >= 35, 105, (41.5, 96), (42, 105), 'legR', 'legRf'),
-}, {'armL': [15.5, 88], 'armR': [54, 88]}, f_front_synth)
+}, {'armL': [15.5, 88], 'armR': [54, 88]}, f_front_synth, k=FK)
 
 F_BACK = table({(60, 61): 30, (62, 63): 28, (64, 69): 26, (70, 78): 25, (79, 89): 23, (90, 92): 24})   # 身體從這一格開始，左邊是頭髮
 F_SIDE_ARM = table({(62, 63): 33, (64, 69): 35, (70, 88): 33, (89, 90): 31, (91, 91): 30})
 def f_side_head(x, y): return y <= 59 or (y in F_BACK and x < F_BACK[y])
 def f_side_arm(x, y): return y in F_SIDE_ARM and x <= F_SIDE_ARM[y] and not f_side_head(x, y)
 def f_side_synth(name, pts, ink, skin):
-    shorts = pts.get((36, 88)) if name == 'torso' else None
+    shorts = pts.get((round(36 / FK), round(88 / FK))) if name == 'torso' else None
     if name == 'torso':
-        behind_arm(pts, ink, range(62, 92), lambda y: F_BACK[y], lambda y: F_SIDE_ARM[y], lambda y: (252, 252, 251) if y <= 83 else shorts)
+        rows = [y for y in range(round(62 / FK), round(92 / FK) + 1) if fy(y) in F_BACK and fy(y) in F_SIDE_ARM]
+        behind_arm(pts, ink, rows, lambda y: round(F_BACK[fy(y)] / FK), lambda y: int(F_SIDE_ARM[fy(y)] / FK), lambda y: (252, 252, 251) if fy(y) <= 83 else shorts)
 F_SIDE = build('f-side', {
     'head':  (f_side_head, (38, 59)),
     'torso': (lambda x, y: 60 <= y <= 94 and not f_side_head(x, y) and not f_side_arm(x, y), (32, 94)),
     **split(f_side_arm, 77, (30, 66), (29, 77), 'armR', 'armRf'),
     **split(lambda x, y: y >= 95, 105, (32, 96), (31.5, 105), 'legR', 'legRf'),
-}, {'armR': [28, 87]}, f_side_synth)
+}, {'armR': [28, 87]}, f_side_synth, k=FK)
 
 path = os.path.join(HERE, '..', '..', 'src', 'rig', 'parts-data.js')
 open(path, 'w').write("// 由 tools/art/build_rig_parts.py 產生：從參考圖切出的身體零件（骨架動畫用），分男（m）女（f）、正面與側面。\n"

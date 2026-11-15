@@ -1,7 +1,7 @@
 // 2D 骨架動畫：角色拆成零件（頭、身體、上臂、前臂、大腿、小腿），掛在關節上；動作是讓關節轉動、移動。
 // 一件裝備只要照零件的形狀上色，所有動作都能用；一個動作做一次，所有裝備都適用。
 // 全部畫在低解析度的 canvas 上（不做平滑），旋轉後仍然是一格一格的像素。
-// 座標：零件用還原後的像素格（男生 112 列高、女生 120 列高）。身體位置（LM）與上色用「大格」：一大格 = 2×2 像素（P.unit），
+// 座標：零件用還原後的像素格（男女都是 112 列高）。身體位置（LM）與上色用「大格」：一大格 = 2×2 像素（P.unit），
 // 和參考圖原本的方塊差不多大，衣服才不會比角色細緻。
 // 角度單位是度，正值為順時針，0 度表示自然下垂。
 // 性別：'m' 男、'f' 女，各有自己的零件圖與身體位置；動作共用。
@@ -31,14 +31,14 @@ const LM = {
       band: { x0: 2, x1: 26, knot: [1, 14, 2, 18], top: (x) => 13 + Math.round((x - 3) / 12), gem: (x) => x >= 25 } },
   },
   f: {
-    front: { foot: [17.25, 60], cx: 17.5, top: 31, belt: 41, shorts: 42, pad: 35, glove: 44, robe: 51, boot: 52, sole: 58,
-      light: (x) => x <= 13, dark: (x) => x >= 22, buckle: (x) => x === 17, center: (x) => x === 17,
-      eyes: [[10, 21, 14, 25], [20, 21, 24, 25]], blinkY: 24,
-      band: { x0: 3, x1: 31, knot: [31, 17, 32, 20], top: (x) => 15 + Math.round(((x - 17.5) / 14) ** 2), gem: (x) => x === 17 || x === 18 } },
-    side: { foot: [16, 60], cx: 16.5, top: 31, belt: 41, shorts: 42, pad: 35, glove: 43, robe: 51, boot: 52, sole: 58,
-      light: (x) => x >= 19, dark: (x) => x <= 14, buckle: (x) => x >= 20, center: (x) => x >= 20,
-      eyes: [[20, 22, 23, 24]], blinkY: 24,
-      band: { x0: 2, x1: 29, knot: [1, 15, 2, 19], top: (x) => 14 + Math.round((x - 4) / 14), gem: (x) => x >= 28 } },
+    front: { foot: [16.1, 56], cx: 16.5, top: 29, belt: 38, shorts: 39, pad: 33, glove: 41, robe: 47, boot: 48, sole: 54,
+      light: (x) => x <= 12, dark: (x) => x >= 21, buckle: (x) => x === 16, center: (x) => x === 16,
+      eyes: [[9, 19, 13, 23], [18, 19, 22, 23]], blinkY: 22,
+      band: { x0: 3, x1: 29, knot: [29, 16, 30, 19], top: (x) => 14 + Math.round(((x - 16.5) / 13) ** 2), gem: (x) => x === 16 || x === 17 } },
+    side: { foot: [15, 56], cx: 15.5, top: 29, belt: 38, shorts: 39, pad: 33, glove: 40, robe: 47, boot: 48, sole: 54,
+      light: (x) => x >= 18, dark: (x) => x <= 13, buckle: (x) => x >= 19, center: (x) => x >= 19,
+      eyes: [[19, 21, 22, 23]], blinkY: 23,
+      band: { x0: 2, x1: 27, knot: [1, 14, 2, 18], top: (x) => 13 + Math.round((x - 4) / 13), gem: (x) => x >= 26 } },
   },
 };
 

@@ -8,7 +8,7 @@ from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 INK = (20, 12, 13)
-ROWS = {'m-front': 112, 'm-side': 112, 'f-front': 120, 'f-side': 120}   # 女生頭髮比較蓬，身體和男生等高
+ROWS = {'m-front': 112, 'm-side': 112, 'f-front': 112, 'f-side': 112}   # 男女肩膀到腳底都是 55 列
 
 def extract(name, colors=40):
     im = Image.open(os.path.join(HERE, 'ref', name + '.webp')).convert('RGB')
