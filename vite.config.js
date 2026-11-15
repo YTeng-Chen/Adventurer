@@ -11,6 +11,7 @@ export default defineConfig({
       input: {
         main: resolve(import.meta.dirname, 'index.html'),
         model3d: resolve(import.meta.dirname, 'tools/model3d.html'), // 3D 角色原型（不影響遊戲）
+        rig: resolve(import.meta.dirname, 'tools/rig.html'),         // 2D 骨架動畫原型（不影響遊戲）
       },
     },
   },
