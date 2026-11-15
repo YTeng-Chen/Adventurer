@@ -10,15 +10,10 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Pixelify+Sans:wght@400;600;700&display=swap">
 </head>
 <body>
-<header class="top">
-  <div class="top-in">
-    <h1 class="brand">冒險者 <span class="en">ADVENTURE</span></h1>
-    <div class="hud" id="hud"></div>
-  </div>
-</header>
+<main class="app">
+  <header class="top" id="hud"></header>
 
-<main class="layout">
-  <section class="stage-wrap" id="stageWrap" aria-label="遊戲畫面">
+  <section class="stage-wrap" id="stageWrap" aria-label="戰鬥畫面" hidden>
     <div class="stage" id="stage"></div>
     <div class="battle-bar" id="battleBar" hidden>
       <div class="row spread"><h2 id="bTitle">戰鬥</h2><button class="btn ghost small" data-act="b-skip" id="bSkip">跳過</button></div>
@@ -27,30 +22,10 @@
     </div>
   </section>
 
-  <section class="hero-panel" aria-label="角色">
-    <div id="heroInfo"></div>
-    <div class="log-box">
-      <h2 class="mini-h">最近發生的事</h2>
-      <ul class="log" id="log"></ul>
-    </div>
-  </section>
+  <nav class="tiles" id="tiles" aria-label="遊戲功能"></nav>
 
-  <section class="main-panel">
-    <nav class="tabs" role="tablist" aria-label="遊戲功能">
-      <button class="tab" role="tab" data-tab="idle" id="tab-idle">掛機地點</button>
-      <button class="tab" role="tab" data-tab="gear" id="tab-gear">裝備與背包</button>
-      <button class="tab" role="tab" data-tab="hunt" id="tab-hunt">魔物狩獵</button>
-      <button class="tab" role="tab" data-tab="trial" id="tab-trial">神之試煉</button>
-    </nav>
-    <div id="panel" class="panel" role="tabpanel"></div>
-  </section>
+  <section id="panel" class="panel"></section>
 </main>
-
-<footer class="foot">
-  <span>Phaser 版原型・進度存在這個瀏覽器</span>
-  <button class="btn ghost small" data-act="ff" id="ffBtn">快轉 1 小時（測試用）</button>
-  <button class="btn ghost small" data-act="reset-ask" id="resetBtn">重新開始</button>
-</footer>
 
 <div class="modal" id="modal" hidden></div>
 <div class="toast" id="toast" role="status" hidden></div>

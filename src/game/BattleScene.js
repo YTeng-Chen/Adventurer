@@ -1,7 +1,7 @@
 // 戰鬥播放：把 combat.fight() 回傳的紀錄一行一行播出來。戰鬥結果在播放前就已經算好。
 import * as Phaser from 'phaser';
 import { RigHero, enemyTexture } from './textures.js';
-import { W, H, GROUND, FONT, HERO_X, ENEMY_SCALE, BOSS_SCALE } from './config.js';
+import { W, H, GROUND, FONT, HERO_X, FOE_X, ENEMY_SCALE, BOSS_SCALE } from './config.js';
 
 const FLOAT = { attack: '#ffffff', double: '#9fe0ff', chain: '#7af0ff', counter: '#d0d6e0', burn: '#ffa040' };
 
@@ -29,7 +29,7 @@ export class BattleScene extends Phaser.Scene {
     this.hero.setLook(equip, look);
 
     const es = foe.boss ? BOSS_SCALE : ENEMY_SCALE;
-    this.foe = this.add.image(HERO_X + 58, GROUND + 6, enemyTexture(this, foe.shape, foe.c)).setOrigin(0, 1).setScale(es);   // 站在刀光砍得到的距離
+    this.foe = this.add.image(FOE_X, GROUND + 6, enemyTexture(this, foe.shape, foe.c)).setOrigin(0, 1).setScale(es);   // 站在刀光砍得到的距離
     this.foeX = this.foe.x;
     this.tweens.add({ targets: this.foe, y: '-=2', duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
 
@@ -48,7 +48,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   drawBars() {
-    const g = this.bars, bw = 150;
+    const g = this.bars, bw = (W - 48) / 2;
     const bar = (x, v, max, col) => {
       g.fillStyle(0x0a0d13).fillRect(x - 1, 9, bw + 2, 9);
       g.fillStyle(0x3a2228).fillRect(x, 10, bw, 7);

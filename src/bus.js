@@ -6,6 +6,7 @@
 //   battle:start   開始播放戰鬥 { foe, r, equip }
 //   battle:skip    跳到戰鬥結尾
 //   battle:close   關閉戰鬥，回到掛機場景
+//   stage:show     戰鬥畫面顯示或隱藏了（true / false）；只有在戰鬥地圖掛機或播放戰鬥時才顯示
 // Phaser → 介面
 //   battle:line    播到第 i 行戰鬥紀錄 { i, line }
 //   battle:end     戰鬥播完

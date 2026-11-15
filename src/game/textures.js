@@ -3,6 +3,7 @@
 import * as Phaser from 'phaser';
 import { sprites } from '../ui/sprites.js';
 import { Rig, ANIMS } from '../rig/rig.js';
+import { HERO_SCALE } from './config.js';
 
 export function gridTexture(scene, key, grid) {
   if (scene.textures.exists(key)) return key;
@@ -50,7 +51,8 @@ export class RigHero {
     this.rig = new Rig('side');
     this.cw = 260; this.ch = groundY + 12; this.footX = 96;
     this.tex = scene.textures.createCanvas(`rig-hero-${rigSeq++}`, this.cw, this.ch);
-    this.image = scene.add.image(x - this.footX, 0, this.tex.key).setOrigin(0, 0);
+    // 以腳底為基準縮放，HERO_SCALE 改變時角色仍然站在地面上
+    this.image = scene.add.image(x, groundY, this.tex.key).setOrigin(this.footX / this.cw, groundY / this.ch).setScale(HERO_SCALE);
     this.anim = 'idle'; this.t0 = scene.time.now; this.speed = 1;
     this.blinkAt = 1500 + Math.random() * 2000;
     this.flashUntil = 0;
@@ -63,7 +65,7 @@ export class RigHero {
   // speed > 1 會播得比較快（戰鬥紀錄播得快的時候用）
   play(name, speed = 1) { this.anim = name; this.t0 = this.scene.time.now; this.speed = speed; }
   flash(ms = 110) { this.flashUntil = this.scene.time.now + ms; }
-  get topY() { return this.groundY - this.rig.height - 1; }
+  get topY() { return this.groundY - (this.rig.height + 1) * HERO_SCALE; }
 
   update(time) {
     let anim = ANIMS[this.anim];

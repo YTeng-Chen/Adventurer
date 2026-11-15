@@ -7,6 +7,7 @@ import { stats as S } from '../core/stats.js';
 import { save as store } from '../core/save.js';
 import { sprites as SP } from './sprites.js';
 import { Rig, ANIMS, HAIR_COLORS, DEFAULT_HAIR, GENDERS } from '../rig/rig.js';
+import { navIcon } from './nav-icons.js';
 
 export function startUI(bus) {
   const $ = (q) => document.querySelector(q);
@@ -15,8 +16,8 @@ export function startUI(bus) {
   const fmtV = (k, v) => (D.STAT_PCT[k] ? (Math.round(v * 10) / 10) + '%' : fmt(v));
 
   let s = null;
-  let tab = 'idle';
-  let viewLoc = null;       // 正在查看的地點（預設是掛機中的地點）
+  let tab = null;           // 目前打開的功能：掛機地點的代號，或 hero、gear、hunt、trial、settings（開機時設為掛機中的地點）
+  let stageShown = false;
   let bagFilter = 'all';
   let battle = null;        // 播放中的戰鬥
   let lastTickSum = null;
@@ -54,54 +55,75 @@ export function startUI(bus) {
     const loc = D.LOCATIONS.find((l) => l.k === s.location);
     const tickPct = Math.min(100, ((now - s.lastTick) / D.TICK_MS) * 100);
     $('#hud').innerHTML = `
-      <div class="hud-item"><span class="hud-label">等級</span><span class="lv">Lv ${s.hero.level}</span>
-        <div class="bar exp" title="經驗 ${fmt(s.hero.exp)} / ${fmt(need)}"><span style="width:${(s.hero.exp / need) * 100}%"></span></div></div>
-      <div class="hud-item"><span class="gold">${fmt(s.gold)}</span></div>
-      <div class="hud-item"><span class="hud-label">掛機中</span><b>${loc.n}${s.location === 'battle' ? '・' + D.AREAS[s.areaIdx].n : ''}</b>
-        <div class="bar tick" title="下一次結算"><span style="width:${tickPct}%"></span></div></div>`;
+      <div class="hud-main">${navIcon(s.location)}
+        <div class="hud-text"><span class="hud-label">掛機中</span><b>${loc.n}${s.location === 'battle' ? '・' + D.AREAS[s.areaIdx].n : ''}</b>
+          <div class="bar tick" title="下一次結算"><span style="width:${tickPct}%"></span></div></div></div>
+      <div class="hud-side"><span class="gold">${fmt(s.gold)}</span>
+        <span class="hud-lv"><span class="lv">Lv ${s.hero.level}</span>
+          <span class="bar exp" title="經驗 ${fmt(s.hero.exp)} / ${fmt(need)}"><span style="width:${(s.hero.exp / need) * 100}%"></span></span></span></div>`;
+  }
+
+  // ---------- 戰鬥畫面：只有在戰鬥地圖掛機、或播放戰鬥時才顯示 ----------
+  function updateStage() {
+    const show = !!battle || s.location === 'battle';
+    if (show === stageShown) return;
+    stageShown = show;
+    $('#stageWrap').hidden = !show;
+    bus.emit('stage:show', show);
   }
 
   // ---------- 角色 ----------
-  function renderHero() {
+  function heroPanel() {
     const h = W.hero(s);
     const st = h.stats;
     const mechs = h.cls.mechs.map(([t, f]) => `<li>${esc(S.mechText(t, f))}</li>`).join('');
-    $('#heroInfo').innerHTML = `
-      <div><div class="row spread"><p class="cls-name">${esc(h.cls.name)}<span class="cls-kind">${esc(h.cls.kind)}</span></p>
-        <button class="btn ghost small" data-act="look">更換外觀</button></div>
-        <ul class="mechs">${mechs || '<li>武器、頭飾、上衣、鞋子中有 2 件同流派，就會有職業</li>'}</ul></div>
-      <div class="power"><span class="hud-label">戰力</span><span class="num">${fmt(S.power(st))}</span></div>
-      <dl class="stats">${D.STATS.map((x) => `<div><dt>${x.n}</dt><dd class="num">${fmtV(x.k, st[x.k])}</dd></div>`).join('')}</dl>`;
     const log = s.log.slice(0, 12);
-    $('#log').innerHTML = log.length ? log.map((l) => `<li><time>${clock(l.t)}</time><span>${esc(l.msg)}</span></li>`).join('')
-      : '<li class="empty">還沒有大事發生。升級、鍛造出史詩裝備、擊敗頭目都會記在這裡。</li>';
+    return `<div class="row spread"><h2>角色</h2><button class="btn ghost small" data-act="look">更換外觀</button></div>
+      <div><p class="cls-name">${esc(h.cls.name)}<span class="cls-kind">${esc(h.cls.kind)}</span></p>
+        <ul class="mechs">${mechs || '<li>武器、頭飾、上衣、鞋子中有 2 件同流派，就會有職業</li>'}</ul>
+        <div class="power"><span class="hud-label">戰力</span><span class="num">${fmt(S.power(st))}</span></div>
+        <dl class="stats">${D.STATS.map((x) => `<div><dt>${x.n}</dt><dd class="num">${fmtV(x.k, st[x.k])}</dd></div>`).join('')}</dl></div>
+      <div class="log-box"><h3 class="mini-h">最近發生的事</h3>
+        <ul class="log">${log.length ? log.map((l) => `<li><time>${clock(l.t)}</time><span>${esc(l.msg)}</span></li>`).join('')
+          : '<li class="empty">還沒有大事發生。升級、鍛造出史詩裝備、擊敗頭目都會記在這裡。</li>'}</ul></div>`;
+  }
+  function settingsPanel() {
+    return `<h2>設定</h2>
+      <div class="card-list">
+        <div class="row spread"><span>外觀（性別與髮色）</span><button class="btn ghost small" data-act="look">更換外觀</button></div>
+        <div class="row spread"><span>快轉 1 小時<small class="hint">　測試用，馬上看到離線收穫</small></span><button class="btn ghost small" data-act="ff" id="ffBtn">快轉</button></div>
+        <div class="row spread"><span>重新開始<small class="hint">　刪除角色、裝備和進度</small></span><button class="btn ghost small" data-act="reset-ask" id="resetBtn">重新開始</button></div>
+      </div>
+      <p class="hint">Phaser 版原型・進度存在這個瀏覽器。</p>`;
   }
 
   // ---------- 分頁 ----------
-  function renderTabs() {
-    document.querySelectorAll('.tab').forEach((b) => b.setAttribute('aria-selected', b.dataset.tab === tab));
+  const TOOLS = [{ k: 'hero', n: '角色' }, { k: 'gear', n: '背包' }, { k: 'hunt', n: '狩獵' }, { k: 'trial', n: '試煉' }, { k: 'settings', n: '設定' }];
+  const isLoc = (k) => D.LOCATIONS.some((l) => l.k === k);
+  function renderTiles() {
+    const tile = (k, n) => `<button class="tile" data-tab="${k}" id="tab-${k}" aria-pressed="${k === tab}">
+      ${k === s.location ? '<span class="tile-on">掛機中</span>' : ''}${navIcon(k)}<span class="tile-n">${n}</span></button>`;
+    $('#tiles').innerHTML = D.LOCATIONS.map((l) => tile(l.k, l.n.replace('地圖', ''))).join('') + TOOLS.map((t) => tile(t.k, t.n)).join('');
   }
   function renderPanel() {
-    renderTabs();
+    renderTiles();
     const p = $('#panel');
-    if (tab === 'idle') p.innerHTML = idlePanel();
+    if (isLoc(tab)) p.innerHTML = locPanel(tab);
+    else if (tab === 'hero') p.innerHTML = heroPanel();
     else if (tab === 'gear') p.innerHTML = gearPanel();
     else if (tab === 'hunt') { p.innerHTML = huntPanel(); drawBossThumbs(); }
     else if (tab === 'trial') p.innerHTML = trialPanel();
+    else p.innerHTML = settingsPanel();
   }
 
   // ---------- 掛機地點 ----------
-  function idlePanel() {
-    const v = viewLoc || s.location;
-    const locs = D.LOCATIONS.map((l) => `
-      <button class="loc" data-act="view-loc" data-k="${l.k}" aria-pressed="${l.k === v}">
-        ${l.k === s.location ? '<span class="on">掛機中</span>' : '<span class="on" style="color:var(--muted)">　</span>'}
-        <b>${l.n}</b><small>${l.d}</small></button>`).join('');
+  function locPanel(v) {
+    const loc = D.LOCATIONS.find((l) => l.k === v);
     const body = { training: trainingView, battle: battleView, forge: forgeView, market: marketView, guild: guildView }[v]();
-    const go = v === s.location ? '' : `<button class="btn" data-act="go" data-k="${v}">改到${D.LOCATIONS.find((l) => l.k === v).n}掛機</button>`;
-    return `<div class="row spread"><h2>掛機地點</h2><p class="hint">同一時間只能在一個地點掛機，離線也會繼續（最多 12 小時）。</p></div>
-      <div class="locs">${locs}</div>
-      <div class="sub">${go ? `<div class="row">${go}<span class="hint">目前在${D.LOCATIONS.find((l) => l.k === s.location).n}掛機</span></div>` : ''}${body}</div>`;
+    const state = v === s.location ? '<span class="on-chip">掛機中</span>' : `<button class="btn" data-act="go" data-k="${v}">改到這裡掛機</button>`;
+    return `<div class="row spread"><h2>${loc.n}</h2>${state}</div>
+      <p class="hint">${loc.d}。同一時間只能在一個地點掛機，離線也會繼續（最多 12 小時）。</p>
+      <div class="sub">${body}</div>`;
   }
 
   function trainingView() {
@@ -347,8 +369,8 @@ export function startUI(bus) {
     $('#bResult').innerHTML = '';
     const btn = $('#bSkip');
     btn.textContent = '跳過'; btn.dataset.act = 'b-skip';
-    $('#stageWrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
     renderAll();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     // 戰鬥畫面交給 Phaser；沒有人接（例如畫面還沒準備好）就直接顯示結果
     if (!bus.emit('battle:start', { foe, r, equip: { ...s.equip }, look: s.appearance })) endBattle();
   }
@@ -458,16 +480,15 @@ export function startUI(bus) {
   }
 
   // ---------- 主迴圈 ----------
-  function renderAll() { renderHud(); renderHero(); renderPanel(); bus.emit('state'); }
+  function renderAll() { renderHud(); updateStage(); renderPanel(); bus.emit('state'); }
   function onTick(sum) {
     lastTickSum = sum;
     bus.emit('tick', sum);
     if (sum.levels) toast(`升到 ${s.hero.level} 級！`);
     const good = sum.items.filter((it) => it.rarity >= 3);
     if (good.length) toast(`得到${D.RARITY[good[0].rarity].n}裝備「${good[0].name}」`);
-    renderHero();
-    // 掛機分頁會即時更新；其他分頁不打斷玩家操作
-    if (tab === 'idle' && !document.activeElement?.matches('select')) renderPanel();
+    // 掛機地點與角色的畫面會即時更新；其他功能不打斷玩家操作
+    if ((isLoc(tab) || tab === 'hero') && !document.activeElement?.matches('select')) renderPanel();
   }
   function loop() {
     const now = Date.now();
@@ -485,8 +506,7 @@ export function startUI(bus) {
     const now = Date.now();
     const k = el.dataset.k, id = el.dataset.id, i = el.dataset.i;
     switch (a) {
-      case 'view-loc': viewLoc = k; break;
-      case 'go': W.setLocation(s, k); viewLoc = null; toast(`改到${D.LOCATIONS.find((l) => l.k === k).n}掛機`); break;
+      case 'go': W.setLocation(s, k); toast(`改到${D.LOCATIONS.find((l) => l.k === k).n}掛機`); break;
       case 'unlock': if (W.unlockDevice(s, k)) toast('設備已解鎖'); break;
       case 'dev-up': if (W.upgradeDevice(s, k)) toast('設備升級了，訓練上限提高'); break;
       case 'train': s.trainDevice = k; break;
@@ -540,7 +560,7 @@ export function startUI(bus) {
         break;
       }
       case 'reset-ask': confirmBox('重新開始？', '目前的角色、裝備和進度都會刪除，無法復原。', 'reset', '刪除並重新開始'); return;
-      case 'reset': store.clear(); s = W.newGame(Date.now()); T.ensure(s, Date.now()); $('#modal').hidden = true; persist(); renderAll(); openLook(true); return;
+      case 'reset': store.clear(); s = W.newGame(Date.now()); T.ensure(s, Date.now()); $('#modal').hidden = true; persist(); tab = s.location; renderAll(); openLook(true); return;
       default: return;
     }
     persist();
@@ -579,6 +599,7 @@ export function startUI(bus) {
     const now = Date.now();
     s = store.load(now) || W.newGame(now);
     T.ensure(s, now);
+    tab = s.location;
     bind();
     const sum = W.catchUp(s, now);
     renderAll();

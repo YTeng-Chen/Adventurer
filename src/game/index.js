@@ -29,5 +29,10 @@ export function createGame(parent, { bus, getState }) {
     game.scene.stop('Battle');
     game.scene.wake('Idle');
   });
+  // 戰鬥畫面只有需要時才顯示：藏起來時停止更新省電，顯示時重新量尺寸
+  bus.on('stage:show', (show) => {
+    if (show) { game.loop.wake(); requestAnimationFrame(() => game.scale.refresh()); }
+    else game.loop.sleep();
+  });
   return game;
 }
