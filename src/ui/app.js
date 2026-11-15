@@ -409,7 +409,7 @@ export function startUI(bus) {
   function drawLook(cv, view, look, equip, scale) {
     const rig = new Rig(view);
     rig.setLook(look); rig.setEquip(equip || {});
-    const w = view === 'front' ? 76 : 70, h = 118;
+    const w = view === 'front' ? 76 : 70, h = 138;
     const ctx = setupCanvas(cv, w * scale, h * scale);
     ctx.scale(scale, scale);
     rig.draw(ctx, view === 'front' ? 38 : 30, h - 3, ANIMS.idle.pose(0));
