@@ -32,7 +32,7 @@ button, select, input { font: inherit; color: inherit; }
 .num { font-family: var(--pixel); font-variant-numeric: tabular-nums; letter-spacing: .02em; }
 h2, h3 { text-wrap: balance; }
 
-/* ---------- 版面：手機直式為主。狀態列 → 戰鬥畫面（約螢幕 1/3，只有戰鬥時出現）→ 功能方塊 → 所選功能的內容 ---------- */
+/* ---------- 版面：手機直式為主。狀態列 → 戰鬥畫面（約螢幕 1/3，只有戰鬥時出現）→ 所選功能的內容 → 功能方塊（固定在最下方） ---------- */
 .app {
   max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; min-height: 100dvh;
   padding-block: calc(10px + env(safe-area-inset-top, 0px)) calc(24px + env(safe-area-inset-bottom, 0px));
@@ -62,7 +62,7 @@ h2, h3 { text-wrap: balance; }
   background: var(--panel); border: 2px solid var(--line);
   box-shadow: 4px 4px 0 0 var(--shadow);
 }
-/* 戰鬥畫面：寬度填滿，高度約手機螢幕的 1/3（312:224 的畫面在 390 寬的手機上是 280 高） */
+/* 戰鬥畫面：寬度填滿，高度約手機螢幕的 1/3（624:448 的畫面在 390 寬的手機上是 280 高） */
 .stage-wrap { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .stage {
   width: min(100%, calc(36dvh * 312 / 224)); margin: 0 auto; aspect-ratio: 312 / 224; background: var(--shadow);
@@ -75,17 +75,21 @@ h2, h3 { text-wrap: balance; }
 }
 .battle-bar h2 { margin: 0; font-size: 1.05rem; font-weight: 900; }
 
-/* 功能方塊：圖示＋名稱，五個掛機地點排第一列，其他功能排第二列 */
-.tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+/* 功能方塊：圖示＋名稱，五個掛機地點排第一列，其他功能排第二列。固定在畫面最下方，內容捲動時也按得到 */
+.tiles {
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px;
+  position: sticky; bottom: 0; z-index: 5; background: var(--bg); border-top: 2px solid var(--line);
+  margin: 0 -12px calc(-24px - env(safe-area-inset-bottom, 0px)); padding: 12px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+}
 .tile {
   position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  min-height: 78px; padding: 8px 2px 6px; background: var(--panel); border: 2px solid var(--line); border-radius: 12px;
+  min-height: 62px; padding: 6px 2px 4px; background: var(--panel); border: 2px solid var(--line); border-radius: 12px;
   cursor: pointer; color: var(--ink); min-width: 0;
 }
 .tile:hover { border-color: #4a5a7c; }
 .tile[aria-pressed="true"] { border-color: var(--gold); background: #2c2a26; }
-.tile .nav-ico { width: 38px; height: 38px; }
-.tile-n { font-size: .86rem; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+.tile .nav-ico { width: 30px; height: 30px; }
+.tile-n { font-size: .8rem; font-weight: 700; line-height: 1.2; white-space: nowrap; }
 .tile-on {
   position: absolute; top: -7px; left: 50%; transform: translateX(-50%); padding: 0 6px; border-radius: 8px; white-space: nowrap;
   background: var(--good); color: var(--shadow); font-size: .66rem; font-weight: 900; line-height: 1.5;
@@ -244,7 +248,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: .88rem; }
 .swatch i { width: 14px; height: 14px; display: inline-block; border: 2px solid var(--shadow); }
 
 .toast {
-  position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 40;
+  position: fixed; left: 50%; bottom: calc(176px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 40;   /* 在功能方塊上方 */
   background: var(--ink); color: var(--bg); padding: 8px 16px; font-weight: 700; border: 2px solid var(--shadow); box-shadow: 4px 4px 0 var(--shadow); max-width: 90vw;
 }
 @media (max-width: 560px) {
@@ -252,5 +256,5 @@ details summary { cursor: pointer; color: var(--muted); font-size: .88rem; }
   .mats { font-size: .78rem; }
   .mats > div { padding: 4px 5px; }
 }
-@media (max-width: 360px) { .tile-n { font-size: .78rem; } .tile .nav-ico { width: 32px; height: 32px; } }
+@media (max-width: 360px) { .tile-n { font-size: .74rem; } .tile .nav-ico { width: 26px; height: 26px; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

@@ -13,8 +13,8 @@ export class IdleScene extends Phaser.Scene {
     this.sig = '';
 
     this.bg = this.add.graphics();
-    this.foe = this.add.image(FOE_X, GROUND + 6, enemyTexture(this, 'slime', '#62c46a')).setOrigin(0, 1).setScale(ENEMY_SCALE);
-    this.tweens.add({ targets: this.foe, y: '-=2', duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+    this.foe = this.add.image(FOE_X, GROUND + 12, enemyTexture(this, 'slime', '#62c46a')).setOrigin(0, 1).setScale(ENEMY_SCALE);
+    this.tweens.add({ targets: this.foe, y: '-=4', duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
     this.hero = new RigHero(this, HERO_X, GROUND);
 
     const offs = [
@@ -48,10 +48,10 @@ export class IdleScene extends Phaser.Scene {
     const c = (h) => parseInt(h.slice(1), 16);
     g.clear();
     g.fillStyle(c(area.sky)).fillRect(0, 0, W, GROUND);
-    g.fillStyle(0xffffff, 0.15).fillRect(28, 30, 44, 8).fillRect(190, 54, 60, 8);
+    g.fillStyle(0xffffff, 0.15).fillRect(56, 60, 88, 16).fillRect(380, 108, 120, 16);
     g.fillStyle(c(area.ground)).fillRect(0, GROUND, W, H - GROUND);
     g.fillStyle(0x000000, 0.18);
-    for (let x = 0; x < W; x += 20) g.fillRect(x, GROUND, 10, 3);
+    for (let x = 0; x < W; x += 40) g.fillRect(x, GROUND, 20, 6);
   }
 
   onTick(sum) {
@@ -65,7 +65,7 @@ export class IdleScene extends Phaser.Scene {
     if (sum.gold) parts.push(`+${sum.gold} G`);
     if (sum.items.length) parts.push(`+${sum.items.length} ITEM`);
     if (!parts.length) return;
-    const t = this.add.text(HERO_X, this.hero.topY - 6, parts.join('  '), FONT(10, '#f2b84b')).setOrigin(0.3, 1);
-    this.tweens.add({ targets: t, y: t.y - 20, alpha: 0, duration: 1500, ease: 'Quad.out', onComplete: () => t.destroy() });
+    const t = this.add.text(HERO_X, this.hero.topY - 10, parts.join('  '), FONT(20, '#f2b84b')).setOrigin(0.3, 1);
+    this.tweens.add({ targets: t, y: t.y - 36, alpha: 0, duration: 1500, ease: 'Quad.out', onComplete: () => t.destroy() });
   }
 }

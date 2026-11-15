@@ -23,19 +23,19 @@ export class BattleScene extends Phaser.Scene {
     g.fillStyle(0x1d2740).fillRect(0, 0, W, GROUND);
     g.fillStyle(0x2a3554).fillRect(0, GROUND, W, H - GROUND);
     g.fillStyle(0x34416a);
-    for (let x = 0; x < W; x += 16) g.fillRect(x, GROUND, 8, 2);
+    for (let x = 0; x < W; x += 32) g.fillRect(x, GROUND, 16, 4);
 
     this.hero = new RigHero(this, HERO_X, GROUND);
     this.hero.setLook(equip, look);
 
     const es = foe.boss ? BOSS_SCALE : ENEMY_SCALE;
-    this.foe = this.add.image(FOE_X, GROUND + 6, enemyTexture(this, foe.shape, foe.c)).setOrigin(0, 1).setScale(es);   // 站在刀光砍得到的距離
+    this.foe = this.add.image(FOE_X, GROUND + 12, enemyTexture(this, foe.shape, foe.c)).setOrigin(0, 1).setScale(es);   // 站在刀光砍得到的距離
     this.foeX = this.foe.x;
-    this.tweens.add({ targets: this.foe, y: '-=2', duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+    this.tweens.add({ targets: this.foe, y: '-=4', duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
 
     this.bars = this.add.graphics();
-    this.hpTextP = this.add.text(16, 22, '', FONT(9, '#ece4d2'));
-    this.hpTextE = this.add.text(W - 16, 22, '', FONT(9, '#ece4d2')).setOrigin(1, 0);
+    this.hpTextP = this.add.text(32, 44, '', FONT(18, '#ece4d2'));
+    this.hpTextE = this.add.text(W - 32, 44, '', FONT(18, '#ece4d2')).setOrigin(1, 0);
     this.hpP = r.maxHpP; this.hpE = r.maxHpE;
     this.drawBars();
 
@@ -48,15 +48,15 @@ export class BattleScene extends Phaser.Scene {
   }
 
   drawBars() {
-    const g = this.bars, bw = (W - 48) / 2;
+    const g = this.bars, bw = (W - 96) / 2;
     const bar = (x, v, max, col) => {
-      g.fillStyle(0x0a0d13).fillRect(x - 1, 9, bw + 2, 9);
-      g.fillStyle(0x3a2228).fillRect(x, 10, bw, 7);
-      g.fillStyle(col).fillRect(x, 10, Math.max(0, (v / max) * bw), 7);
+      g.fillStyle(0x0a0d13).fillRect(x - 2, 18, bw + 4, 18);
+      g.fillStyle(0x3a2228).fillRect(x, 20, bw, 14);
+      g.fillStyle(col).fillRect(x, 20, Math.max(0, (v / max) * bw), 14);
     };
     g.clear();
-    bar(16, this.hpP, this.r.maxHpP, 0x6cc77a);
-    bar(W - 16 - bw, this.hpE, this.r.maxHpE, 0xe66a5e);
+    bar(32, this.hpP, this.r.maxHpP, 0x6cc77a);
+    bar(W - 32 - bw, this.hpE, this.r.maxHpE, 0xe66a5e);
     const n = (v) => Math.round(v).toLocaleString('en-US');
     this.hpTextP.setText(`${n(this.hpP)} / ${n(this.r.maxHpP)}`);
     this.hpTextE.setText(`${n(this.hpE)} / ${n(this.r.maxHpE)}`);
@@ -79,7 +79,7 @@ export class BattleScene extends Phaser.Scene {
 
   lunge(who, crit) {
     if (who === 'p') this.hero.play(crit ? 'jump' : 'slash', crit ? 2.2 : 1.6);   // 暴擊用跳斬
-    else this.tweens.add({ targets: this.foe, x: this.foeX - 14, duration: 90, yoyo: true, ease: 'Quad.out' });
+    else this.tweens.add({ targets: this.foe, x: this.foeX - 22, duration: 90, yoyo: true, ease: 'Quad.out' });
   }
 
   hit(target, line) {
@@ -95,8 +95,8 @@ export class BattleScene extends Phaser.Scene {
     }
     if (line.crit) this.cameras.main.shake(90, 0.006);
     const color = line.crit && line.kind === 'attack' ? '#f2b84b' : FLOAT[line.kind] || '#ffffff';
-    const t = this.add.text(x, y + 26, (line.crit ? '!' : '') + Math.round(line.dmg).toLocaleString('en-US'), FONT(line.crit ? 15 : 11, color)).setOrigin(0.5, 1);
-    this.tweens.add({ targets: t, y: t.y - 24, alpha: 0, duration: 850, ease: 'Quad.out', onComplete: () => t.destroy() });
+    const t = this.add.text(x, y + 30, (line.crit ? '!' : '') + Math.round(line.dmg).toLocaleString('en-US'), FONT(line.crit ? 30 : 22, color)).setOrigin(0.5, 1);
+    this.tweens.add({ targets: t, y: t.y - 44, alpha: 0, duration: 850, ease: 'Quad.out', onComplete: () => t.destroy() });
   }
 
   finish() {
