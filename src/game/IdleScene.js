@@ -13,7 +13,7 @@ export class IdleScene extends Phaser.Scene {
     this.sig = '';
 
     this.bg = this.add.graphics();
-    this.foe = this.add.image(FOE_X, GROUND + 12, enemyTexture(this, 'slime', '#62c46a')).setOrigin(0, 1).setScale(ENEMY_SCALE);
+    this.foe = this.add.image(FOE_X, GROUND + 6, enemyTexture(this, 'slime', '#62c46a')).setOrigin(0, 1).setScale(ENEMY_SCALE);
     this.tweens.add({ targets: this.foe, y: '-=4', duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
     this.hero = new RigHero(this, HERO_X, GROUND);
 

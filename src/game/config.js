@@ -4,12 +4,13 @@ export const W = 624;
 export const H = 448;
 export const GROUND = 392;
 
-// 角色大小：HERO_SCALE 是顯示比例（1 = 112 像素高，約畫面高度的 1/4）。魔物圖是 32×32。
-export const HERO_SCALE = 1;
+// 角色大小：HERO_SCALE 是顯示比例（0.5 = 56 像素高，約畫面高度的 1/8）。角色原圖的方塊是 2×2 像素，縮成一半剛好一格一點。
+// 魔物圖是 32×32，跟著角色一起縮放。
+export const HERO_SCALE = 0.5;
 export const HERO_X = 224;   // 角色腳底中心的位置
-export const FOE_X = 284;    // 魔物左緣的位置（刀光砍得到的距離）
-export const ENEMY_SCALE = 2;
-export const BOSS_SCALE = 3;
+export const FOE_X = 254;    // 魔物左緣的位置（刀光砍得到的距離）
+export const ENEMY_SCALE = 1;
+export const BOSS_SCALE = 1.5;
 
 // Phaser 文字只用來顯示數字與短英文（傷害、EXP），中文都交給 HTML
 export const FONT = (size, color) => ({

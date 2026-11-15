@@ -29,7 +29,7 @@ export class BattleScene extends Phaser.Scene {
     this.hero.setLook(equip, look);
 
     const es = foe.boss ? BOSS_SCALE : ENEMY_SCALE;
-    this.foe = this.add.image(FOE_X, GROUND + 12, enemyTexture(this, foe.shape, foe.c)).setOrigin(0, 1).setScale(es);   // 站在刀光砍得到的距離
+    this.foe = this.add.image(FOE_X, GROUND + 6, enemyTexture(this, foe.shape, foe.c)).setOrigin(0, 1).setScale(es);   // 站在刀光砍得到的距離
     this.foeX = this.foe.x;
     this.tweens.add({ targets: this.foe, y: '-=4', duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
 
@@ -79,7 +79,7 @@ export class BattleScene extends Phaser.Scene {
 
   lunge(who, crit) {
     if (who === 'p') this.hero.play(crit ? 'jump' : 'slash', crit ? 2.2 : 1.6);   // 暴擊用跳斬
-    else this.tweens.add({ targets: this.foe, x: this.foeX - 22, duration: 90, yoyo: true, ease: 'Quad.out' });
+    else this.tweens.add({ targets: this.foe, x: this.foeX - 12, duration: 90, yoyo: true, ease: 'Quad.out' });
   }
 
   hit(target, line) {
@@ -95,7 +95,7 @@ export class BattleScene extends Phaser.Scene {
     }
     if (line.crit) this.cameras.main.shake(90, 0.006);
     const color = line.crit && line.kind === 'attack' ? '#f2b84b' : FLOAT[line.kind] || '#ffffff';
-    const t = this.add.text(x, y + 30, (line.crit ? '!' : '') + Math.round(line.dmg).toLocaleString('en-US'), FONT(line.crit ? 30 : 22, color)).setOrigin(0.5, 1);
+    const t = this.add.text(x, y + 30, (line.crit ? '!' : '') + Math.round(line.dmg).toLocaleString('en-US'), FONT(line.crit ? 24 : 18, color)).setOrigin(0.5, 1);
     this.tweens.add({ targets: t, y: t.y - 44, alpha: 0, duration: 850, ease: 'Quad.out', onComplete: () => t.destroy() });
   }
 
