@@ -120,9 +120,9 @@ export function startUI(bus) {
   function locPanel(v) {
     const loc = D.LOCATIONS.find((l) => l.k === v);
     const body = { training: trainingView, battle: battleView, forge: forgeView, market: marketView, guild: guildView }[v]();
-    const state = v === s.location ? '<span class="on-chip">掛機中</span>' : `<button class="btn" data-act="go" data-k="${v}">改到這裡掛機</button>`;
+    const state = '<span class="on-chip">掛機中</span>';
     return `<div class="row spread"><h2>${loc.n}</h2>${state}</div>
-      <p class="hint">${loc.d}。同一時間只能在一個地點掛機，離線也會繼續（最多 12 小時）。</p>
+      <p class="hint">${loc.d}。點下面的地點方塊就會改到那裡掛機，同一時間只能在一個地點，離線也會繼續（最多 12 小時）。</p>
       <div class="sub">${body}</div>`;
   }
 
@@ -570,7 +570,12 @@ export function startUI(bus) {
   function bind() {
     document.addEventListener('click', (e) => {
       const tb = e.target.closest('[data-tab]');
-      if (tb) { tab = tb.dataset.tab; renderPanel(); return; }
+      if (tb) {
+        tab = tb.dataset.tab;
+        // 點掛機地點的方塊就直接改到那裡掛機
+        if (isLoc(tab) && tab !== s.location) { act('go', { dataset: { k: tab } }); return; }
+        renderPanel(); return;
+      }
       const el = e.target.closest('[data-act]');
       if (el && !el.disabled) act(el.dataset.act, el);
     });
