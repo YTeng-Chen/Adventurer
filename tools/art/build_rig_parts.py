@@ -47,13 +47,17 @@ def front_synth(name, pts, px, ink):
     if name == 'torso':   # 手臂抬起來時，肩膀下面要有輪廓（平常被手臂蓋住）
         for y in range(59, 63):
             pts[(20, y)] = ink; pts[(37, y)] = ink
+# 手腳各拆成兩段（上臂／前臂、大腿／小腿），在關節處重疊兩列，彎曲時才不會露出縫隙
+def split(inside, joint_y, pivot_top, pivot_joint, a, b):
+    return {a: (lambda x, y: inside(x, y) and y <= joint_y + 1, pivot_top),
+            b: (lambda x, y: inside(x, y) and y >= joint_y - 1, pivot_joint)}
 FRONT = build('male-base-front.webp', {
     'head':  (lambda x, y: y <= 49, (29.5, 50)),
     'torso': (lambda x, y: 50 <= y <= 83 and not arm_l(x, y) and not arm_r(x, y), (29.5, 83)),
-    'armL':  (arm_l, (17.5, 61.5)),
-    'armR':  (arm_r, (40.5, 61.5)),
-    'legL':  (lambda x, y: y >= 84 and x <= 28, (22.5, 85)),
-    'legR':  (lambda x, y: y >= 84 and x >= 30, (36.5, 85)),
+    **split(arm_l, 70, (17.5, 61.5), (14.5, 70), 'armL', 'armLf'),
+    **split(arm_r, 70, (40.5, 61.5), (45, 70), 'armR', 'armRf'),
+    **split(lambda x, y: y >= 84 and x <= 28, 95, (22.5, 85), (21.5, 95), 'legL', 'legLf'),
+    **split(lambda x, y: y >= 84 and x >= 30, 95, (36.5, 85), (37.5, 95), 'legR', 'legRf'),
 }, {'armL': [13, 76], 'armR': [46, 76]}, front_synth)
 
 # ---------- 側面（朝右）：只看得到靠近鏡頭的手和腿；後面的手腳由程式複製並調暗 ----------
@@ -80,8 +84,8 @@ def side_synth(name, pts, px, ink):
 SIDE = build('male-base-right.webp', {
     'head':  (lambda x, y: y <= 47 and not side_neck(x, y), (25, 46)),
     'torso': (lambda x, y: (side_neck(x, y) or 48 <= y <= 77) and not side_arm(x, y), (26, 77)),
-    'armR':  (side_arm, (21.5, 54.5)),
-    'legR':  (lambda x, y: y >= 78, (26, 79)),
+    **split(side_arm, 63, (21.5, 54.5), (21, 63), 'armR', 'armRf'),
+    **split(lambda x, y: y >= 78, 87, (26, 79), (26, 87), 'legR', 'legRf'),
 }, {'armR': [20, 71]}, side_synth)
 
 path = os.path.join(HERE, '..', '..', 'src', 'rig', 'parts-data.js')

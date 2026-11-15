@@ -20,11 +20,11 @@ npm run dev
 - `npm run preview`：在本機預覽打包結果。
 - `npm test`：執行遊戲規則的測試。
 - 開發時打開 `/tools/sprites.html`：一次看男女角色、所有流派、稀有度、材料階級的裝備像素圖。
-- 開發時打開 `/tools/hairstyles.html`：髮型挑選頁（男女各 3 種髮型、6 種髮色）。
-- 開發時打開 `/tools/rig.html`：2D 骨架動畫原型（`src/rig/`）。角色取自 `tools/art/ref/` 的正面參考圖，由 `tools/art/build_rig_parts.py` 切成零件；可播放待機、走路、揮砍、跳斬，並切換裝備。還沒接進遊戲。
-- 開發時打開 `/tools/model3d.html`：3D 像素風人物設計稿（Three.js，`src/three/`）。人物由圓滑曲面組成，頭髮是一撮撮立體髮束，用低解析度算繪再描邊；可切換角度、動作、髮色。還沒接進遊戲。
+- 開發時打開 `/tools/hairstyles.html`：早期的髮型挑選頁（舊的手繪 Q 版，遊戲已不使用）。
+- 開發時打開 `/tools/rig.html`：骨架動畫預覽（`src/rig/`）。可切換正面與側面、髮色、服裝、稀有度、材料階級，播放待機、走路、揮砍、跳斬、工作、受擊。
+- 開發時打開 `/tools/model3d.html`：3D 像素風人物設計稿（Three.js，`src/three/`）。已放棄這個方向，留作紀錄，遊戲沒有使用。
 
-第一次進遊戲會先建立角色（性別、髮型、髮色），之後可以在角色面板按「更換外觀」修改。進度存在瀏覽器裡。頁面底部的「快轉 1 小時」是測試用的，可以馬上看到離線收穫。
+第一次進遊戲會先建立角色（目前只能選髮色），之後可以在角色面板按「更換外觀」修改。進度存在瀏覽器裡。頁面底部的「快轉 1 小時」是測試用的，可以馬上看到離線收穫。
 
 ## 怎麼玩
 
@@ -45,9 +45,9 @@ npm run dev
 
 - 戰鬥結果由 `core` 先算好，Phaser 只負責把戰鬥紀錄播出來，所以「跳過」不會改變結果。
 - HTML 介面和 Phaser 不直接互相呼叫，而是透過 `src/bus.js` 的事件（`state`、`tick`、`battle:start` 等，說明寫在檔案開頭）。
-- 角色是手繪的動漫迷你 Q 版紙娃娃：後髮、披風、身體、鞋子、上衣、前髮、頭飾、武器各一層，換裝備或換髮型只換那一層。角色會呼吸、眨眼、披風會飄，攻擊時武器以右手為支點揮動。
-- 身體與髮型是手繪的高解析度像素圖（角色 68×108 格，參考大頭、寬臉、大眼、兩側耳朵、厚帽兜、大球鞋的比例）：`tools/art/character.py` 用 Python（需要 Pillow）畫出來，執行 `python3 tools/art/character.py --export` 輸出 `src/art/chibi-data.js` 與 `tools/hairstyles-data.js`。髮色用四階色票替換，所以每種髮型都能換色。
-- 裝備在 `src/art/chibi.js` 用程式照同樣的畫風（黑色輪廓、卡通平塗）畫，設計座標放大 2 倍後再描 1 格細的輪廓：流派決定款式（劍士冒險帽與皮甲、守衛騎士盔與板甲、術士法帽與法袍），材料階級決定材質，稀有度決定滾邊、寶石與裝飾（羽毛、角、披風）。之後換成美術畫的圖，只需要改 `src/art/chibi.js` 與 `src/game/textures.js`。
+- 角色是 2D 骨架動畫（`src/rig/rig.js`）：把參考圖切成頭、身體、上臂、前臂、大腿、小腿等零件，掛在關節上轉動。掛機與戰鬥場景用側面，角色建立與外觀預覽用正面。動作是「時間 → 各關節角度」的函式（`ANIMS`：idle、walk、slash、jump、work、hurt），加新動作不需要重畫圖。
+- 零件來自 `tools/art/ref/` 的參考圖（正面 60×109 格、側面 50×99 格）：`python3 tools/art/extract_ref.py` 把圖重新取樣成像素格，`python3 tools/art/build_rig_parts.py` 切成零件並輸出 `src/rig/parts-data.js`（需要 Pillow）。髮色用色票替換。目前只有男生和一種髮型；要加女生或其他髮型，需要同樣格式的正面與側面參考圖。
+- 裝備不是另外畫的圖，而是照每個零件的輪廓上色，所以換裝後所有動作都能直接用：流派決定款式（劍士皮背心、守衛板甲、術士法袍；武器是劍、鎚、法杖），材料階級決定材質，稀有度 3 以上會發光。頭飾目前只有頭帶，比頭大的造型（帽子、頭盔）需要另外畫零件。背包裡的裝備圖示仍由舊的 `src/art/chibi.js` 繪製。
 
 ```
 index.html          頁面骨架
@@ -57,12 +57,13 @@ src/style.css       樣式
 src/core/           遊戲規則（data.js 是所有平衡數值）
 src/ui/app.js       HTML 介面
 src/ui/sprites.js   像素圖入口（魔物資料）
-src/art/            角色（chibi.js、chibi-data.js）、裝備、圖示的像素繪製
+src/art/            裝備圖示的像素繪製（chibi.js 是舊的手繪角色，只剩圖示在用）
+src/rig/            骨架動畫角色：rig.js（繪製與動作）、parts-data.js（零件）
 src/game/           Phaser：IdleScene、BattleScene、textures
 tests/              遊戲規則測試
 tools/sprites.html  像素圖預覽（開發用）
-tools/hairstyles.html 髮型挑選頁（開發用）
-tools/art/          手繪角色的產生工具（Python）
+tools/rig.html      骨架動畫預覽（開發用）
+tools/art/          參考圖與零件產生工具（Python）
 ```
 
 ## 點子苗圃同步

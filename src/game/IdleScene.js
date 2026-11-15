@@ -1,8 +1,8 @@
 // 掛機場景：角色在目前的掛機地點待機，每次結算時播一個小動作和跳字。
 import * as Phaser from 'phaser';
 import { data as D } from '../core/data.js';
-import { Hero, enemyTexture } from './textures.js';
-import { W, H, GROUND, FONT, HERO_Y, HERO_SCALE, ENEMY_SCALE, BOSS_SCALE } from './config.js';
+import { RigHero, enemyTexture } from './textures.js';
+import { W, H, GROUND, FONT, HERO_X, ENEMY_SCALE, BOSS_SCALE } from './config.js';
 
 const SHORT = { hp: 'HP', atk: 'ATK', matk: 'MATK', def: 'DEF', mdef: 'MDEF', spd: 'SPD' };
 
@@ -19,12 +19,10 @@ export class IdleScene extends Phaser.Scene {
     this.tweens.add({ targets: this.glow, alpha: { from: 0.35, to: 0.75 }, duration: 380, yoyo: true, repeat: -1 });
     this.props = this.add.graphics();
 
-    this.foe = this.add.image(332, GROUND + 6, enemyTexture(this, 'slime', '#62c46a')).setOrigin(0, 1).setScale(ENEMY_SCALE).setVisible(false);
+    this.foe = this.add.image(HERO_X + 58, GROUND + 6, enemyTexture(this, 'slime', '#62c46a')).setOrigin(0, 1).setScale(ENEMY_SCALE).setVisible(false);
     this.tweens.add({ targets: this.foe, y: '-=2', duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
 
-    this.hero = new Hero(this, 96, HERO_Y, HERO_SCALE);
-    this.heroX = this.hero.box.x;
-    this.tweens.add({ targets: this.hero.box, y: '-=2', duration: 600, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+    this.hero = new RigHero(this, HERO_X, GROUND);
 
     const offs = [
       this.bus.on('state', () => this.refresh()),
@@ -96,10 +94,9 @@ export class IdleScene extends Phaser.Scene {
     const L = s.location;
     // 角色動作：戰鬥、鍛鍊是往前衝，其他地點是小跳一下
     if (L === 'battle' || L === 'training') {
-      this.tweens.add({ targets: this.hero.box, x: this.heroX + 18, duration: 110, yoyo: true, ease: 'Quad.out' });
-      this.hero.swing();
+      this.hero.play('slash');
     } else {
-      this.tweens.add({ targets: this.hero.layers, y: '-=5', duration: 120, yoyo: true, ease: 'Quad.out' });
+      this.hero.play('work');
     }
     if (L === 'battle') {
       this.foe.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);
@@ -111,7 +108,7 @@ export class IdleScene extends Phaser.Scene {
     for (const k in sum.train) parts.push(`+${sum.train[k]} ${SHORT[k] || k.toUpperCase()}`);
     if (sum.items.length) parts.push(`+${sum.items.length} ITEM`);
     if (!parts.length) return;
-    const t = this.add.text(this.heroX - 6, this.hero.box.y - 10, parts.join('  '), FONT(10, '#f2b84b'));
+    const t = this.add.text(HERO_X - 40, this.hero.topY - 12, parts.join('  '), FONT(10, '#f2b84b'));
     this.tweens.add({ targets: t, y: t.y - 20, alpha: 0, duration: 1500, ease: 'Quad.out', onComplete: () => t.destroy() });
   }
 }

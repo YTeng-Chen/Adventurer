@@ -3,11 +3,10 @@ export const W = 480;
 export const H = 170;
 export const GROUND = 142;
 
-// 角色圖 88×108（高解析度手繪 Q 版，原尺寸顯示）、魔物圖 32×32 放大 2 倍；頭目 3 倍
-export const HERO_SCALE = 1;
+// 角色是骨架動畫（側面，約 99 格高，原尺寸顯示）；魔物圖 32×32 放大 2 倍，頭目 3 倍
+export const HERO_X = 196;   // 角色腳底中心的位置
 export const ENEMY_SCALE = 2;
 export const BOSS_SCALE = 3;
-export const HERO_Y = GROUND - 104; // 鞋底輪廓在角色圖第 105 列，讓腳踩在地面上
 
 // Phaser 文字只用來顯示數字與短英文（傷害、EXP），中文都交給 HTML
 export const FONT = (size, color) => ({

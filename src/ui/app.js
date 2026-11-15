@@ -6,6 +6,7 @@ import { items as I } from '../core/items.js';
 import { stats as S } from '../core/stats.js';
 import { save as store } from '../core/save.js';
 import { sprites as SP } from './sprites.js';
+import { Rig, ANIMS, HAIR_COLORS, DEFAULT_HAIR } from '../rig/rig.js';
 
 export function startUI(bus) {
   const $ = (q) => document.querySelector(q);
@@ -404,43 +405,38 @@ export function startUI(bus) {
   }
   // ---------- 外觀（角色建立） ----------
   let lookDraft = null, lookFirst = false, pendingSummary = null;
-  function drawLook(cv, look, equip, scale) {
-    const g = SP.heroGrid(equip || {}, look);
-    const ctx = setupCanvas(cv, SP.HERO_W * scale, SP.HERO_H * scale);
-    SP.draw(ctx, g, 0, 0, scale);
+  // 用骨架角色畫預覽：view 是 'front' 或 'side'
+  function drawLook(cv, view, look, equip, scale) {
+    const rig = new Rig(view);
+    rig.setLook(look); rig.setEquip(equip || {});
+    const w = view === 'front' ? 76 : 70, h = 116;
+    const ctx = setupCanvas(cv, w * scale, h * scale);
+    ctx.scale(scale, scale);
+    rig.draw(ctx, view === 'front' ? 34 : 28, h - 3, ANIMS.idle.pose(0));
   }
   function openLook(first) {
     lookFirst = first;
-    lookDraft = SP.normalizeLook(s.appearance);
+    const cur = s.appearance || {};
+    lookDraft = { color: HAIR_COLORS[cur.color] ? cur.color : DEFAULT_HAIR };
     renderLook();
   }
   function renderLook() {
     const d = lookDraft, m = $('#modal');
     m.hidden = false;
-    const colors = Object.entries(SP.HAIR_COLORS).map(([k, v]) => `<button type="button" class="swatch" data-act="look-c" data-k="${k}" aria-pressed="${d.color === k}"><i style="background:${v[1]}"></i>${k}</button>`).join('');
-    const styles = SP.GENDER_STYLES[d.gender].map((st) => `<button type="button" class="style-card" data-act="look-s" data-k="${st}" aria-pressed="${d.style === st}"><canvas data-style="${st}"></canvas><span>${st}</span></button>`).join('');
+    const colors = Object.entries(HAIR_COLORS).map(([k, v]) => `<button type="button" class="swatch" data-act="look-c" data-k="${k}" aria-pressed="${d.color === k}"><i style="background:${v[1]}"></i>${k}</button>`).join('');
     m.innerHTML = `<div class="modal-card look-card" role="dialog" aria-modal="true" aria-labelledby="lookTitle">
       <h2 id="lookTitle">${lookFirst ? '建立你的冒險者' : '更換外觀'}</h2>
-      ${lookFirst ? '<p class="hint">選性別、髮型和髮色，之後可以在角色面板的「更換外觀」修改。</p>' : ''}
+      ${lookFirst ? '<p class="hint">選一個髮色，之後可以在角色面板的「更換外觀」修改。</p>' : ''}
       <div class="look-grid">
-        <div class="look-preview"><canvas id="lookBig" aria-label="角色預覽"></canvas>
-          ${Object.values(s.equip).some(Boolean) ? '<div class="look-small"><canvas id="lookGear" aria-label="穿上目前裝備的樣子"></canvas><span class="hint">穿上裝備</span></div>' : ''}</div>
+        <div class="look-preview"><canvas id="lookBig" aria-label="角色正面"></canvas><canvas id="lookSide" aria-label="角色側面"></canvas></div>
         <div class="look-options">
-          <span class="mini-h">性別</span>
-          <div class="row">${['男', '女'].map((k) => `<button type="button" class="btn ghost small" data-act="look-g" data-k="${k}" aria-pressed="${d.gender === k}">${k === '男' ? '男生' : '女生'}</button>`).join('')}</div>
-          <span class="mini-h">髮型</span><div class="style-cards">${styles}</div>
           <span class="mini-h">髮色</span><div class="row swatches">${colors}</div>
+          <p class="hint">目前只有男生和這個髮型。女生角色和其他髮型的圖還在準備中，完成後會出現在這裡。</p>
         </div>
       </div>
       <div class="row"><button class="btn" data-act="look-ok">${lookFirst ? '開始冒險' : '儲存外觀'}</button>${lookFirst ? '' : '<button class="btn ghost" data-act="look-cancel">取消</button>'}</div></div>`;
-    drawLook($('#lookBig'), d, null, 3);
-    const gear = $('#lookGear');
-    if (gear) drawLook(gear, d, s.equip, 1);
-    m.querySelectorAll('canvas[data-style]').forEach((cv) => {
-      const g = SP.heroGrid({}, { ...d, style: cv.dataset.style }).slice(0, 64).map((row) => row.slice(0, 68));
-      const ctx = setupCanvas(cv, 136, 128);
-      SP.draw(ctx, g, 0, 0, 2);
-    });
+    drawLook($('#lookBig'), 'front', d, s.equip, 2);
+    drawLook($('#lookSide'), 'side', d, s.equip, 2);
   }
   function closeLook(saveIt) {
     if (saveIt) { s.appearance = { ...lookDraft }; persist(); toast(lookFirst ? '冒險開始！' : '外觀已更新'); }
@@ -529,8 +525,6 @@ export function startUI(bus) {
       case 'b-close': closeBattle(); return;
       case 'modal-close': $('#modal').hidden = true; $('#modal').innerHTML = ''; break;
       case 'look': openLook(false); return;
-      case 'look-g': if (lookDraft.gender !== k) { lookDraft.gender = k; lookDraft.style = SP.GENDER_STYLES[k][0]; } renderLook(); return;
-      case 'look-s': lookDraft.style = k; renderLook(); return;
       case 'look-c': lookDraft.color = k; renderLook(); return;
       case 'look-ok': closeLook(true); return;
       case 'look-cancel': closeLook(false); return;

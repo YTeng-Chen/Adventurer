@@ -1,7 +1,7 @@
 // 戰鬥播放：把 combat.fight() 回傳的紀錄一行一行播出來。戰鬥結果在播放前就已經算好。
 import * as Phaser from 'phaser';
-import { Hero, enemyTexture } from './textures.js';
-import { W, H, GROUND, FONT, HERO_Y, HERO_SCALE, ENEMY_SCALE, BOSS_SCALE } from './config.js';
+import { RigHero, enemyTexture } from './textures.js';
+import { W, H, GROUND, FONT, HERO_X, ENEMY_SCALE, BOSS_SCALE } from './config.js';
 
 const FLOAT = { attack: '#ffffff', double: '#9fe0ff', chain: '#7af0ff', counter: '#d0d6e0', burn: '#ffa040' };
 
@@ -25,13 +25,11 @@ export class BattleScene extends Phaser.Scene {
     g.fillStyle(0x34416a);
     for (let x = 0; x < W; x += 16) g.fillRect(x, GROUND, 8, 2);
 
-    this.hero = new Hero(this, 96, HERO_Y, HERO_SCALE);
+    this.hero = new RigHero(this, HERO_X, GROUND);
     this.hero.setLook(equip, look);
-    this.heroX = this.hero.box.x;
-    this.tweens.add({ targets: this.hero.box, y: '-=2', duration: 600, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
 
     const es = foe.boss ? BOSS_SCALE : ENEMY_SCALE;
-    this.foe = this.add.image(W - 70, GROUND + 6, enemyTexture(this, foe.shape, foe.c)).setOrigin(1, 1).setScale(es);
+    this.foe = this.add.image(HERO_X + 58, GROUND + 6, enemyTexture(this, foe.shape, foe.c)).setOrigin(0, 1).setScale(es);   // 站在刀光砍得到的距離
     this.foeX = this.foe.x;
     this.tweens.add({ targets: this.foe, y: '-=2', duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
 
@@ -74,14 +72,14 @@ export class BattleScene extends Phaser.Scene {
       // 燃燒是持續傷害：受傷的是被燒的一方
       const target = line.kind === 'burn' ? (line.who === 'p' ? 'e' : 'p') : line.who === 'p' ? 'e' : 'p';
       this.hit(target, line);
-      if (line.kind !== 'burn') this.lunge(line.who);
+      if (line.kind !== 'burn') this.lunge(line.who, line.crit);
     }
     this.bus.emit('battle:line', { i: this.i - 1, line });
   }
 
-  lunge(who) {
-    if (who === 'p') { this.tweens.add({ targets: this.hero.box, x: this.heroX + 16, duration: 90, yoyo: true, ease: 'Quad.out' }); this.hero.swing(); }
-    else this.tweens.add({ targets: this.foe, x: this.foeX - 16, duration: 90, yoyo: true, ease: 'Quad.out' });
+  lunge(who, crit) {
+    if (who === 'p') this.hero.play(crit ? 'jump' : 'slash', crit ? 2.2 : 1.6);   // 暴擊用跳斬
+    else this.tweens.add({ targets: this.foe, x: this.foeX - 14, duration: 90, yoyo: true, ease: 'Quad.out' });
   }
 
   hit(target, line) {
@@ -89,10 +87,11 @@ export class BattleScene extends Phaser.Scene {
     if (target === 'e') {
       this.foe.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);
       this.time.delayedCall(110, () => this.foe.clearTint());
-      x = this.foe.x - this.foe.displayWidth / 2; y = this.foe.y - this.foe.displayHeight;
+      x = this.foe.x + this.foe.displayWidth / 2; y = this.foe.y - this.foe.displayHeight;
     } else {
       this.hero.flash(110);
-      x = this.heroX + this.hero.width / 2; y = this.hero.box.y;
+      this.hero.play('hurt');
+      x = HERO_X; y = this.hero.topY;
     }
     if (line.crit) this.cameras.main.shake(90, 0.006);
     const color = line.crit && line.kind === 'attack' ? '#f2b84b' : FLOAT[line.kind] || '#ffffff';
@@ -107,7 +106,7 @@ export class BattleScene extends Phaser.Scene {
     const last = this.r.log[this.r.log.length - 1];
     if (last) { this.hpP = last.hpP; this.hpE = last.hpE; this.drawBars(); }
     if (this.hpE <= 0) this.tweens.add({ targets: this.foe, alpha: 0.25, duration: 400 });
-    if (this.hpP <= 0) this.tweens.add({ targets: this.hero.box, alpha: 0.35, duration: 400 });
+    if (this.hpP <= 0) this.tweens.add({ targets: this.hero.image, alpha: 0.35, duration: 400 });
     this.bus.emit('battle:end', { i: this.r.log.length });
   }
 }

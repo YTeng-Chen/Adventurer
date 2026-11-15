@@ -1,7 +1,8 @@
-// 把像素圖的色塊陣列變成 Phaser 貼圖，並組出紙娃娃角色。
+// 把像素圖的色塊陣列變成 Phaser 貼圖（魔物），並把骨架角色放進場景。
 // 之後換成美術畫的 spritesheet 時，只要改這個檔案。
 import * as Phaser from 'phaser';
 import { sprites } from '../ui/sprites.js';
+import { Rig, ANIMS } from '../rig/rig.js';
 
 export function gridTexture(scene, key, grid) {
   if (scene.textures.exists(key)) return key;
@@ -38,102 +39,49 @@ export function enemyTexture(scene, shape, color) {
 
 const hex = (c) => parseInt(c.slice(1), 16);
 
-// 紙娃娃角色：Container 裡每個部位一張圖（後髮、披風、身體、鞋、上衣、前髮、頭飾、武器），同樣大小疊在一起。
-// 會動：呼吸起伏、隨機眨眼、披風飄動；攻擊時武器以右手為支點揮動。
-export class Hero {
-  constructor(scene, x, y, scale) {
+// 骨架角色（側面）：Rig 把角色和特效畫在一張低解析度的 canvas 上，這裡把它當成貼圖放進場景，每一格重畫。
+// 動作：待機會一直播；play('slash') 之類的單次動作播完會回到待機。
+let rigSeq = 0;
+export class RigHero {
+  // x：腳底中心的位置；groundY：地面高度
+  constructor(scene, x, groundY) {
     this.scene = scene;
-    this.scale = scale;
-    this.box = scene.add.container(x, y);
-    this.parts = [];
-    this.images = [];
-    this.weapon = null;
-    this.emitter = null;
-    this.sig = '';
-    this.o = { breath: 0, blink: false, cape: 0 };
-    this.t = 0;
-    this.blinkAt = 1800 + Math.random() * 2000;
-    this.timer = scene.time.addEvent({ delay: 100, loop: true, callback: () => this.tick() });
-    scene.events.once('shutdown', () => this.timer.remove());
+    this.x = x; this.groundY = groundY;
+    this.rig = new Rig('side');
+    this.cw = 260; this.ch = groundY + 12; this.footX = 96;
+    this.tex = scene.textures.createCanvas(`rig-hero-${rigSeq++}`, this.cw, this.ch);
+    this.image = scene.add.image(x - this.footX, 0, this.tex.key).setOrigin(0, 0);
+    this.anim = 'idle'; this.t0 = scene.time.now; this.speed = 1;
+    this.blinkAt = 1500 + Math.random() * 2000;
+    this.flashUntil = 0;
+    this.update = this.update.bind(this);
+    scene.events.on('update', this.update);
+    scene.events.once('shutdown', () => { scene.events.off('update', this.update); scene.textures.remove(this.tex.key); });
+    this.update(scene.time.now);
   }
+  setLook(equip, look) { this.rig.setEquip(equip); this.rig.setLook(look); }
+  // speed > 1 會播得比較快（戰鬥紀錄播得快的時候用）
+  play(name, speed = 1) { this.anim = name; this.t0 = this.scene.time.now; this.speed = speed; }
+  flash(ms = 110) { this.flashUntil = this.scene.time.now + ms; }
+  get topY() { return this.groundY - 100; }
 
-  frameTexture(p) {
-    const o = this.o;
-    const key = `h:${p.key}|${o.breath}|${p.id === 'base' ? (o.blink ? 1 : 0) : ''}|${p.id === 'cape' ? o.cape : ''}`;
-    return gridTexture(this.scene, key, p.frames(o));
+  update(time) {
+    let anim = ANIMS[this.anim];
+    let t = ((time - this.t0) / 1000 / anim.dur) * this.speed;
+    if (anim.loop) t %= 1;
+    else if (t >= 1) { this.anim = 'idle'; this.t0 = time; this.speed = 1; anim = ANIMS.idle; t = 0; }
+    let blink = false;
+    if (time > this.blinkAt) { blink = true; if (time > this.blinkAt + 130) this.blinkAt = time + 2000 + Math.random() * 2600; }
+    const pose = anim.pose(t), ctx = this.tex.context;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, this.cw, this.ch);
+    this.rig.draw(ctx, this.footX, this.groundY, pose, blink);
+    if (time < this.flashUntil) {          // 受擊閃白：只把角色的像素塗白
+      ctx.globalCompositeOperation = 'source-atop';
+      ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.fillRect(0, 0, this.cw, this.ch);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    this.rig.drawFx(ctx, this.footX, this.groundY, pose, time / 1000);
+    this.tex.refresh();
   }
-
-  // 換外觀或裝備：look = { gender, style, color }
-  setLook(equip, look) {
-    const parts = sprites.heroParts(equip, look);
-    const glow = sprites.glow(equip);
-    const sig = parts.map((p) => p.key).join('|') + (glow ? glow.rarity : '');
-    if (sig === this.sig) return;
-    this.sig = sig;
-    this.parts = parts;
-    for (const img of this.images) img.destroy();
-    const P = sprites.PIVOT, s = this.scale;
-    this.weapon = null;
-    this.images = parts.map((p) => {
-      const img = this.scene.add.image(0, 0, this.frameTexture(p)).setScale(s);
-      if (p.id === 'weapon') {
-        img.setOrigin(P.x / sprites.HERO_W, P.y / sprites.HERO_H).setPosition(P.x * s, P.y * s);
-        this.weapon = img;
-      } else img.setOrigin(0, 0);
-      return img;
-    });
-    this.box.add(this.images);
-    this.setGlow(glow);
-  }
-
-  tick() {
-    this.t += 100;
-    const o = this.o;
-    const breath = Math.floor(this.t / 600) % 2;
-    const cape = [0, 1, 2, 1][Math.floor(this.t / 200) % 4];
-    let blink = o.blink;
-    if (this.t >= this.blinkAt) { blink = true; if (this.t >= this.blinkAt + 130) { blink = false; this.blinkAt = this.t + 2200 + Math.random() * 2600; } }
-    if (breath === o.breath && cape === o.cape && blink === o.blink) return;
-    Object.assign(o, { breath, cape, blink });
-    this.parts.forEach((p, i) => { const img = this.images[i]; if (img) img.setTexture(this.frameTexture(p)); });
-  }
-
-  // 武器揮動：先往後拉，再往前砍，回到原位
-  swing() {
-    const w = this.weapon;
-    if (!w) return;
-    this.scene.tweens.killTweensOf(w);
-    w.angle = 0;
-    this.scene.tweens.add({
-      targets: w, angle: -35, duration: 70, ease: 'Quad.out',
-      onComplete: () => this.scene.tweens.add({
-        targets: w, angle: 55, duration: 90, ease: 'Quad.in',
-        onComplete: () => this.scene.tweens.add({ targets: w, angle: 0, duration: 160, ease: 'Back.out' }),
-      }),
-    });
-  }
-
-  // 史詩、傳說裝備的閃光粒子
-  setGlow(glow) {
-    if (this.emitter) { this.emitter.destroy(); this.emitter = null; }
-    if (!glow) return;
-    const s = this.scale, w = sprites.HERO_W * s, h = sprites.HERO_H * s;
-    this.emitter = this.scene.add.particles(0, 0, pixelTexture(this.scene), {
-      x: { min: w * 0.15, max: w * 0.75 }, y: { min: h * 0.2, max: h * 0.9 },
-      speedY: { min: -26, max: -12 }, lifespan: 1100,
-      scale: { start: s / 2, end: 0 }, alpha: { start: 1, end: 0 },
-      tint: hex(sprites.shade(glow.color, 0.35)),
-      frequency: glow.rarity === 4 ? 110 : 260,
-    });
-    this.box.add(this.emitter);
-  }
-
-  flash(ms = 120) {
-    for (const img of this.images) img.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);
-    this.scene.time.delayedCall(ms, () => { for (const img of this.images) img.clearTint(); });
-  }
-
-  get layers() { return this.images; }
-  get width() { return sprites.HERO_W * this.scale; }
-  get height() { return sprites.HERO_H * this.scale; }
 }

@@ -1,25 +1,39 @@
-// 2D 骨架動畫：角色拆成零件（頭、身體、左右手、左右腿），掛在關節上；動作是讓關節轉動、移動。
-// 一件裝備只要畫對應零件的圖，所有動作都能用；一個動作做一次，所有裝備都適用。
+// 2D 骨架動畫：角色拆成零件（頭、身體、上臂、前臂、大腿、小腿），掛在關節上；動作是讓關節轉動、移動。
+// 一件裝備只要照零件的形狀上色，所有動作都能用；一個動作做一次，所有裝備都適用。
 // 全部畫在低解析度的 canvas 上（不做平滑），旋轉後仍然是一格一格的像素。
 // 座標：零件用參考圖的像素座標（正面 60×109、側面 50×99）；角度單位是度，正值為順時針，0 度表示自然下垂。
+// 兩種視角：側面（朝右；戰鬥與掛機用，後面的手腳是調暗的複製品）與正面（角色建立與預覽用）。
 import { RIG_PARTS } from './parts-data.js';
+import { gearMats } from '../art/palette.js';
+import { CHIBI } from '../art/chibi-data.js';
 
 const RAD = Math.PI / 180;
 const INK = RIG_PARTS.front.ink;
-// 兩種視角：正面（六個零件）與側面（朝右；頭、身體、靠近鏡頭的手和腿，後面的手腳是調暗的複製品）
 const FOOT = { front: [30, 108], side: [27, 98] };
+export const HAIR_COLORS = CHIBI.hairColors;
+export const DEFAULT_HAIR = '深棕';   // 參考圖原本的髮色，不重新上色
+
+// 各視角的身體位置（像素列）：衣服與裝備照這些位置上色
+const LM = {
+  front: { cx: 29.5, top: 53, belt: 70, shorts: 74, pad: 64, glove: 73, robe: 92, boot: 93, sole: 104,
+    light: (x) => x <= 23, dark: (x) => x >= 33, buckle: (x) => x >= 28 && x <= 31, center: (x) => x === 29 || x === 30,
+    eyes: [[16, 36, 23, 43], [32, 36, 40, 43]], blinkY: 42 },
+  side: { cx: 26, top: 49, belt: 63, shorts: 66, pad: 57, glove: 66, robe: 85, boot: 86, sole: 95,
+    light: (x) => x >= 30, dark: (x) => x <= 21, buckle: (x) => x >= 31 && x <= 32, center: (x) => x >= 32,
+    eyes: [[30, 34, 38, 39]], blinkY: 38 },
+};
 
 // ---------- 零件圖 ----------
 function rgb(hex) { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
-function kind(hex) {   // 這格是輪廓、皮膚，還是其他（頭髮、短褲）
+function kind(hex) {   // 這格是輪廓、皮膚，還是其他（頭髮、短褲、眼白）
   const [r, g, b] = rgb(hex);
   if (r + g + b < 140) return 'ink';
   if (r > 200 && g > 150 && b > 120 && r - b > 25) return 'skin';
   return 'other';
 }
-function makeCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
 const darker = (hex, f) => { const [r, g, b] = rgb(hex); return `rgb(${Math.round(r * f)},${Math.round(g * f)},${Math.round(b * f)})`; };
-// 把零件畫成 canvas；paint(x, y, 顏色, 種類) 可以回傳新的顏色（做裝備用），回傳 null 表示這格不畫；dim 是整體調暗（後面的手腳）
+function makeCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+// 把零件畫成 canvas；paint(x, y, 顏色, 種類) 回傳新的顏色，回傳 null 表示這格不畫；dim 是整體調暗（後面的手腳）
 function partCanvas(P, name, paint, dim = 1) {
   const part = P.parts[name];
   const c = makeCanvas(part.rows[0].length, part.rows.length), ctx = c.getContext('2d');
@@ -28,234 +42,302 @@ function partCanvas(P, name, paint, dim = 1) {
     const hex = P.pal[ch];
     const col = paint ? paint(part.x + i, part.y + j, hex, kind(hex)) : hex;
     if (!col) return;
-    ctx.fillStyle = dim < 1 && col[0] === '#' ? darker(col, dim) : col; ctx.fillRect(i, j, 1, 1);
+    ctx.fillStyle = dim < 1 ? darker(col, dim) : col; ctx.fillRect(i, j, 1, 1);
   }));
   return c;
 }
+const inBox = (x, y, [x0, y0, x1, y1]) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
 
-// ---------- 裝備：照身體零件的形狀上色，所以一定合身 ----------
-const LEATHER = { vest: '#a8683a', vestL: '#bd7b45', vestD: '#8a5230', belt: '#5a3520', gold: '#f2c14e', trim: '#c98a4a', pad: '#aac2dc', padL: '#d5e2ef',
-  glove: '#6e4a2e', pants: '#3d4470', pantsD: '#343a62', pantsL: '#5d6eaa', boot: '#84502c', bootD: '#6e4226', sole: '#5e3a1e', band: '#d0473f', bandL: '#e8736a', bandD: '#7a2630' };
-const GEAR_SETS = {
-  // 冒險者皮甲：皮背心、斜背帶、護肩、手套、長褲、皮靴、紅頭巾。正面與側面各有一套上色規則（座標不同）。
-  leather: {
-    front: {
-      torso(x, y, hex, k) {
-        const C = LEATHER;
-        if (k === 'ink') return null;
-        if (y >= 74) return k === 'other' ? (rgb(hex)[0] > 200 ? C.pantsL : x > 30 ? C.pantsD : C.pants) : null;   // 短褲 → 長褲上半
-        if (k !== 'skin' || y <= 52) return null;
-        if (y <= 59 && Math.abs(x - 29.5) <= (60 - y) * 0.55) return null;       // V 領
-        if (y >= 70) return x >= 28 && x <= 31 ? C.gold : C.belt;                // 腰帶與扣環
-        if (Math.abs(x - 20 - (y - 55)) <= 1) return C.belt;                     // 斜背帶
-        if (y === 53 || y === 54) return C.trim;
-        return x >= 33 ? C.vestD : x <= 23 ? C.vestL : C.vest;
-      },
-      arm(x, y, hex, k) {
-        const C = LEATHER;
-        if (k !== 'skin') return null;
-        if (y <= 64) return y <= 60 ? C.padL : C.pad;
-        if (y <= 71) return C.vestD;
-        return y === 72 ? C.trim : C.glove;
-      },
-      leg(x, y, hex, k) {
-        const C = LEATHER;
-        if (k !== 'skin') return null;
-        if (y <= 92) return x % 15 > 8 ? C.pantsD : C.pants;
-        if (y <= 94) return C.trim;
-        return y >= 104 ? C.sole : x % 15 > 9 ? C.bootD : C.boot;
-      },
-      head(x, y, hex, k) {   // 紅頭巾：綁在額頭上，髮絲的黑線蓋在上面；右邊打結垂下
-        const C = LEATHER;
-        if (x >= 48 && x <= 51 && y >= 29 && y <= 37) return x === 48 || y === 37 ? C.bandD : y <= 31 ? C.bandL : C.band;
-        if (x < 11 || x > 48 || k === 'ink') return null;
-        const top = 27 + Math.round(((x - 29.5) / 19) ** 2 * 2);
-        return y === top ? C.bandL : y === top + 1 || y === top + 2 ? C.band : y === top + 3 ? C.bandD : null;
-      },
-    },
-    side: {
-      torso(x, y, hex, k) {
-        const C = LEATHER;
-        if (k === 'ink') return null;
-        if (y >= 68) return k === 'other' ? C.pants : k === 'skin' ? C.pantsL : null;   // 短褲（含白條）→ 長褲上半
-        if (k === 'other' && y <= 47) return null;                                // 脖子的陰影
-        if (y <= 48) return null;
-        if (y >= 63) return x >= 30 && x <= 32 ? C.gold : C.belt;
-        if (y <= 50) return C.trim;
-        return x >= 30 ? C.vestL : C.vest;
-      },
-      arm(x, y, hex, k) {
-        const C = LEATHER;
-        if (k === 'ink') return null;
-        if (y <= 57) return y <= 54 ? C.padL : C.pad;
-        if (y <= 64) return C.vestD;
-        return y === 65 ? C.trim : C.glove;
-      },
-      leg(x, y, hex, k) {
-        const C = LEATHER;
-        if (k !== 'skin') return null;
-        if (y <= 85) return C.pants;
-        if (y <= 87) return C.trim;
-        return y >= 95 ? C.sole : x >= 30 ? C.boot : C.bootD;
-      },
-      head(x, y, hex, k) {   // 紅頭巾：繞過額頭到後腦，後面打結垂下
-        const C = LEATHER;
-        if (x >= 4 && x <= 7 && y >= 24 && y <= 33) return x === 7 || y === 33 ? C.bandD : y <= 26 ? C.bandL : C.band;
-        if (x < 7 || x > 37 || k === 'ink') return null;
-        const top = 22 + Math.round((x - 8) / 12);
-        return y === top ? C.bandL : y === top + 1 || y === top + 2 ? C.band : y === top + 3 ? C.bandD : null;
-      },
-    },
-  },
-};
-// 劍：握柄中心是支點，劍身朝上
-function swordCanvas() {
-  const c = makeCanvas(13, 44), x = c.getContext('2d');
-  const r = (col, px, py, w, h) => { x.fillStyle = col; x.fillRect(px, py, w, h); };
-  r(INK, 3, 3, 7, 30); r(INK, 4, 1, 5, 2); r(INK, 5, 0, 3, 1);                 // 劍身輪廓
-  r('#eef3f8', 4, 3, 2, 29); r('#b9c7d8', 6, 2, 1, 30); r('#8fa0b6', 7, 3, 2, 29);
-  r('#eef3f8', 5, 1, 1, 2); r('#b9c7d8', 6, 1, 1, 1); r('#8fa0b6', 7, 2, 1, 1);
-  r(INK, 0, 32, 13, 5); r('#f2c14e', 1, 33, 11, 2); r('#b9842a', 1, 35, 11, 1);     // 護手
-  r(INK, 4, 37, 5, 7); r('#84502c', 5, 37, 2, 5); r('#5e3a1e', 7, 37, 1, 5); r('#f2c14e', 5, 42, 3, 1);   // 握柄
-  return { canvas: c, pivot: [6.5, 39.5] };
+// 頭：換髮色（眼睛的範圍不動）、眨眼
+function headPainter(view, hair, blink) {
+  const L = LM[view], pal = hair !== DEFAULT_HAIR && HAIR_COLORS[hair];
+  return (x, y, hex, k) => {
+    const eye = L.eyes.some((b) => inBox(x, y, b));
+    if (eye && blink) {
+      if (k === 'skin') return hex;
+      return y === L.blinkY ? INK : y > L.blinkY ? hex : '#fdddca';   // 眼睛換成皮膚，只留一條閉起來的線
+    }
+    if (!pal || eye || k === 'skin') return hex;
+    const lum = rgb(hex).reduce((a, b) => a + b, 0);
+    if (lum < 60) return hex;                          // 最外圈的輪廓
+    return lum < 140 ? pal[0] : lum < 300 ? pal[1] : pal[2];
+  };
 }
 
-// ---------- 動作：輸入時間，回傳姿勢與特效 ----------
+// ---------- 衣服與裝備：照身體零件的形狀上色，所以一定合身 ----------
+const BASIC = { tee: '#e9e6e5', teeD: '#c4bdc0', pants: '#3d4470', pantsD: '#343a62', shoe: '#3a3540', sole: '#f2eff0' };
+function mats(it) {
+  const m = gearMats(it), c = (k) => ({ d: m[k].ramp[1], b: m[k].ramp[2], l: m[k].ramp[3] });
+  return { metal: c('metal'), leather: c('leather'), cloth: c('cloth'), trim: it.rarity >= 1 ? m.trim.ramp[2] : null, gem: it.rarity >= 2 ? m.gem.ramp[2] : null,
+    gold: m.gold.ramp[2], wood: c('wood'), orb: m.orb.ramp[2], orbL: m.orb.ramp[3], belt: m.belt.ramp[2] };
+}
+const shadeX = (L, x, c) => (L.light(x) ? c.l : L.dark(x) ? c.d : c.b);
+
+// 每個零件一個上色函式。equip = { head, body, feet }（遊戲裡的裝備物件）；沒穿的部位用基本服裝（白 T、長褲、鞋子）。
+// bare 為 true 時不穿任何東西（只在設計稿頁面看基本身體用）。
+function painters(view, equip, bare) {
+  if (bare) return { torso: () => null, arm: () => null, leg: () => null, head: null };
+  const L = LM[view];
+  const body = equip.body && { it: equip.body, m: mats(equip.body) }, feet = equip.feet && { it: equip.feet, m: mats(equip.feet) }, head = equip.head && { it: equip.head, m: mats(equip.head) };
+  const robe = body && body.it.tag === 'arcane';
+  const torso = (x, y, hex, k) => {
+    if (k === 'ink') return null;
+    if (y >= L.shorts) return robe ? shadeX(L, x, body.m.cloth) : L.dark(x) ? BASIC.pantsD : BASIC.pants;   // 短褲 → 長褲（法袍會蓋住）
+    if (k !== 'skin' || y < L.top) return null;
+    if (!body) return view === 'front' && y <= 56 && Math.abs(x - L.cx) <= (57 - y) * 0.9 ? null : L.dark(x) ? BASIC.teeD : BASIC.tee;   // 白 T，圓領
+    const { it, m } = body, tag = it.tag;
+    if (y >= L.belt) return L.buckle(x) ? (m.gem || m.gold) : m.belt;
+    if (m.trim && y <= L.top + 1) return m.trim;
+    if (tag === 'guard') return L.center(x) ? m.metal.l : y === L.top + 7 || y === L.top + 12 ? m.metal.d : shadeX(L, x, m.metal);   // 板甲：中線與甲片接縫
+    if (tag === 'arcane') return L.center(x) ? (m.trim || m.cloth.l) : shadeX(L, x, m.cloth);                                       // 法袍：中央滾邊
+    if (view === 'front' && y <= 59 && Math.abs(x - L.cx) <= (60 - y) * 0.55) return null;                                             // 皮甲：V 領
+    if (view === 'front' && Math.abs(x - 20 - (y - 55)) <= 1) return m.belt;                                                           // 斜背帶
+    return shadeX(L, x, m.leather);
+  };
+  const arm = (x, y, hex, k) => {
+    if (k !== 'skin') return null;
+    if (!body) return y <= L.pad + 2 ? BASIC.tee : null;                             // 短袖
+    const { it, m } = body, tag = it.tag;
+    if (tag === 'guard') return y <= L.pad ? (y <= L.pad - 3 ? m.metal.l : m.metal.b) : y >= L.glove ? m.metal.d : y === L.glove - 1 && m.trim ? m.trim : m.metal.b;
+    if (tag === 'arcane') return y >= L.glove ? null : y >= L.glove - 2 ? (m.trim || m.cloth.d) : y <= L.pad ? m.cloth.l : m.cloth.b;   // 寬袖，露出手
+    if (y <= L.pad) return it.rarity >= 2 ? (y <= L.pad - 3 ? m.metal.l : m.metal.b) : m.leather.l;   // 稀有以上有金屬護肩
+    return y >= L.glove ? m.leather.d : y === L.glove - 1 && m.trim ? m.trim : m.cloth.b;
+  };
+  const leg = (x, y, hex, k) => {
+    if (k !== 'skin') return null;
+    const tag = feet && feet.it.tag;
+    const start = !feet ? L.boot + 6 : tag === 'guard' ? L.boot - 4 : tag === 'arcane' ? L.boot + 5 : L.boot;
+    if (y >= start) {
+      if (!feet) return y >= L.sole ? BASIC.sole : BASIC.shoe;
+      const c = tag === 'guard' ? feet.m.metal : tag === 'arcane' ? feet.m.cloth : feet.m.leather;
+      if (y <= start + 1 && feet.m.trim) return feet.m.trim;
+      return y >= L.sole ? c.d : shadeX(L, x, c);
+    }
+    if (robe && y <= L.robe) return y === L.robe ? (body.m.trim || body.m.cloth.d) : shadeX(L, x, body.m.cloth);   // 法袍下襬蓋到膝蓋
+    return L.dark(x) ? BASIC.pantsD : BASIC.pants;
+  };
+  // 頭飾：綁在額頭上的頭帶（劍士布頭巾、守衛金屬護額、術士飾帶），髮絲的黑線蓋在上面
+  const band = head && (() => {
+    const { it, m } = head, c = it.tag === 'guard' ? m.metal : it.tag === 'arcane' ? m.cloth : m.leather;
+    const main = it.tag === 'blade' && m.trim ? { l: m.trim, b: m.trim, d: c.d } : c;
+    const h = it.tag === 'guard' ? 4 : 3;
+    return (x, y, hex, k) => {
+      const front = view === 'front';
+      const [x0, x1] = front ? [11, 48] : [7, 37];
+      const knot = front ? [48, 29, 51, 37] : [4, 24, 7, 33];
+      if (it.tag !== 'guard' && inBox(x, y, knot)) return y <= knot[1] + 2 ? main.l : main.b;   // 打結垂下的布
+      if (x < x0 || x > x1 || k === 'ink') return null;
+      const top = front ? 27 + Math.round(((x - 29.5) / 19) ** 2 * 2) : 22 + Math.round((x - 8) / 12);
+      if (m.gem && (front ? Math.abs(x - 29.5) <= 1.5 : x >= 35) && y > top && y < top + h) return m.gem;   // 中央的寶石
+      return y === top ? main.l : y > top && y < top + h ? main.b : y === top + h ? (m.trim || main.d) : null;
+    };
+  })();
+  return { torso, arm, leg, head: band };
+}
+
+// ---------- 武器：握柄是支點，朝上 ----------
+function weaponCanvas(it) {
+  const m = it ? mats(it) : null, tag = it ? it.tag : 'blade';
+  const metal = m ? m.metal : { l: '#eef3f8', b: '#b9c7d8', d: '#8fa0b6' }, grip = m ? m.leather : { b: '#84502c', d: '#5e3a1e' };
+  const gold = m && it.rarity >= 4 ? m.gold : m && m.trim ? m.trim : m ? metal.b : '#f2c14e';
+  const c = makeCanvas(17, 48), x = c.getContext('2d');
+  const r = (col, px, py, w, h) => { x.fillStyle = col; x.fillRect(px, py, w, h); };
+  if (tag === 'guard') {          // 戰錘
+    r(INK, 6, 12, 5, 36); r(m.wood.b, 7, 13, 2, 34); r(m.wood.d, 9, 13, 1, 34);
+    r(INK, 0, 0, 17, 13); r(metal.b, 1, 1, 15, 11); r(metal.l, 1, 1, 15, 3); r(metal.d, 1, 9, 15, 3); r(gold, 1, 5, 15, 2);
+    if (m.gem) r(m.gem, 7, 4, 3, 4);
+    return { canvas: c, pivot: [8.5, 42.5] };
+  }
+  if (tag === 'arcane') {         // 法杖
+    r(INK, 6, 9, 5, 39); r(m.wood.b, 7, 10, 2, 37); r(m.wood.d, 9, 10, 1, 37);
+    r(INK, 3, 0, 11, 11); r(m.orb, 4, 1, 9, 9); r(m.orbL, 5, 2, 3, 3); r(INK, 3, 10, 11, 3); r(gold, 4, 11, 9, 1);
+    return { canvas: c, pivot: [8.5, 40.5] };
+  }
+  r(INK, 5, 3, 7, 34); r(INK, 6, 1, 5, 2); r(INK, 7, 0, 3, 1);                          // 劍
+  r(metal.l, 6, 3, 2, 33); r(metal.b, 8, 2, 1, 34); r(metal.d, 9, 3, 2, 33);
+  r(metal.l, 7, 1, 1, 2); r(metal.d, 9, 2, 1, 1);
+  if (it && it.rarity >= 3) r(m.trim, 8, 5, 1, 28);                                      // 史詩以上：劍身的光紋
+  r(INK, 2, 36, 13, 5); r(gold, 3, 37, 11, 3);
+  r(INK, 6, 41, 5, 7); r(grip.b, 7, 41, 2, 5); r(grip.d, 9, 41, 1, 5); r(gold, 7, 46, 3, 1);
+  return { canvas: c, pivot: [8.5, 43.5] };
+}
+
+// ---------- 動作：輸入 0–1 的進度，回傳姿勢與特效 ----------
 const ease = (t) => t * t * (3 - 2 * t);
 const lerp = (a, b, t) => a + (b - a) * Math.max(0, Math.min(1, t));
 const seg = (t, a, b) => Math.max(0, Math.min(1, (t - a) / (b - a)));
-const REST = { x: 0, y: 0, bodyY: 0, torso: 0, head: 0, armL: 0, armR: 0, legL: 0, legR: 0, weapon: 0, fx: [] };
+const REST = { x: 0, y: 0, bodyY: 0, torso: 0, head: 0, armL: 0, armR: 0, elbowL: 0, elbowR: 0, legL: 0, legR: 0, kneeL: 0, kneeR: 0, weapon: 0, fx: [] };
 
 export const ANIMS = {
   idle: { name: '待機', dur: 1.8, loop: true, pose(t) {
     const b = Math.sin(t * Math.PI * 2);
-    return { ...REST, bodyY: b > 0.25 ? 1 : 0, armL: 2 + b * 1.5, armR: -2 - b * 1.5, head: b * 0.8, weapon: 14 };
+    return { ...REST, bodyY: b > 0.25 ? 1 : 0, armL: 2 + b * 1.5, armR: -2 - b * 1.5, elbowR: -14 - b * 3, elbowL: -6, head: b * 0.8, weapon: 14 };
   } },
   walk: { name: '走路', dur: 0.7, loop: true, pose(t) {
-    const s = Math.sin(t * Math.PI * 2);
-    return { ...REST, bodyY: Math.abs(s) > 0.7 ? 1 : 0, legL: s * 24, legR: -s * 24, armL: -s * 20, armR: s * 16 - 6, torso: 2, weapon: 20 };
+    const s = Math.sin(t * Math.PI * 2), c = Math.cos(t * Math.PI * 2);
+    return { ...REST, bodyY: Math.abs(s) > 0.7 ? 1 : 0, legL: s * 26, legR: -s * 26, kneeL: Math.max(0, c) * 34, kneeR: Math.max(0, -c) * 34,
+      armL: -s * 22, armR: s * 16 - 6, elbowL: -14, elbowR: -22, torso: 3, weapon: 20 };
   } },
   // 揮砍：往後舉起 → 往前砍下（刀光）→ 收回
   slash: { name: '揮砍', dur: 0.62, pose(t) {
     const a = ease(seg(t, 0, 0.32)), b = ease(seg(t, 0.32, 0.5)), c = ease(seg(t, 0.5, 1));
-    const armR = lerp(lerp(0, -165, a), -62, b) * (1 - c);
-    const weapon = lerp(lerp(14, 160, a), 190, b) * (1 - c) + 14 * c;
     const fx = [];
     if (t > 0.3 && t < 0.72) fx.push({ type: 'arc', from: -175, to: lerp(-175, -50, b), r: 52, alpha: 1 - seg(t, 0.5, 0.72), width: 8 });
     if (t > 0.42 && t < 0.6) fx.push({ type: 'hit', power: 1 });
     return { ...REST, x: lerp(lerp(0, -3, a), 7, b) * (1 - c), torso: lerp(lerp(0, -7, a), 9, b) * (1 - c), head: lerp(0, -4, a) * (1 - b),
-      armR, weapon, armL: lerp(0, 18, b) * (1 - c), legL: lerp(0, -10, b) * (1 - c), legR: lerp(0, 12, b) * (1 - c), bodyY: b > 0.5 && c < 0.5 ? 1 : 0, fx };
+      armR: lerp(lerp(0, -150, a), -62, b) * (1 - c), elbowR: lerp(lerp(-14, -60, a), -6, b) * (1 - c) - 14 * c, weapon: lerp(lerp(14, 150, a), 190, b) * (1 - c) + 14 * c,
+      armL: lerp(0, 22, b) * (1 - c), elbowL: -20 * (1 - c), legL: lerp(0, -12, b) * (1 - c), legR: lerp(0, 14, b) * (1 - c), kneeL: lerp(0, 14, b) * (1 - c),
+      bodyY: b > 0.5 && c < 0.5 ? 1 : 0, fx };
   } },
-  // 跳斬：蹲下 → 跳起、劍舉過頭 → 落下重擊（大刀光、衝擊波、火花）→ 起身
+  // 跳斬：蹲下 → 跳起、武器舉過頭 → 落下重擊（大刀光、衝擊波、火花）→ 起身
   jump: { name: '跳斬', dur: 1.15, pose(t) {
     const crouch = ease(seg(t, 0, 0.14)), up = ease(seg(t, 0.14, 0.45)), down = seg(t, 0.52, 0.62), land = ease(seg(t, 0.62, 1));
-    const air = up * (1 - down * down);
-    const y = -34 * air;
-    const armR = lerp(lerp(0, -175, up), -48, ease(down)) * (1 - land);
-    const weapon = lerp(lerp(14, 180, up), 200, ease(down)) * (1 - land) + 14 * land;
+    const air = up * (1 - down * down), d = ease(down);
     const fx = [];
-    if (t > 0.5 && t < 0.8) fx.push({ type: 'arc', from: -190, to: lerp(-190, -30, ease(down)), r: 56, alpha: 1 - seg(t, 0.62, 0.8), width: 11, gold: true });
+    if (t > 0.5 && t < 0.8) fx.push({ type: 'arc', from: -190, to: lerp(-190, -30, d), r: 56, alpha: 1 - seg(t, 0.62, 0.8), width: 11, gold: true });
     if (t > 0.6 && t < 0.95) fx.push({ type: 'shock', p: seg(t, 0.6, 0.95) });
     if (t > 0.6 && t < 0.9) fx.push({ type: 'sparks', p: seg(t, 0.6, 0.9) });
     if (t > 0.6 && t < 0.72) fx.push({ type: 'hit', power: 2 });
     if (t > 0.6 && t < 0.7) fx.push({ type: 'shake', amount: 3 });
-    const squash = (crouch * (1 - up) + (t > 0.62 ? 1 - land : 0) * 0.9) * 3;
-    return { ...REST, x: 10 * ease(seg(t, 0.14, 0.62)) * (1 - land), y, bodyY: Math.round(squash), torso: lerp(lerp(0, -10, up), 14, ease(down)) * (1 - land),
-      head: lerp(0, -8, up) * (1 - down), armR, weapon, armL: lerp(lerp(0, -40, up), 30, ease(down)) * (1 - land),
-      legL: (-30 * air + (squash ? -8 : 0)), legR: (22 * air + (squash ? 8 : 0)), fx };
+    const squat = crouch * (1 - up) + (t > 0.62 ? 1 - land : 0) * 0.9;
+    return { ...REST, x: 10 * ease(seg(t, 0.14, 0.62)) * (1 - land), y: -34 * air, bodyY: Math.round(squat * 4), torso: lerp(lerp(0, -10, up), 14, d) * (1 - land),
+      head: lerp(0, -8, up) * (1 - down), armR: lerp(lerp(0, -165, up), -48, d) * (1 - land), elbowR: lerp(lerp(-14, -40, up), -4, d) * (1 - land) - 14 * land,
+      weapon: lerp(lerp(14, 170, up), 200, d) * (1 - land) + 14 * land, armL: lerp(lerp(0, -40, up), 30, d) * (1 - land), elbowL: -30 * air,
+      legL: -34 * air - squat * 26, legR: 18 * air - squat * 26, kneeL: 60 * air + squat * 52, kneeR: 30 * air + squat * 52, fx };
+  } },
+  // 忙碌：鍛造、買賣、接委託時舉手忙一下
+  work: { name: '忙碌', dur: 0.45, pose(t) {
+    const k = Math.sin(seg(t, 0, 1) * Math.PI);
+    return { ...REST, bodyY: k > 0.5 ? 1 : 0, armR: -50 * k, elbowR: -14 - 50 * k, armL: -30 * k, elbowL: -40 * k, head: 4 * k, weapon: 14 + 30 * k, fx: [] };
+  } },
+  // 受擊：往後仰一下
+  hurt: { name: '受擊', dur: 0.32, pose(t) {
+    const k = Math.sin(seg(t, 0, 1) * Math.PI);
+    return { ...REST, x: -5 * k, torso: -12 * k, head: -8 * k, armL: -20 * k, armR: -24 * k, elbowR: -14, legL: -8 * k, kneeR: 12 * k, weapon: 14 + 20 * k, fx: [] };
   } },
 };
 
 // ---------- 骨架 ----------
 const FAR = 0.74;   // 側面時，後面的手腳調暗
+const LIMBS = ['armL', 'armLf', 'armR', 'armRf', 'legL', 'legLf', 'legR', 'legRf'];
 export class Rig {
   constructor(view = 'side') {
-    this.sword = swordCanvas();
-    this.weapon = true;
-    this.gearName = null;
-    this.setView(view);
-  }
-  setView(view) {
     this.view = view;
-    const P = this.P = RIG_PARTS[view];
-    this.foot = FOOT[view];
-    this.body = Object.fromEntries(Object.keys(P.parts).map((k) => [k, partCanvas(P, k)]));
-    if (view === 'side') { this.body.armL = partCanvas(P, 'armR', null, FAR); this.body.legL = partCanvas(P, 'legR', null, FAR); }
-    this.setGear(this.gearName);
+    this.look = { color: DEFAULT_HAIR };
+    this.equip = {};
+    this.weapon = true;
+    this.bare = false;
+    this.rebuild();
   }
-  setGear(name) {
-    this.gearName = name;
-    const set = name && GEAR_SETS[name] && GEAR_SETS[name][this.view], P = this.P;
-    if (!set) { this.gear = {}; return; }
-    const g = { head: partCanvas(P, 'head', set.head), torso: partCanvas(P, 'torso', set.torso), armR: partCanvas(P, 'armR', set.arm), legR: partCanvas(P, 'legR', set.leg) };
-    if (this.view === 'side') { g.armL = partCanvas(P, 'armR', set.arm, FAR); g.legL = partCanvas(P, 'legR', set.leg, FAR); }
-    else { g.armL = partCanvas(P, 'armL', set.arm); g.legL = partCanvas(P, 'legL', set.leg); }
-    this.gear = g;
+  setView(view) { if (view !== this.view) { this.view = view; this.rebuild(); } }
+  setLook(look) { const color = HAIR_COLORS[look && look.color] ? look.color : DEFAULT_HAIR; if (color !== this.look.color) { this.look = { color }; this.rebuild(); } }
+  // equip：{ weapon, head, body, feet }，內容是遊戲裡的裝備物件（需要 tag、tier、rarity）
+  setEquip(equip, bare = false) {
+    const e = equip || {};
+    const sig = ['weapon', 'head', 'body', 'feet'].map((k) => (e[k] ? `${e[k].tag}-${e[k].tier}-${e[k].rarity}` : '')).join('|') + bare;
+    if (sig === this.sig) return;
+    this.sig = sig; this.equip = { ...e }; this.bare = bare;
+    this.rebuild();
   }
-  // 側面的後手、後腿沿用前手、前腿的位置與支點
-  geo(name) { return this.P.parts[name] || this.P.parts[name === 'armL' ? 'armR' : 'legR']; }
+  rebuild() {
+    const P = this.P = RIG_PARTS[this.view], side = this.view === 'side';
+    this.foot = FOOT[this.view];
+    const src = (n) => (P.parts[n] ? n : n.replace('L', 'R'));       // 側面的後手、後腿沿用前手、前腿的圖
+    const far = (n) => (side && n.includes('L') ? FAR : 1);
+    const paint = painters(this.view, this.equip, this.bare);
+    this.body = { torso: partCanvas(P, 'torso'), head: partCanvas(P, 'head', headPainter(this.view, this.look.color, false)), headBlink: partCanvas(P, 'head', headPainter(this.view, this.look.color, true)) };
+    this.gear = { torso: partCanvas(P, 'torso', paint.torso), head: paint.head ? partCanvas(P, 'head', paint.head) : null };
+    for (const n of LIMBS) {
+      this.body[n] = partCanvas(P, src(n), null, far(n));
+      this.gear[n] = partCanvas(P, src(n), n.startsWith('arm') ? paint.arm : paint.leg, far(n));
+    }
+    this.held = weaponCanvas(this.equip.weapon);
+    const best = Math.max(-1, ...['weapon', 'head', 'body', 'feet'].map((k) => (this.equip[k] ? this.equip[k].rarity : -1)));
+    this.glow = best >= 3 ? gearMats({ tier: 1, rarity: best, tag: null }).trim.ramp[3] : null;   // 史詩以上會冒光點
+  }
+  geo(name) { return this.P.parts[name] || this.P.parts[name.replace('L', 'R')]; }
 
-  // 把一個零件畫在目前的座標系上，繞自己的支點轉 deg 度；inner() 畫跟著它動的東西（例如手上的武器）
-  part(ctx, name, deg, inner, dx = 0) {
-    const part = this.geo(name), [px, py] = part.pivot;
-    ctx.save();
-    ctx.translate(Math.round(part.x + px) + dx, Math.round(part.y + py));
-    ctx.rotate(Math.round(deg) * RAD);
-    if (inner) inner();
-    ctx.drawImage(this.body[name], -Math.round(px), -Math.round(py));
+  image(ctx, name, part, blink) {
+    const [px, py] = part.pivot;
+    ctx.drawImage(name === 'head' && blink ? this.body.headBlink : this.body[name], -Math.round(px), -Math.round(py));
     if (this.gear[name]) ctx.drawImage(this.gear[name], -Math.round(px), -Math.round(py));
+  }
+  // 單一零件（頭、身體）：繞自己的支點轉
+  part(ctx, name, deg, blink) {
+    const part = this.geo(name);
+    ctx.save();
+    ctx.translate(Math.round(part.x + part.pivot[0]), Math.round(part.y + part.pivot[1]));
+    ctx.rotate(Math.round(deg) * RAD);
+    this.image(ctx, name, part, blink);
     ctx.restore();
   }
-  heldWeapon(ctx, pose) {
-    const a = this.P.parts.armR, hand = this.P.hands.armR;
+  // 手或腿：上段繞肩膀（髖部）轉，下段再繞手肘（膝蓋）轉；held() 畫握在手上的武器
+  limb(ctx, name, deg, bend, held, dx = 0) {
+    const up = this.geo(name), low = this.geo(name + 'f');
+    const ux = Math.round(up.x + up.pivot[0]), uy = Math.round(up.y + up.pivot[1]);
+    const lx = Math.round(low.x + low.pivot[0]), ly = Math.round(low.y + low.pivot[1]);
     ctx.save();
-    ctx.translate(Math.round(hand[0] - a.x - a.pivot[0]), Math.round(hand[1] - a.y - a.pivot[1]));
-    ctx.rotate(Math.round(pose.weapon) * RAD);
-    ctx.drawImage(this.sword.canvas, -Math.round(this.sword.pivot[0]), -Math.round(this.sword.pivot[1]));
+    ctx.translate(ux + dx, uy);
+    ctx.rotate(Math.round(deg) * RAD);
+    this.image(ctx, name, up);
+    ctx.translate(lx - ux, ly - uy);
+    ctx.rotate(Math.round(bend) * RAD);
+    if (held) held(lx, ly);
+    this.image(ctx, name + 'f', low);
     ctx.restore();
   }
 
-  // 在 (ox, oy)（腳底中心）畫出角色
-  draw(ctx, ox, oy, pose) {
+  // 在 (ox, oy)（腳底中心）畫出角色。pose 來自 ANIMS；blink 為 true 時閉眼
+  draw(ctx, ox, oy, pose, blink = false) {
     const side = this.view === 'side';
-    // 側面時持劍的手自然往前伸，劍尖朝前上方（正面的姿勢是劍豎在身旁）
-    if (side) pose = { ...pose, armR: pose.armR - 24, weapon: pose.weapon + 38 };
+    // 側面時持武器的手自然往前伸、武器朝前上方；正面是預覽用，手肘膝蓋不彎
+    if (side) pose = { ...pose, armR: pose.armR - 14, weapon: pose.weapon + 62 };
+    else pose = { ...pose, elbowL: 0, elbowR: 0, kneeL: 0, kneeR: 0 };
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     ctx.translate(Math.round(ox - this.foot[0] + pose.x), Math.round(oy - this.foot[1] + pose.y));
-    this.part(ctx, 'legL', pose.legL, null, side ? -1 : 0);
-    this.part(ctx, 'legR', pose.legR);
+    this.limb(ctx, 'legL', pose.legL, pose.kneeL, null, side ? -1 : 0);
+    this.limb(ctx, 'legR', pose.legR, pose.kneeR);
     // 上半身：整體上下起伏，並繞腰部前後傾
-    const t = this.P.parts.torso;
-    ctx.translate(0, pose.bodyY);
-    ctx.translate(Math.round(t.x + t.pivot[0]), Math.round(t.y + t.pivot[1]));
+    const t = this.P.parts.torso, tx = Math.round(t.x + t.pivot[0]), ty = Math.round(t.y + t.pivot[1]);
+    ctx.translate(tx, ty + pose.bodyY);
     ctx.rotate(Math.round(pose.torso) * RAD);
-    ctx.translate(-Math.round(t.x + t.pivot[0]), -Math.round(t.y + t.pivot[1]));
-    const weapon = this.weapon ? () => this.heldWeapon(ctx, pose) : null;   // 武器畫在手臂下面，拳頭蓋住握柄
-    if (side) {
-      this.part(ctx, 'armL', pose.armL, null, 3);       // 後面的手：往前錯開一點，從身體後面露出來
-      this.part(ctx, 'torso', 0);
-      this.part(ctx, 'head', pose.head);
-      this.part(ctx, 'armR', pose.armR, weapon);
-    } else {
-      this.part(ctx, 'torso', 0);
-      this.part(ctx, 'armL', pose.armL);
-      this.part(ctx, 'head', pose.head);
-      this.part(ctx, 'armR', pose.armR, weapon);
-    }
+    ctx.translate(-tx, -ty);
+    const hand = this.P.hands.armR;
+    const held = this.weapon ? (lx, ly) => {      // 武器畫在前臂下面，拳頭蓋住握柄
+      ctx.save();
+      ctx.translate(Math.round(hand[0] - lx), Math.round(hand[1] - ly));
+      ctx.rotate(Math.round(pose.weapon) * RAD);
+      ctx.drawImage(this.held.canvas, -Math.round(this.held.pivot[0]), -Math.round(this.held.pivot[1]));
+      ctx.restore();
+    } : null;
+    if (side) this.limb(ctx, 'armL', pose.armL, pose.elbowL, null, 3);   // 後面的手：往前錯開一點，從身體後面露出來
+    this.part(ctx, 'torso', 0);
+    if (!side) this.limb(ctx, 'armL', pose.armL, pose.elbowL);
+    this.part(ctx, 'head', pose.head, blink);
+    this.limb(ctx, 'armR', pose.armR, pose.elbowR, held);
     ctx.restore();
   }
 
-  // 特效：刀光、衝擊波、火花（都用一格一格的像素畫）
-  drawFx(ctx, ox, oy, pose) {
+  // 特效：刀光、衝擊波、火花、裝備光點（都用一格一格的像素畫）。time 是秒，用來讓光點飄動
+  drawFx(ctx, ox, oy, pose, time = 0) {
     const sh = this.P.parts.armR;
     const cx = ox - this.foot[0] + pose.x + sh.x + sh.pivot[0], cy = oy - this.foot[1] + pose.y + pose.bodyY + sh.y + sh.pivot[1];
+    if (this.glow) {
+      ctx.fillStyle = this.glow;
+      for (let i = 0; i < 5; i++) {
+        const ph = (time * 0.7 + i / 5) % 1;
+        ctx.globalAlpha = Math.sin(ph * Math.PI);
+        ctx.fillRect(Math.round(ox + pose.x - 16 + ((i * 13) % 32)), Math.round(oy + pose.y - 20 - ph * 60), 1, i % 2 ? 1 : 2);
+      }
+      ctx.globalAlpha = 1;
+    }
     for (const f of pose.fx) {
       if (f.type === 'arc') {
-        // 刀光：沿著揮砍的弧線，越靠近劍尖越亮、越寬；尾端變細變淡
+        // 刀光：沿著揮砍的弧線，越靠近武器尖端越亮、越寬；尾端變細變淡
         const span = f.to - f.from;
         for (let a = f.from; a <= f.to; a += 1.2) {
-          const k = (a - f.from) / (span || 1);                 // 0 = 尾端，1 = 劍尖
+          const k = (a - f.from) / (span || 1);
           const w = Math.max(1, Math.round(f.width * k));
           for (let i = 0; i < w; i++) {
             const r = f.r - i, x = cx - Math.sin(a * RAD) * r, y = cy + Math.cos(a * RAD) * r;
@@ -267,7 +349,6 @@ export class Rig {
         }
         ctx.globalAlpha = 1;
       } else if (f.type === 'shock') {
-        // 衝擊波：沿著地面往兩邊擴散的兩道弧
         const w = 16 + f.p * 70;
         ctx.globalAlpha = 1 - f.p;
         ctx.fillStyle = '#fff3c4';
