@@ -17,7 +17,8 @@ let start = performance.now(), base = 'idle', blinkAt = 2;
 function apply() {
   rig.setView(state.view);
   rig.setLook({ gender: state.gender, color: state.hair });
-  const it = (type) => ({ type, tag: state.gear, tier: state.tier, rarity: state.rarity });
+  const bow = state.gear === 'bow';
+  const it = (type) => ({ type, tag: bow ? 'blade' : state.gear, tier: state.tier, rarity: state.rarity, form: bow && type === 'weapon' ? 'bow' : undefined });
   const sets = { bare: [{}, true] };
   const [equip, bare] = sets[state.gear] || [{ weapon: it('weapon'), head: it('head'), body: it('body'), feet: it('feet') }, false];
   rig.setEquip(equip, bare);
@@ -33,11 +34,11 @@ function seg(id, items, cur, onPick) {
   el.onclick = (e) => { const b = e.target.closest('button'); if (b) { onPick(b.dataset.v); renderOptions(); } };
 }
 function renderOptions() {
-  seg('anims', Object.entries(ANIMS).map(([k, a]) => [k, a.name]), () => state.anim, (v) => play(v));
+  seg('anims', Object.entries(ANIMS).filter(([k]) => !k.startsWith('quick_')).map(([k, a]) => [k, a.name]), () => state.anim, (v) => play(v));
   seg('view', [['side', '側面'], ['front', '正面']], () => state.view, (v) => { state.view = v; apply(); });
   seg('gender', Object.entries(GENDERS), () => state.gender, (v) => { state.gender = v; apply(); });
   seg('hair', Object.entries(HAIR_COLORS).map(([k, v]) => [k, k, v[1]]), () => state.hair, (v) => { state.hair = v; apply(); });
-  seg('gear', [['bare', '沒穿裝備'], ...D.TAG_KEYS.map((t) => [t, D.TAGS[t].n])], () => state.gear, (v) => { state.gear = v; apply(); });
+  seg('gear', [['bare', '沒穿裝備'], ...D.TAG_KEYS.map((t) => [t, D.TAGS[t].n]), ['bow', '劍士（弓）']], () => state.gear, (v) => { state.gear = v; apply(); });
   seg('rarity', D.RARITY.map((r, i) => [i, r.n, r.color]), () => state.rarity, (v) => { state.rarity = +v; apply(); });
   seg('tier', [1, 2, 3, 4, 5].map((t) => [t, 'T' + t]), () => state.tier, (v) => { state.tier = +v; apply(); });
 }
@@ -53,7 +54,7 @@ function frame(now) {
   let blink = false;
   if (frozen === null && sec > blinkAt) { blink = true; if (sec > blinkAt + 0.13) blinkAt = sec + 2 + Math.random() * 2.5; }
   if (params.get('blink')) blink = true;
-  const pose = anim.pose(t);
+  const pose = anim.pose(t, (FOE_X - HERO_X));
   const shake = pose.fx.find((f) => f.type === 'shake'), hit = pose.fx.find((f) => f.type === 'hit');
   const sx = shake ? Math.round((Math.random() - 0.5) * 2 * shake.amount) : 0, sy = shake ? Math.round((Math.random() - 0.5) * shake.amount) : 0;
   ctx.setTransform(1, 0, 0, 1, 0, 0);

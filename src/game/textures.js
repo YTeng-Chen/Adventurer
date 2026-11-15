@@ -2,7 +2,7 @@
 // 之後換成美術畫的 spritesheet 時，只要改這個檔案。
 import * as Phaser from 'phaser';
 import { sprites } from '../ui/sprites.js';
-import { Rig, ANIMS } from '../rig/rig.js';
+import { Rig, ANIMS, attackStyle } from '../rig/rig.js';
 import { HERO_SCALE } from './config.js';
 
 export function gridTexture(scene, key, grid) {
@@ -41,7 +41,7 @@ export function enemyTexture(scene, shape, color) {
 const hex = (c) => parseInt(c.slice(1), 16);
 
 // 骨架角色（側面）：Rig 把角色和特效畫在一張低解析度的 canvas 上，這裡把它當成貼圖放進場景，每一格重畫。
-// 動作：待機會一直播；play('slash') 之類的單次動作播完會回到待機。
+// 動作：待機會一直播；attack() 之類的單次動作播完會回到待機。
 let rigSeq = 0;
 export class RigHero {
   // x：腳底中心的位置；groundY：地面高度
@@ -61,7 +61,15 @@ export class RigHero {
     scene.events.once('shutdown', () => { scene.events.off('update', this.update); scene.textures.remove(this.tex.key); });
     this.update(scene.time.now);
   }
-  setLook(equip, look) { this.rig.setEquip(equip); this.rig.setLook(look); }
+  setLook(equip, look) { this.rig.setEquip(equip); this.rig.setLook(look); this.style = attackStyle(equip && equip.weapon); }
+  // 目標在畫面上的 x（魔物中心）：魔法球、箭、命中的爆光會飛到那裡
+  setTarget(screenX) { this.reach = (screenX - this.x) / HERO_SCALE; }
+  // 依武器播放攻擊：full 為 true 是三段連招，否則是單發快攻。回傳命中的時間表 [{ ms, w, power }]
+  attack(full, speed = 1) {
+    const name = `${full ? 'combo' : 'quick'}_${this.style || 'sword'}`, anim = ANIMS[name];
+    this.play(name, speed);
+    return anim.hits.map((h) => ({ ms: (h.t * anim.dur * 1000) / speed, w: h.w, power: h.power }));
+  }
   // speed > 1 會播得比較快（戰鬥紀錄播得快的時候用）
   play(name, speed = 1) { this.anim = name; this.t0 = this.scene.time.now; this.speed = speed; }
   flash(ms = 110) { this.flashUntil = this.scene.time.now + ms; }
@@ -74,7 +82,7 @@ export class RigHero {
     else if (t >= 1) { this.anim = 'idle'; this.t0 = time; this.speed = 1; anim = ANIMS.idle; t = 0; }
     let blink = false;
     if (time > this.blinkAt) { blink = true; if (time > this.blinkAt + 130) this.blinkAt = time + 2000 + Math.random() * 2600; }
-    const pose = anim.pose(t), ctx = this.tex.context;
+    const pose = anim.pose(t, this.reach), ctx = this.tex.context;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.cw, this.ch);
     this.rig.draw(ctx, this.footX, this.footY, pose, blink);

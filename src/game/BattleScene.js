@@ -39,9 +39,12 @@ export class BattleScene extends Phaser.Scene {
     this.hpP = r.maxHpP; this.hpE = r.maxHpE;
     this.drawBars();
 
+    this.hero.setTarget(this.foe.x + this.foe.displayWidth / 2);
+
+    // 播放速度：玩家的一次攻擊是一套三段連招，需要比較長的時間；紀錄很長時整體加快
     const log = r.log;
-    const step = Math.max(60, Math.min(320, 11000 / Math.max(1, log.length)));
-    this.timer = this.time.addEvent({ delay: step, loop: true, callback: () => this.next() });
+    this.pace = Math.max(1, Math.min(2.4, log.length / 26));     // 動作加速的倍率
+    this.time.delayedCall(350, () => this.next());
 
     const offs = [this.bus.on('battle:skip', () => this.finish())];
     this.events.once('shutdown', () => offs.forEach((off) => off()));
@@ -62,47 +65,76 @@ export class BattleScene extends Phaser.Scene {
     this.hpTextE.setText(`${n(this.hpE)} / ${n(this.r.maxHpE)}`);
   }
 
+  // 播下一行戰鬥紀錄。每一行播完（動作需要的時間）才排下一行
   next() {
+    if (this.done) return;
     const line = this.r.log[this.i];
     if (!line) { this.finish(); return; }
     this.i++;
-    this.hpP = line.hpP; this.hpE = line.hpE;
-    this.drawBars();
-    if (line.kind !== 'undying') {
-      // 燃燒是持續傷害：受傷的是被燒的一方
-      const target = line.kind === 'burn' ? (line.who === 'p' ? 'e' : 'p') : line.who === 'p' ? 'e' : 'p';
-      this.hit(target, line);
-      if (line.kind !== 'burn') this.lunge(line.who, line.crit);
-    }
-    this.bus.emit('battle:line', { i: this.i - 1, line });
-  }
-
-  lunge(who, crit) {
-    if (who === 'p') this.hero.play(crit ? 'jump' : 'slash', crit ? 2.2 : 1.6);   // 暴擊用跳斬
-    else this.tweens.add({ targets: this.foe, x: this.foeX - 12, duration: 90, yoyo: true, ease: 'Quad.out' });
-  }
-
-  hit(target, line) {
-    let x, y;
-    if (target === 'e') {
-      this.foe.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);
-      this.time.delayedCall(110, () => this.foe.clearTint());
-      x = this.foe.x + this.foe.displayWidth / 2; y = this.foe.y - this.foe.displayHeight;
+    let wait = 260 / this.pace;
+    if (line.kind === 'undying') {
+      this.setHp(line);
+    } else if (line.kind === 'burn') {
+      this.setHp(line);
+      this.pop(line.who === 'p' ? 'e' : 'p', line.dmg, line, 1);
+    } else if (line.who === 'p') {
+      wait = this.heroAttack(line);
     } else {
+      this.setHp(line);
+      this.tweens.add({ targets: this.foe, x: this.foeX - 12, duration: 90, yoyo: true, ease: 'Quad.out' });
       this.hero.flash(110);
       this.hero.play('hurt');
-      x = HERO_X; y = this.hero.topY;
+      this.pop('p', line.dmg, line, line.crit ? 2 : 1);
+      wait = 340 / this.pace;
     }
-    if (line.crit) this.cameras.main.shake(90, 0.006);
+    this.bus.emit('battle:line', { i: this.i - 1, line });
+    this.timer = this.time.delayedCall(wait, () => this.next());
+  }
+
+  setHp(line) { this.hpP = line.hpP; this.hpE = line.hpE; this.drawBars(); }
+
+  // 玩家攻擊：一般攻擊是三段連招，傷害照比例分三次跳出來；追擊、連鎖、反擊是單發快攻。回傳這個動作要播多久
+  heroAttack(line) {
+    const full = line.kind === 'attack';
+    const speed = (full ? 1.25 : 1.5) * this.pace;
+    const hits = this.hero.attack(full, speed);
+    const hp0 = this.hpE, hpP = line.hpP;
+    let given = 0;
+    hits.forEach((h, n) => this.time.delayedCall(h.ms, () => {
+      if (this.done) return;
+      const last = n === hits.length - 1;
+      const part = last ? line.dmg - given : Math.round(line.dmg * h.w);
+      given += part;
+      this.hpP = hpP;
+      this.hpE = last ? line.hpE : Math.max(line.hpE, hp0 - given);
+      this.drawBars();
+      this.foe.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);
+      this.time.delayedCall(90, () => this.foe.clearTint());
+      this.tweens.add({ targets: this.foe, x: this.foeX + 3 + h.power * 2, duration: 60, yoyo: true, ease: 'Quad.out' });   // 被打退一點
+      if (h.power >= 3 || (last && line.crit)) this.cameras.main.shake(110 + h.power * 20, 0.003 + h.power * 0.0015);
+      this.pop('e', part, { ...line, crit: line.crit && last }, last && hits.length > 1 ? 2 : 1, n);
+    }));
+    return hits[hits.length - 1].ms + (full ? 260 : 150) / this.pace;
+  }
+
+  // 跳出傷害數字。big：1 一般、2 終結技或暴擊（字比較大）；n 是連招的第幾段（往旁邊錯開，不會疊在一起）
+  pop(target, dmg, line, big = 1, n = 0) {
+    let x, y;
+    if (target === 'e') { x = this.foe.x + this.foe.displayWidth / 2 + (n - 1) * 14; y = this.foe.y - this.foe.displayHeight - 4 - n * 6; }
+    else { x = HERO_X; y = this.hero.topY; }
     const color = line.crit && line.kind === 'attack' ? '#f2b84b' : FLOAT[line.kind] || '#ffffff';
-    const t = this.add.text(x, y + 30, (line.crit ? '!' : '') + Math.round(line.dmg).toLocaleString('en-US'), FONT(line.crit ? 24 : 18, color)).setOrigin(0.5, 1);
-    this.tweens.add({ targets: t, y: t.y - 44, alpha: 0, duration: 850, ease: 'Quad.out', onComplete: () => t.destroy() });
+    const size = (big > 1 ? 24 : 16) + (line.crit ? 4 : 0);
+    const t = this.add.text(x, y + 20, (line.crit ? '!' : '') + Math.round(dmg).toLocaleString('en-US'), FONT(size, color)).setOrigin(0.5, 1);
+    if (big > 1) { t.setScale(1.6); this.tweens.add({ targets: t, scale: 1, duration: 140, ease: 'Back.out' }); }   // 彈一下
+    this.tweens.add({ targets: t, y: t.y - 44, alpha: 0, duration: 850, delay: big > 1 ? 120 : 0, ease: 'Quad.out', onComplete: () => t.destroy() });
   }
 
   finish() {
     if (this.done) return;
     this.done = true;
     if (this.timer) this.timer.remove();
+    this.time.removeAllEvents();
+    this.foe.clearTint();
     const last = this.r.log[this.r.log.length - 1];
     if (last) { this.hpP = last.hpP; this.hpE = last.hpE; this.drawBars(); }
     if (this.hpE <= 0) this.tweens.add({ targets: this.foe, alpha: 0.25, duration: 400 });

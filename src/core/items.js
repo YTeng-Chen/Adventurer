@@ -4,7 +4,7 @@ import { stats } from './stats.js';
 const D = data;
 
 const NAME_PARTS = {
-  weapon: { blade: ['長劍', '彎刀', '雙刃'], guard: ['戰錘', '重斧', '鎚矛'], arcane: ['法杖', '魔典', '水晶杖'] },
+  weapon: { blade: ['長劍', '彎刀', '雙刃', '獵弓', '長弓'], guard: ['戰錘', '重斧', '鎚矛'], arcane: ['法杖', '魔典', '水晶杖'] },
   head: { blade: ['頭巾', '輕盔'], guard: ['鐵盔', '護面盔'], arcane: ['尖帽', '兜帽'] },
   body: { blade: ['皮甲', '戰衣'], guard: ['板甲', '鎖子甲'], arcane: ['法袍', '長袍'] },
   feet: { blade: ['疾行靴', '短靴'], guard: ['鐵靴', '重靴'], arcane: ['布鞋', '星紋鞋'] },
@@ -48,7 +48,10 @@ function createItem(rng, { type, tag, tier, rarity, seq }) {
 
   const nameBase = type === 'acc' ? rng.pick(NAME_PARTS.acc) : rng.pick(NAME_PARTS[type][tag]);
   const name = (effect ? effect.n + '之' : '') + TIER_PREFIX[tier] + nameBase;
-  return { id: 'it' + seq, name, type, tag, tier, rarity, base, affixes, effect };
+  const item = { id: 'it' + seq, name, type, tag, tier, rarity, base, affixes, effect };
+  // 武器的形態決定攻擊動作：劍士的武器有劍和弓兩種（數值相同），守衛是鎚，術士是法杖
+  if (type === 'weapon') item.form = nameBase.endsWith('弓') ? 'bow' : { blade: 'sword', guard: 'hammer', arcane: 'staff' }[tag];
+  return item;
 }
 
 function rollRarity(rng, odds) { return rng.weighted(odds); }

@@ -184,3 +184,15 @@ test('新遊戲還沒有外觀，舊存檔也會補上空的外觀欄位（第�
   migrated.appearance = { gender: '女', style: '高馬尾', color: '粉紅' };
   assert.deepEqual(save.migrate(JSON.parse(JSON.stringify(migrated)), NOW).appearance, { gender: '女', style: '高馬尾', color: '粉紅' });
 });
+
+test('武器有形態（決定攻擊動作）：劍士是劍或弓，守衛是鎚，術士是法杖', () => {
+  const rng = R.make(7);
+  const forms = { blade: new Set(), guard: new Set(), arcane: new Set() };
+  for (let i = 0; i < 60; i++) {
+    for (const tag of D.TAG_KEYS) forms[tag].add(I.createItem(rng, { type: 'weapon', tag, tier: 1, rarity: 0, seq: i }).form);
+  }
+  assert.deepEqual([...forms.blade].sort(), ['bow', 'sword']);
+  assert.deepEqual([...forms.guard], ['hammer']);
+  assert.deepEqual([...forms.arcane], ['staff']);
+  assert.equal(I.createItem(rng, { type: 'body', tag: 'blade', tier: 1, rarity: 0, seq: 99 }).form, undefined);
+});

@@ -168,6 +168,16 @@ function weaponCanvas(it) {
     r(INK, 3, 0, 11, 11); r(m.orb, 4, 1, 9, 9); r(m.orbL, 5, 2, 3, 3); r(INK, 3, 10, 11, 3); r(gold, 4, 11, 9, 1);
     return { canvas: c, pivot: [8.5, 40.5] };
   }
+  if (it && it.form === 'bow') {   // 弓：握把在中間，弓臂往前彎、弦在後
+    const limb = m.trim ? { b: m.trim, l: m.trim } : m.wood;
+    for (let y = 1; y <= 47; y++) {
+      const bend = Math.round(7 * (1 - ((y - 24) / 23) ** 2));          // 弓臂的弧度
+      r(INK, 3 + bend, y, 5, 1); r(limb.b, 4 + bend, y, 3, 1); r(limb.l || limb.b, 4 + bend, y, 1, 1);
+      r('#f4f0e6', 3, y, 1, 1);                                        // 弦
+    }
+    r(INK, 10, 20, 6, 9); r(grip.b, 11, 21, 4, 7); r(gold, 11, 21, 4, 1); r(gold, 11, 27, 4, 1);
+    return { canvas: c, pivot: [12.5, 24.5] };
+  }
   r(INK, 5, 3, 7, 34); r(INK, 6, 1, 5, 2); r(INK, 7, 0, 3, 1);                          // 劍
   r(metal.l, 6, 3, 2, 33); r(metal.b, 8, 2, 1, 34); r(metal.d, 9, 3, 2, 33);
   r(metal.l, 7, 1, 1, 2); r(metal.d, 9, 2, 1, 1);
@@ -178,10 +188,176 @@ function weaponCanvas(it) {
 }
 
 // ---------- 動作：輸入 0–1 的進度，回傳姿勢與特效 ----------
+// 姿勢的欄位：x、y（整個人的位移，y 負值是往上）、bodyY（上半身下沉）、torso、head、armL/R、elbowL/R、legL/R、kneeL/R、weapon（角度）。
+// 特效（fx）用的座標以腳底為原點：x 往前（右）、y 往上，單位是角色原圖的像素。
 const ease = (t) => t * t * (3 - 2 * t);
 const lerp = (a, b, t) => a + (b - a) * Math.max(0, Math.min(1, t));
 const seg = (t, a, b) => Math.max(0, Math.min(1, (t - a) / (b - a)));
 const REST = { x: 0, y: 0, bodyY: 0, torso: 0, head: 0, armL: 0, armR: 0, elbowL: 0, elbowR: 0, legL: 0, legR: 0, kneeL: 0, kneeR: 0, weapon: 0, fx: [] };
+const GUARD = { ...REST, elbowR: -14, weapon: 14 };          // 拿著武器站好的姿勢
+const CH = Object.keys(REST).filter((k) => k !== 'fx');
+const REACH = 84;                                            // 預設的目標距離（腳底到魔物中心）
+const TY = 30;                                               // 目標的高度（魔物身體中間）
+
+// 關鍵格動畫：frames = [[時間, 姿勢], ...]，沒寫的欄位用 GUARD；相鄰兩格之間平滑過渡
+function kf(t, frames) {
+  let i = 0;
+  while (i < frames.length - 2 && t > frames[i + 1][0]) i++;
+  const [t0, a] = frames[i], [t1, b] = frames[i + 1], k = ease(seg(t, t0, t1));
+  const out = { fx: [] };
+  for (const c of CH) out[c] = lerp(a[c] ?? GUARD[c], b[c] ?? GUARD[c], k);
+  out.x = Math.round(out.x); out.y = Math.round(out.y); out.bodyY = Math.round(out.bodyY);
+  return out;
+}
+// 飛行物在 t0–t1 之間從 from 飛到 to（arc 是中途多拱起的高度）；不在這段時間回傳 null
+function fly(t, t0, t1, from, to, arc = 0) {
+  if (t < t0 || t > t1) return null;
+  const k = (t - t0) / (t1 - t0);
+  return { x: lerp(from[0], to[0], k), y: lerp(from[1], to[1], k) + Math.sin(k * Math.PI) * arc, k };
+}
+// 命中的共同特效：魔物位置的爆光；power 2 以上加震動。hits 是這個動作的命中時間表
+function hitFx(fx, t, hits, T, colors) {
+  hits.forEach((h, i) => {
+    if (t >= h.t && t < h.t + 0.05) fx.push({ type: 'hit', power: h.power });
+    if (t >= h.t && t < h.t + 0.14) fx.push({ type: 'burst', x: T, y: TY, p: seg(t, h.t, h.t + 0.14), size: 12 + h.power * 9, c: colors[i] || colors[0], rays: 6 + h.power * 2 });
+    if (h.power >= 2 && t >= h.t && t < h.t + 0.07) fx.push({ type: 'shake', amount: 2 + h.power });
+  });
+}
+const C = { ice: ['#ffffff', '#8fd3ff'], gold: ['#fff3c4', '#f2b84b'], fire: ['#fff3c4', '#ff8a3c'], arcane: ['#ffffff', '#c58bff'], wind: ['#f4ffd8', '#9be36a'] };
+
+// 三段連招。每種武器一套：前兩段快、第三段是終結技（跳起或蓄力，命中時停頓一下、畫面震動）。
+// hits：命中的時間（0–1）、這一段佔整次攻擊傷害的比例 w、力道 power（決定爆光大小與震動）。
+const COMBOS = {
+  // 劍：下劈 → 反手上挑 → 跳斬
+  sword: { name: '劍・三連斬', dur: 1.05, hits: [{ t: 0.16, w: 0.25, power: 1 }, { t: 0.42, w: 0.3, power: 1 }, { t: 0.8, w: 0.45, power: 3 }],
+    pose(t, T = REACH) {
+      const p = kf(t, [
+        [0, {}],
+        [0.08, { armR: -150, elbowR: -60, weapon: 150, torso: -7, head: -4, x: -3 }],
+        [0.16, { armR: -62, elbowR: -6, weapon: 190, torso: 9, x: 8, legL: -12, legR: 14, kneeL: 14, armL: 22, elbowL: -20 }],
+        [0.26, { armR: -20, elbowR: -10, weapon: 215, torso: 12, x: 10, legL: -10, legR: 12, bodyY: 1 }],
+        [0.34, { armR: 34, elbowR: -20, weapon: 232, torso: 14, x: 12, bodyY: 3, kneeL: 24, kneeR: 24, legL: -12, legR: -12 }],
+        [0.42, { armR: -142, elbowR: -28, weapon: 118, torso: -9, head: -6, x: 18, legL: -14, legR: 16, kneeL: 10 }],
+        [0.52, { armR: -160, elbowR: -40, weapon: 150, torso: -10, head: -6, x: 18 }],
+        [0.6, { armR: -165, elbowR: -40, weapon: 170, x: 18, bodyY: 4, legL: -26, legR: -26, kneeL: 52, kneeR: 52 }],
+        [0.72, { armR: -170, elbowR: -40, weapon: 175, torso: -10, head: -8, x: 24, y: -36, legL: -34, kneeL: 60, legR: 18, kneeR: 30, armL: -40, elbowL: -30 }],
+        [0.8, { armR: -48, elbowR: -4, weapon: 200, torso: 14, x: 28, bodyY: 4, legL: -24, legR: -24, kneeL: 48, kneeR: 48, armL: 30 }],
+        [0.9, { armR: -48, elbowR: -4, weapon: 200, torso: 14, x: 28, bodyY: 4, legL: -24, legR: -24, kneeL: 48, kneeR: 48, armL: 30 }],
+        [1, {}],
+      ]);
+      const fx = p.fx;
+      if (t > 0.09 && t < 0.3) fx.push({ type: 'arc', from: -175, to: lerp(-175, -50, seg(t, 0.09, 0.17)), r: 52, alpha: 1 - seg(t, 0.18, 0.3), width: 8, c: C.ice });
+      if (t > 0.35 && t < 0.56) fx.push({ type: 'arc', from: -20, to: lerp(-20, -178, seg(t, 0.35, 0.43)), r: 54, alpha: 1 - seg(t, 0.44, 0.56), width: 9, c: C.ice });
+      if (t > 0.73 && t < 0.96) fx.push({ type: 'arc', from: -195, to: lerp(-195, -28, seg(t, 0.73, 0.81)), r: 58, alpha: 1 - seg(t, 0.82, 0.96), width: 13, c: C.gold });
+      if (t > 0.8) fx.push({ type: 'shock', x: 34, p: seg(t, 0.8, 1), power: 1 }, { type: 'sparks', x: 34, p: seg(t, 0.8, 0.98) });
+      hitFx(fx, t, this.hits, T, [C.ice, C.ice, C.gold]);
+      return p;
+    } },
+  // 鎚：當頭砸 → 橫掃 → 跳起重砸（地面裂開、碎石飛起）
+  hammer: { name: '鎚・碎地三擊', dur: 1.25, hits: [{ t: 0.2, w: 0.25, power: 2 }, { t: 0.5, w: 0.3, power: 1 }, { t: 0.84, w: 0.45, power: 4 }],
+    pose(t, T = REACH) {
+      const p = kf(t, [
+        [0, {}],
+        [0.12, { armR: -170, elbowR: -30, weapon: 160, torso: -10, head: -6, x: -2 }],
+        [0.2, { armR: -40, elbowR: -4, weapon: 205, torso: 16, x: 10, bodyY: 3, legL: -18, legR: 12, kneeL: 30, kneeR: 16 }],
+        [0.3, { armR: -24, elbowR: -6, weapon: 214, torso: 14, x: 10, bodyY: 2, legL: -12, legR: 10 }],
+        [0.4, { armR: 62, elbowR: -22, weapon: 250, torso: -12, head: -4, x: 8, legL: 8, legR: -8 }],
+        [0.5, { armR: -96, elbowR: -8, weapon: 176, torso: 13, x: 18, legL: -16, legR: 16, kneeL: 16, armL: 26 }],
+        [0.6, { armR: -150, elbowR: -30, weapon: 140, torso: 2, x: 18 }],
+        [0.68, { armR: -170, elbowR: -30, weapon: 165, x: 18, bodyY: 5, legL: -28, legR: -28, kneeL: 56, kneeR: 56 }],
+        [0.78, { armR: -176, elbowR: -24, weapon: 176, torso: -12, head: -8, x: 24, y: -44, legL: -40, kneeL: 70, legR: -10, kneeR: 60, armL: -50, elbowL: -30 }],
+        [0.84, { armR: -35, elbowR: 0, weapon: 210, torso: 18, x: 28, bodyY: 5, legL: -26, legR: -26, kneeL: 52, kneeR: 52, armL: 30 }],
+        [0.95, { armR: -35, elbowR: 0, weapon: 210, torso: 18, x: 28, bodyY: 5, legL: -26, legR: -26, kneeL: 52, kneeR: 52, armL: 30 }],
+        [1, {}],
+      ]);
+      const fx = p.fx;
+      if (t > 0.13 && t < 0.34) fx.push({ type: 'arc', from: -185, to: lerp(-185, -40, seg(t, 0.13, 0.21)), r: 54, alpha: 1 - seg(t, 0.22, 0.34), width: 11, c: C.fire });
+      if (t > 0.2 && t < 0.4) fx.push({ type: 'shock', x: 30, p: seg(t, 0.2, 0.4), power: 0.6 });
+      if (t > 0.42 && t < 0.64) fx.push({ type: 'arc', from: 70, to: lerp(70, -110, seg(t, 0.42, 0.51)), r: 56, alpha: 1 - seg(t, 0.52, 0.64), width: 12, c: C.fire });
+      if (t > 0.79 && t < 0.98) fx.push({ type: 'arc', from: -200, to: lerp(-200, -24, seg(t, 0.79, 0.85)), r: 60, alpha: 1 - seg(t, 0.86, 0.98), width: 15, c: C.gold });
+      if (t > 0.84) fx.push({ type: 'shock', x: 38, p: seg(t, 0.84, 1), power: 1.6 }, { type: 'sparks', x: 38, p: seg(t, 0.84, 1) },
+        { type: 'debris', x: 38, p: seg(t, 0.84, 1) }, { type: 'crack', x: 38, p: seg(t, 0.84, 0.9), alpha: 1 - seg(t, 0.94, 1) });
+      hitFx(fx, t, this.hits, T, [C.fire, C.fire, C.gold]);
+      return p;
+    } },
+  // 法杖：魔法球 → 兩顆弧線魔法球 → 蓄力（腳下魔法陣、光點聚集）後射出光束
+  staff: { name: '法杖・奧術連彈', dur: 1.3, hits: [{ t: 0.22, w: 0.25, power: 1 }, { t: 0.5, w: 0.3, power: 1 }, { t: 0.9, w: 0.45, power: 3 }],
+    pose(t, T = REACH) {
+      const p = kf(t, [
+        [0, {}],
+        [0.08, { armR: 12, elbowR: -44, weapon: 4, torso: -5, x: -2 }],
+        [0.14, { armR: -72, elbowR: -8, weapon: 58, torso: 7, x: 3, legL: -8, legR: 8 }],
+        [0.26, { armR: -40, elbowR: -16, weapon: 30, torso: 2 }],
+        [0.34, { armR: -152, elbowR: -40, weapon: 120, torso: -7, head: -4 }],
+        [0.42, { armR: -80, elbowR: -6, weapon: 66, torso: 9, x: 4, legL: -10, legR: 10 }],
+        [0.52, { armR: -50, elbowR: -20, weapon: 36, torso: 2 }],
+        [0.6, { armR: -28, elbowR: -34, weapon: 6, armL: -64, elbowL: -44, torso: -3, bodyY: 1 }],
+        [0.76, { armR: -34, elbowR: -40, weapon: 2, armL: -80, elbowL: -50, torso: -6, head: -5, y: -7, legL: 6, legR: -6, kneeL: 14, kneeR: 10 }],
+        [0.82, { armR: -88, elbowR: 0, weapon: 76, armL: 24, torso: 11, x: 5, y: -4, legL: -12, legR: 12 }],
+        [0.94, { armR: -88, elbowR: 0, weapon: 76, armL: 24, torso: 11, x: 3, y: 0, legL: -12, legR: 12 }],
+        [1, {}],
+      ]);
+      const fx = p.fx, tip = [44, 64];
+      const o1 = fly(t, 0.14, 0.22, tip, [T, TY]);
+      if (o1) fx.push({ type: 'orb', x: o1.x, y: o1.y, r: 5, c: C.arcane, dir: [1, -0.35] });
+      const o2 = fly(t, 0.42, 0.5, tip, [T, TY], 22), o3 = fly(t, 0.45, 0.53, tip, [T, TY], -14);
+      if (o2) fx.push({ type: 'orb', x: o2.x, y: o2.y, r: 5, c: C.arcane, dir: [1, 0.2 - o2.k] });
+      if (o3) fx.push({ type: 'orb', x: o3.x, y: o3.y, r: 5, c: C.ice, dir: [1, o3.k - 0.6] });
+      if (t >= 0.53 && t < 0.63) fx.push({ type: 'burst', x: T, y: TY, p: seg(t, 0.53, 0.63), size: 16, c: C.ice, rays: 6 });
+      if (t > 0.56 && t < 0.96) fx.push({ type: 'ring', x: 0, rx: lerp(8, 34, seg(t, 0.56, 0.7)), rot: t * 500, c: C.arcane, alpha: Math.min(seg(t, 0.56, 0.62), 1 - seg(t, 0.88, 0.96)) });
+      if (t > 0.6 && t < 0.82) fx.push({ type: 'gather', x: 30, y: 96 + 7 * seg(t, 0.6, 0.76), p: seg(t, 0.6, 0.82), c: C.arcane, n: 10 });
+      if (t > 0.74 && t < 0.83) fx.push({ type: 'orb', x: 30, y: 103, r: lerp(3, 8, seg(t, 0.74, 0.83)), c: C.arcane, dir: [0, 0] });
+      if (t > 0.82 && t < 1) fx.push({ type: 'beam', x0: 46, x1: lerp(46, T + 60, seg(t, 0.82, 0.9)), y: 62, h: lerp(13, 2, seg(t, 0.9, 1)), c: C.arcane, alpha: 1 - seg(t, 0.93, 1) });
+      if (t >= 0.9) fx.push({ type: 'burst', x: T, y: TY, p: seg(t, 0.9, 1), size: 44, c: C.ice, rays: 14, ring: true });
+      hitFx(fx, t, this.hits, T, [C.arcane, C.arcane, C.arcane]);
+      return p;
+    } },
+  // 弓：一箭 → 連射兩箭 → 後跳蓄力、射出貫穿箭
+  bow: { name: '弓・貫穿三連射', dur: 1.15, hits: [{ t: 0.18, w: 0.25, power: 1 }, { t: 0.44, w: 0.3, power: 1 }, { t: 0.86, w: 0.45, power: 3 }],
+    pose(t, T = REACH) {
+      const aim = { armR: -76, elbowR: 0, weapon: 28, armL: -52, elbowL: -92 }, loose = { armR: -76, elbowR: 0, weapon: 28, armL: -30, elbowL: -40 };
+      const p = kf(t, [
+        [0, {}],
+        [0.1, { ...aim, torso: -4 }],
+        [0.14, { ...loose, torso: 3, x: -2 }],
+        [0.3, { ...aim, armR: -84, torso: -6, x: -2 }],
+        [0.37, { ...loose, armR: -84, torso: 2, x: -4 }],
+        [0.4, { ...aim, armR: -70, torso: -3, x: -4 }],
+        [0.43, { ...loose, armR: -70, torso: 3, x: -6 }],
+        [0.54, { ...aim, x: -16, y: -18, torso: -14, legL: -30, kneeL: 60, legR: 10, kneeR: 40 }],
+        [0.62, { ...aim, x: -24, bodyY: 4, torso: -6, legL: -30, legR: 14, kneeL: 44, kneeR: 30 }],
+        [0.79, { ...aim, armL: -60, elbowL: -100, x: -24, bodyY: 4, torso: -8, legL: -30, legR: 14, kneeL: 44, kneeR: 30 }],
+        [0.82, { ...loose, x: -30, bodyY: 3, torso: 6, legL: -26, legR: 12, kneeL: 38, kneeR: 26 }],
+        [0.93, { ...loose, x: -30, bodyY: 3, torso: 6, legL: -26, legR: 12, kneeL: 38, kneeR: 26 }],
+        [1, {}],
+      ]);
+      const fx = p.fx, nock = [38, 66];
+      const a1 = fly(t, 0.14, 0.18, nock, [T, TY + 2]);
+      if (a1) fx.push({ type: 'arrow', x: a1.x, y: a1.y, ang: 24, len: 22, c: C.wind });
+      const a2 = fly(t, 0.37, 0.44, [nock[0] - 4, nock[1] + 4], [T, TY + 8]), a3 = fly(t, 0.43, 0.5, [nock[0] - 6, nock[1]], [T, TY - 6]);
+      if (a2) fx.push({ type: 'arrow', x: a2.x, y: a2.y, ang: 22, len: 22, c: C.wind });
+      if (a3) fx.push({ type: 'arrow', x: a3.x, y: a3.y, ang: 27, len: 22, c: C.wind });
+      if (t >= 0.5 && t < 0.6) fx.push({ type: 'burst', x: T, y: TY - 6, p: seg(t, 0.5, 0.6), size: 14, c: C.wind, rays: 6 });
+      if (t > 0.62 && t < 0.8) fx.push({ type: 'gather', x: 20, y: 62, p: seg(t, 0.62, 0.8), c: C.gold, n: 8 });
+      if (t > 0.7 && t < 0.8) fx.push({ type: 'orb', x: 22, y: 62, r: lerp(2, 5, seg(t, 0.7, 0.8)), c: C.gold, dir: [0, 0] });
+      const a4 = fly(t, 0.8, 0.86, [14, 62], [T + 10, TY + 4]);
+      if (a4) fx.push({ type: 'arrow', x: a4.x, y: a4.y, ang: 18, len: 40, c: C.gold, big: true });
+      if (t > 0.82 && t < 1) fx.push({ type: 'beam', x0: 14, x1: lerp(14, T + 66, seg(t, 0.82, 0.88)), y: 62, h: lerp(5, 1, seg(t, 0.86, 1)), c: C.gold, alpha: 0.8 * (1 - seg(t, 0.88, 1)), slope: (TY + 4 - 62) / (T - 4) });
+      hitFx(fx, t, this.hits, T, [C.wind, C.wind, C.gold]);
+      return p;
+    } },
+};
+// 追擊、連鎖、反擊用的單發快攻：只播連招的第一段，然後收招
+function quick(combo, cut) {
+  const h = combo.hits[0];
+  return { name: combo.name + '（單發）', dur: combo.dur * cut * 1.25, hits: [{ t: (h.t / cut) * 0.8, w: 1, power: h.power }],
+    pose(t, T = REACH) {
+      if (t < 0.8) return combo.pose((t / 0.8) * cut, T);
+      const a = combo.pose(cut, T), k = ease(seg(t, 0.8, 1)), out = { fx: [] };
+      for (const c of CH) out[c] = Math.round(lerp(a[c], GUARD[c], k));
+      return out;
+    } };
+}
 
 export const ANIMS = {
   idle: { name: '待機', dur: 1.8, loop: true, pose(t) {
@@ -193,44 +369,20 @@ export const ANIMS = {
     return { ...REST, bodyY: Math.abs(s) > 0.7 ? 1 : 0, legL: s * 26, legR: -s * 26, kneeL: Math.max(0, c) * 34, kneeR: Math.max(0, -c) * 34,
       armL: -s * 22, armR: s * 16 - 6, elbowL: -14, elbowR: -22, torso: 3, weapon: 20 };
   } },
-  // 揮砍：往後舉起 → 往前砍下（刀光）→ 收回
-  slash: { name: '揮砍', dur: 0.62, pose(t) {
-    const a = ease(seg(t, 0, 0.32)), b = ease(seg(t, 0.32, 0.5)), c = ease(seg(t, 0.5, 1));
-    const fx = [];
-    if (t > 0.3 && t < 0.72) fx.push({ type: 'arc', from: -175, to: lerp(-175, -50, b), r: 52, alpha: 1 - seg(t, 0.5, 0.72), width: 8 });
-    if (t > 0.42 && t < 0.6) fx.push({ type: 'hit', power: 1 });
-    return { ...REST, x: lerp(lerp(0, -3, a), 7, b) * (1 - c), torso: lerp(lerp(0, -7, a), 9, b) * (1 - c), head: lerp(0, -4, a) * (1 - b),
-      armR: lerp(lerp(0, -150, a), -62, b) * (1 - c), elbowR: lerp(lerp(-14, -60, a), -6, b) * (1 - c) - 14 * c, weapon: lerp(lerp(14, 150, a), 190, b) * (1 - c) + 14 * c,
-      armL: lerp(0, 22, b) * (1 - c), elbowL: -20 * (1 - c), legL: lerp(0, -12, b) * (1 - c), legR: lerp(0, 14, b) * (1 - c), kneeL: lerp(0, 14, b) * (1 - c),
-      bodyY: b > 0.5 && c < 0.5 ? 1 : 0, fx };
-  } },
-  // 跳斬：蹲下 → 跳起、武器舉過頭 → 落下重擊（大刀光、衝擊波、火花）→ 起身
-  jump: { name: '跳斬', dur: 1.15, pose(t) {
-    const crouch = ease(seg(t, 0, 0.14)), up = ease(seg(t, 0.14, 0.45)), down = seg(t, 0.52, 0.62), land = ease(seg(t, 0.62, 1));
-    const air = up * (1 - down * down), d = ease(down);
-    const fx = [];
-    if (t > 0.5 && t < 0.8) fx.push({ type: 'arc', from: -190, to: lerp(-190, -30, d), r: 56, alpha: 1 - seg(t, 0.62, 0.8), width: 11, gold: true });
-    if (t > 0.6 && t < 0.95) fx.push({ type: 'shock', p: seg(t, 0.6, 0.95) });
-    if (t > 0.6 && t < 0.9) fx.push({ type: 'sparks', p: seg(t, 0.6, 0.9) });
-    if (t > 0.6 && t < 0.72) fx.push({ type: 'hit', power: 2 });
-    if (t > 0.6 && t < 0.7) fx.push({ type: 'shake', amount: 3 });
-    const squat = crouch * (1 - up) + (t > 0.62 ? 1 - land : 0) * 0.9;
-    return { ...REST, x: 10 * ease(seg(t, 0.14, 0.62)) * (1 - land), y: -34 * air, bodyY: Math.round(squat * 4), torso: lerp(lerp(0, -10, up), 14, d) * (1 - land),
-      head: lerp(0, -8, up) * (1 - down), armR: lerp(lerp(0, -165, up), -48, d) * (1 - land), elbowR: lerp(lerp(-14, -40, up), -4, d) * (1 - land) - 14 * land,
-      weapon: lerp(lerp(14, 170, up), 200, d) * (1 - land) + 14 * land, armL: lerp(lerp(0, -40, up), 30, d) * (1 - land), elbowL: -30 * air,
-      legL: -34 * air - squat * 26, legR: 18 * air - squat * 26, kneeL: 60 * air + squat * 52, kneeR: 30 * air + squat * 52, fx };
-  } },
-  // 忙碌：鍛造、買賣、接委託時舉手忙一下
-  work: { name: '忙碌', dur: 0.45, pose(t) {
-    const k = Math.sin(seg(t, 0, 1) * Math.PI);
-    return { ...REST, bodyY: k > 0.5 ? 1 : 0, armR: -50 * k, elbowR: -14 - 50 * k, armL: -30 * k, elbowL: -40 * k, head: 4 * k, weapon: 14 + 30 * k, fx: [] };
-  } },
+  combo_sword: COMBOS.sword, combo_hammer: COMBOS.hammer, combo_staff: COMBOS.staff, combo_bow: COMBOS.bow,
+  quick_sword: quick(COMBOS.sword, 0.27), quick_hammer: quick(COMBOS.hammer, 0.31), quick_staff: quick(COMBOS.staff, 0.27), quick_bow: quick(COMBOS.bow, 0.24),
   // 受擊：往後仰一下
   hurt: { name: '受擊', dur: 0.32, pose(t) {
     const k = Math.sin(seg(t, 0, 1) * Math.PI);
     return { ...REST, x: -5 * k, torso: -12 * k, head: -8 * k, armL: -20 * k, armR: -24 * k, elbowR: -14, legL: -8 * k, kneeR: 12 * k, weapon: 14 + 20 * k, fx: [] };
   } },
 };
+// 武器決定攻擊方式：劍士的武器是劍或弓（form），守衛是鎚，術士是法杖；空手用劍的動作
+export function attackStyle(weapon) {
+  if (!weapon) return 'sword';
+  if (weapon.form === 'bow') return 'bow';
+  return { guard: 'hammer', arcane: 'staff' }[weapon.tag] || 'sword';
+}
 
 // ---------- 骨架 ----------
 const FAR = 0.74;   // 側面時，後面的手腳調暗
@@ -254,7 +406,7 @@ export class Rig {
   // equip：{ weapon, head, body, feet }，內容是遊戲裡的裝備物件（需要 tag、tier、rarity）
   setEquip(equip, bare = false) {
     const e = equip || {};
-    const sig = ['weapon', 'head', 'body', 'feet'].map((k) => (e[k] ? `${e[k].tag}-${e[k].tier}-${e[k].rarity}` : '')).join('|') + bare;
+    const sig = ['weapon', 'head', 'body', 'feet'].map((k) => (e[k] ? `${e[k].tag}-${e[k].tier}-${e[k].rarity}-${e[k].form || ''}` : '')).join('|') + bare;
     if (sig === this.sig) return;
     this.sig = sig; this.equip = { ...e }; this.bare = bare;
     this.rebuild();
@@ -348,50 +500,108 @@ export class Rig {
   drawFx(ctx, ox, oy, pose, time = 0) {
     const sh = this.G.armR;
     const cx = ox - this.foot[0] + pose.x + sh.x + sh.pivot[0], cy = oy - this.foot[1] + pose.y + pose.bodyY + sh.y + sh.pivot[1];
+    const dot = (x, y, col, w = 1, h = w) => { ctx.fillStyle = col; ctx.fillRect(Math.round(x), Math.round(y), w, h); };
     if (this.glow) {
-      ctx.fillStyle = this.glow;
       for (let i = 0; i < 5; i++) {
         const ph = (time * 0.7 + i / 5) % 1;
         ctx.globalAlpha = Math.sin(ph * Math.PI);
-        ctx.fillRect(Math.round(ox + pose.x - 16 + ((i * 13) % 32)), Math.round(oy + pose.y - 20 - ph * 60), 1, i % 2 ? 1 : 2);
+        dot(ox + pose.x - 16 + ((i * 13) % 32), oy + pose.y - 20 - ph * 60, this.glow, 1, i % 2 ? 1 : 2);
       }
       ctx.globalAlpha = 1;
     }
     for (const f of pose.fx) {
+      const [core, edge] = f.c || ['#ffffff', '#8fd3ff'];
       if (f.type === 'arc') {
-        // 刀光：沿著揮砍的弧線，越靠近武器尖端越亮、越寬；尾端變細變淡
-        const span = f.to - f.from;
-        for (let a = f.from; a <= f.to; a += 1.2) {
-          const k = (a - f.from) / (span || 1);
-          const w = Math.max(1, Math.round(f.width * k));
+        // 刀光：沿著揮砍的弧線（可以順時針也可以逆時針），越靠近武器這一端越亮、越寬；尾端變細變淡
+        const span = f.to - f.from, n = Math.max(1, Math.round(Math.abs(span) / 1.2));
+        for (let s = 0; s <= n; s++) {
+          const k = s / n, a = f.from + span * k, w = Math.max(1, Math.round(f.width * k));
           for (let i = 0; i < w; i++) {
-            const r = f.r - i, x = cx - Math.sin(a * RAD) * r, y = cy + Math.cos(a * RAD) * r;
-            const edge = i === 0 || i === w - 1;
+            const r = f.r - i;
             ctx.globalAlpha = f.alpha * (0.25 + 0.75 * k);
-            ctx.fillStyle = edge ? (f.gold ? '#f2b84b' : '#8fd3ff') : (f.gold ? '#fff3c4' : '#ffffff');
-            ctx.fillRect(Math.round(x), Math.round(y), 1, 1);
+            dot(cx - Math.sin(a * RAD) * r, cy + Math.cos(a * RAD) * r, i === 0 || i === w - 1 ? edge : core);
           }
         }
-        ctx.globalAlpha = 1;
-      } else if (f.type === 'shock') {
-        const w = 16 + f.p * 70;
+      } else if (f.type === 'shock') {           // 貼著地面往兩邊散開的衝擊波
+        const pw = f.power || 1, w = (16 + f.p * 70) * pw, x0 = ox + (f.x ?? 30);
         ctx.globalAlpha = 1 - f.p;
-        ctx.fillStyle = '#fff3c4';
         for (let x = -w; x <= w; x++) {
-          const h = Math.round((1 - (x / w) ** 2) * (5 - f.p * 3));
-          if (Math.abs(x) > w - 10) ctx.fillRect(Math.round(ox + 30 + x), oy - h, 1, Math.max(1, h));
+          const h = Math.round((1 - (x / w) ** 2) * (5 - f.p * 3) * pw);
+          if (Math.abs(x) > w - 10 * pw) dot(x0 + x, oy - h, '#fff3c4', 1, Math.max(1, h));
         }
-        ctx.globalAlpha = 1;
       } else if (f.type === 'sparks') {
         for (let i = 0; i < 14; i++) {
-          const ang = (-150 + i * 9.5) * RAD, sp = 26 + ((i * 37) % 22);
-          const x = ox + 30 + Math.cos(ang) * sp * f.p, y = oy - 4 + Math.sin(ang) * sp * f.p + 30 * f.p * f.p;
+          const ang = (-150 + i * 9.5) * RAD, sp = 26 + ((i * 37) % 22), big = i % 4 === 0 ? 2 : 1;
           ctx.globalAlpha = 1 - f.p;
-          ctx.fillStyle = i % 3 ? '#f2b84b' : '#ffffff';
-          ctx.fillRect(Math.round(x), Math.round(y), i % 4 === 0 ? 2 : 1, i % 4 === 0 ? 2 : 1);
+          dot(ox + (f.x ?? 30) + Math.cos(ang) * sp * f.p, oy - 4 + Math.sin(ang) * sp * f.p + 30 * f.p * f.p, i % 3 ? '#f2b84b' : '#ffffff', big);
+        }
+      } else if (f.type === 'debris') {          // 碎石：往上噴再落下
+        for (let i = 0; i < 9; i++) {
+          const vx = -34 + i * 9 + ((i * 7) % 5), vy = 60 + ((i * 29) % 40);
+          ctx.globalAlpha = 1 - f.p * f.p;
+          dot(ox + f.x + vx * f.p, oy - (vy * f.p - 110 * f.p * f.p), i % 2 ? '#6b5240' : '#8f7458', 2 + (i % 2));
+        }
+      } else if (f.type === 'crack') {           // 地面的裂痕
+        ctx.globalAlpha = f.alpha;
+        for (let i = 0; i < 5; i++) {
+          const dir = (i - 2) * 0.55, len = (14 + ((i * 11) % 12)) * f.p;
+          for (let s = 0; s < len; s++) dot(ox + f.x + Math.sin(dir) * s * 1.6 + (s % 3 === 0 ? 1 : 0), oy + 1 + Math.cos(dir) * s * 0.25, s < 3 ? '#fff3c4' : '#0a0d13', 1, 2);
+        }
+      } else if (f.type === 'orb') {             // 魔法球：亮核心、外圈，後面拖著光點
+        const X = ox + f.x, Y = oy - f.y, r = Math.round(f.r);
+        for (let i = 1; i <= 6; i++) {
+          ctx.globalAlpha = 0.6 - i * 0.09;
+          dot(X - f.dir[0] * i * 4 - r / 2, Y + f.dir[1] * i * 4 - r / 2 + ((i * 5 + Math.round(time * 30)) % 3) - 1, edge, Math.max(1, r - i));
         }
         ctx.globalAlpha = 1;
+        for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+          const d = Math.hypot(dx, dy);
+          if (d <= r + 0.3) dot(X + dx, Y + dy, d < r * 0.55 ? core : edge);
+        }
+        dot(X - r - 2, Y, core, 2, 1); dot(X + r + 1, Y, core, 2, 1); dot(X, Y - r - 2, core, 1, 2); dot(X, Y + r + 1, core, 1, 2);
+      } else if (f.type === 'arrow') {           // 箭：箭身、箭頭，後面拖一道風
+        const X = ox + f.x, Y = oy - f.y, a = f.ang * RAD, ux = Math.cos(a), uy = Math.sin(a), th = f.big ? 2 : 1;
+        for (let s = 0; s < f.len * 2.2; s++) { ctx.globalAlpha = 0.35 * (1 - s / (f.len * 2.2)); dot(X - ux * (f.len + s), Y - uy * (f.len + s), edge, th); }
+        ctx.globalAlpha = 1;
+        for (let s = 0; s < f.len; s++) dot(X - ux * s, Y - uy * s, s < 4 ? core : s > f.len - 5 ? edge : '#c9a66b', th);
+        dot(X + ux * 2, Y + uy * 2, core, th + 1);
+      } else if (f.type === 'ring') {            // 腳下的魔法陣：兩圈橢圓加上繞著轉的符點
+        ctx.globalAlpha = f.alpha;
+        for (let a = 0; a < 360; a += 3) {
+          const x = Math.cos(a * RAD), y = Math.sin(a * RAD) * 0.28;
+          dot(ox + f.x + x * f.rx, oy + 1 + y * f.rx, edge);
+          if (a % 6 === 0) dot(ox + f.x + x * f.rx * 0.62, oy + 1 + y * f.rx * 0.62, core);
+        }
+        for (let i = 0; i < 6; i++) {
+          const a = (f.rot + i * 60) * RAD;
+          dot(ox + f.x + Math.cos(a) * f.rx * 0.82 - 1, oy + Math.sin(a) * f.rx * 0.82 * 0.28, core, 2);
+          dot(ox + f.x + Math.cos(a) * f.rx * 0.82, oy - 6 - ((time * 40 + i * 9) % 26), edge, 1, 2);      // 往上飄的光
+        }
+      } else if (f.type === 'gather') {          // 光點往一點聚集
+        for (let i = 0; i < f.n; i++) {
+          const a = (i * 137 + time * 200) * RAD, r = (30 + (i * 13) % 16) * (1 - f.p);
+          ctx.globalAlpha = 0.4 + 0.6 * f.p;
+          dot(ox + f.x + Math.cos(a) * r, oy - f.y + Math.sin(a) * r, i % 2 ? core : edge, i % 3 ? 1 : 2);
+        }
+      } else if (f.type === 'beam') {            // 光束：亮的核心加外圈，邊緣有鋸齒
+        ctx.globalAlpha = f.alpha;
+        const h = Math.max(1, Math.round(f.h));
+        for (let x = f.x0; x <= f.x1; x += 2) {
+          const y = oy - (f.y + (f.slope || 0) * (x - f.x0)), j = ((x * 7 + Math.round(time * 60)) % 3) - 1;
+          dot(ox + x, y - h / 2 + j, edge, 2, h);
+          if (h > 2) dot(ox + x, y - h / 4, core, 2, Math.max(1, Math.round(h / 2)));
+        }
+      } else if (f.type === 'burst') {           // 命中的爆光：中心閃一下，光芒往外射
+        const X = ox + f.x, Y = oy - f.y;
+        ctx.globalAlpha = 1 - f.p;
+        if (f.p < 0.4) { const r = Math.round(f.size * 0.3 * (1 - f.p / 0.4)); for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (Math.hypot(dx, dy) <= r) dot(X + dx, Y + dy, core); }
+        for (let i = 0; i < f.rays; i++) {
+          const a = (i * 360 / f.rays + 17) * RAD, r0 = f.size * (0.25 + 0.6 * f.p), r1 = f.size * (0.5 + 0.7 * f.p);
+          for (let r = r0; r <= r1; r += 1) dot(X + Math.cos(a) * r, Y + Math.sin(a) * r, r > (r0 + r1) / 2 ? edge : core, i % 2 ? 1 : 2);
+        }
+        if (f.ring) for (let a = 0; a < 360; a += 4) dot(X + Math.cos(a * RAD) * f.size * f.p, Y + Math.sin(a * RAD) * f.size * f.p, core, 2);
       }
+      ctx.globalAlpha = 1;
     }
   }
 }

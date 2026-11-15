@@ -16,6 +16,7 @@ export class IdleScene extends Phaser.Scene {
     this.foe = this.add.image(FOE_X, GROUND + 6, enemyTexture(this, 'slime', '#62c46a')).setOrigin(0, 1).setScale(ENEMY_SCALE);
     this.tweens.add({ targets: this.foe, y: '-=4', duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
     this.hero = new RigHero(this, HERO_X, GROUND);
+    this.hero.setTarget(FOE_X + 16 * ENEMY_SCALE);
 
     const offs = [
       this.bus.on('state', () => this.refresh()),
@@ -57,9 +58,13 @@ export class IdleScene extends Phaser.Scene {
   onTick(sum) {
     const s = this.getState();
     if (!s || !this.scene.isActive() || s.location !== 'battle') return; // 戰鬥播放時掛機場景在睡覺
-    this.hero.play('slash');
-    this.foe.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);
-    this.time.delayedCall(140, () => { this.foe.clearTint(); this.nextFoe(s); });
+    // 打一套連招：每一段命中時魔物閃一下，最後一段打完換下一隻
+    const hits = this.hero.attack(true);
+    hits.forEach((h, i) => this.time.delayedCall(h.ms, () => {
+      this.foe.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);
+      if (h.power >= 3) this.cameras.main.shake(120, 0.004);
+      this.time.delayedCall(110, () => { this.foe.clearTint(); if (i === hits.length - 1) this.nextFoe(s); });
+    }));
     const parts = [];
     if (sum.exp) parts.push(`+${sum.exp} EXP`);
     if (sum.gold) parts.push(`+${sum.gold} G`);
