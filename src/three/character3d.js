@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { CHIBI } from '../art/chibi-data.js';
 
-export const HAIR_COLORS = { ...CHIBI.hairColors, 深棕: ['#2e262e', '#453a43', '#63545e', '#827079'], 藍黑: ['#202840', '#34406a', '#4c5c90', '#7484bc'] };
+export const HAIR_COLORS = { ...CHIBI.hairColors, 深棕: ['#392e35', '#584850', '#78646c', '#98848b'], 藍黑: ['#202840', '#34406a', '#4c5c90', '#7484bc'] };
 const SKIN = '#f8ceb7', SKIN_SH = '#e6ae97', INK = '#17141b';
 const TAU = Math.PI * 2, RAD = Math.PI / 180;
 
@@ -79,7 +79,7 @@ function tuftGeometry(L, R, bend = 0.18, flat = 0.5) {
   const N = 12;
   for (let i = 0; i <= N; i++) {
     const t = i / N;
-    const rad = R * Math.pow(Math.sin(Math.PI * Math.pow(t, 0.62)), 0.85);
+    const rad = t < 0.24 ? R * Math.pow(Math.sin((Math.PI / 2) * (t / 0.24)), 0.75) : R * Math.pow(1 - (t - 0.24) / 0.76, 0.9);
     pts.push(new THREE.Vector2(Math.max(0.02, rad), t * L));
   }
   const g = new THREE.LatheGeometry(pts, 12, Math.PI, TAU);
@@ -95,7 +95,7 @@ function tuftGeometry(L, R, bend = 0.18, flat = 0.5) {
 // ---------- 臉（畫在球面貼圖上：512×256，正面中央在 x=256） ----------
 function faceCanvas({ female, blink }) {
   const [c, x] = canvas(512, 256, SKIN);
-  const cx = 256, eyeY = 116, eyeW = 30, eyeH = 47, gap = 33;
+  const cx = 256, eyeY = 116, eyeW = 32, eyeH = 52, gap = 34;
   const rr = (px, py, w, h, r) => { x.beginPath(); x.roundRect(px, py, w, h, r); x.fill(); };
   for (const s of [-1, 1]) {
     const ex = cx + s * gap - eyeW / 2;
@@ -141,15 +141,19 @@ function headGeometry() {
 const HR = { x: 22.3, y: 19.3, z: 20.9 };
 const scalp = (az, el, k = 1) => new THREE.Vector3(
   HR.x * Math.sin(az * RAD) * Math.cos(el * RAD) * k, HR.y * Math.sin(el * RAD) * k, HR.z * Math.cos(az * RAD) * Math.cos(el * RAD) * k);
-function hairShell(m, backTheta = 0.72) {
+function hairShell(m, backTheta = 0.72, { sideEl = null } = {}) {
   const g = new THREE.Group();
-  const top = new THREE.SphereGeometry(1, 32, 12, 0, TAU, 0, Math.PI * 0.4);
-  top.scale(HR.x, HR.y, HR.z);
-  g.add(mesh(top, m));
-  // 後腦與兩側（正面留給臉）：phi 以背面為中心左右各 128 度
-  const back = new THREE.SphereGeometry(1, 32, 12, (270 - 128) * RAD, 256 * RAD, Math.PI * 0.3, Math.PI * (backTheta - 0.3));
-  back.scale(HR.x, HR.y, HR.z);
-  g.add(mesh(back, m));
+  const part = (phi0, phiLen, th0, th1) => {
+    const geo = new THREE.SphereGeometry(1, 32, 12, phi0 * RAD, phiLen * RAD, Math.PI * th0, Math.PI * (th1 - th0));
+    geo.scale(HR.x, HR.y, HR.z);
+    g.add(mesh(geo, m));
+  };
+  part(0, 360, 0, 0.4);                                   // 頭頂
+  if (sideEl === null) part(270 - 128, 256, 0.3, backTheta);   // 後腦與兩側一起往下（正面留給臉）
+  else {
+    part(270 - 130, 260, 0.3, 0.5 - sideEl / 180);        // 兩側只到耳朵上方
+    part(270 - 78, 156, 0.4, backTheta);                  // 後腦往下到後頸
+  }
   return g;
 }
 // 一撮髮束：從 base（方位角、仰角）長到 tip（方位角、仰角、往外的倍數）
@@ -183,47 +187,47 @@ function addTuftPts(group, m, a, b, R, normal, { bend = 0.16, flat = 0.6 } = {})
 // 有種子的亂數：每次產生的亂髮都一樣
 function rng(seed) { let v = seed >>> 0; return () => { v = (v + 0x6d2b79f5) >>> 0; let t = v; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
-// 男生：蓬鬆亂翹的短髮（參考圖的髮型）。由下往上三層厚髮束＋頭頂一圈＋瀏海，每撮都有一點隨機的方向與深淺。
+// 男生：蓬鬆亂翹的短髮（照正面、側面、背面參考圖）。
+// 頭髮比臉寬很多：髮殼之外，一圈圈尖髮束由下往上疊，尖端往外、往後翹出輪廓；兩側收在耳朵上方，露出耳朵。
 function hairMale(pal) {
   const g = new THREE.Group();
   const H = mat(pal[1], { side: THREE.DoubleSide }), M = mat(pal[2]), Dk = mat(pal[0]);
-  const shell = hairShell(H); shell.scale.setScalar(1.07);
+  const shell = hairShell(H, 0.7, { sideEl: 2 }); shell.scale.setScalar(1.22);
   g.add(shell);
-  const r = rng(11);
+  const r = rng(23);
   const j = (n) => (r() - 0.5) * 2 * n;
-  const pick = () => (r() < 0.62 ? H : M);                         // 上面兩層只用基本色與亮色
-  const pickLow = pick;
-  const T = (m, a, b, R, o) => addTuft(g, m, a, b, R, { flat: 0.6, k: 1.05, ...o });
-  // 下層：後腦與兩側往下，尖端往外翹（正面留給臉）
-  for (const az of [70, 98, 126, 154, 182, 210, 238, 266, 294]) {
-    const side = az > 180 ? 1 : -1;
-    T(pickLow(), [az + j(5), 20 + j(5)], [az + side * 8 + j(5), -28 + j(6), 1.18 + j(0.03)], 8, { bend: 0.26 });
+  const pick = () => (r() < 0.6 ? H : M);
+  const back = (az) => (az % 360 < 180 ? 1 : -1);          // 往後腦方向掃
+  // 髮束做成接近圓錐的尖刺（不壓太扁），從頭頂往外、往後掃
+  const T = (m, a, b, R, o) => addTuft(g, m, a, b, R, { flat: 0.85, k: 1.17, bend: 0.08, ...o });
+  // 後頸：往下的髮束
+  for (let az = 112; az <= 248; az += 17) T(H, [az + j(4), 0 + j(4)], [az + j(6), -40 + j(4), 1.3 + j(0.04)], 6);
+  // 兩側：在耳朵上方往外、往下翹
+  for (const s of [-1, 1]) {
+    T(H, [s * 62, 24], [s * 72, -6, 1.42], 5.5);
+    T(M, [s * 80, 24], [s * 94, -8, 1.52], 6);
+    T(H, [s * 100, 22], [s * 118, -10, 1.52], 6);
   }
-  // 中層：錯開方位，蓋住下層的根部
-  for (const az of [56, 84, 112, 140, 168, 196, 224, 252, 280, 308]) {
-    const side = az > 180 ? 1 : -1;
-    T(pick(), [az + j(6), 52 + j(4)], [az + side * 10 + j(6), 10 + j(6), 1.17 + j(0.04)], 8.5, { bend: 0.22 });
-  }
-  // 頭頂：從髮旋往四周蓋下來，貼著頭型，只有尖端微翹
-  for (const az of [10, 55, 100, 145, 190, 235, 280, 325]) {
-    T(pick(), [az + j(8), 86 + j(3)], [az + 12 + j(10), 44 + j(5), 1.13 + j(0.03)], 8.5, { bend: 0.18 });
-  }
-  // 幾撮翹出來的呆毛，打破圓圓的輪廓
-  T(M, [-30, 70], [-58, 62, 1.3], 5, { bend: 0.4 });
-  T(H, [40, 74], [72, 66, 1.3], 5, { bend: 0.4 });
-  T(H, [5, 84], [-20, 80, 1.34], 4.5, { bend: 0.45 });
-  T(H, [150, 70], [178, 56, 1.3], 5, { bend: 0.4 });
-  T(M, [-115, 44], [-130, 22, 1.3], 5, { bend: 0.4 });
-  T(H, [112, 40], [128, 16, 1.3], 5, { bend: 0.4 });
-  // 瀏海：一撮撮蓋在額頭上，兩眼中間那撮最長
-  const bang = { bend: 0.05, k: 1.05, flat: 0.55 };
-  T(H, [-50, 48], [-58, 10, 1.09], 6.5, bang);
-  T(M, [-30, 52], [-37, 13, 1.09], 6.2, bang);
-  T(H, [-11, 55], [-18, 15, 1.09], 5.6, bang);
-  T(Dk, [5, 57], [1, 1, 1.08], 4.6, bang);
-  T(H, [20, 55], [25, 14, 1.09], 5.8, bang);
-  T(H, [38, 52], [46, 12, 1.09], 6.2, bang);
-  T(M, [56, 47], [66, 9, 1.09], 6.5, bang);
+  // 三圈長尖刺：一圈蓋一圈，尖端翹出輪廓
+  for (let az = 56; az <= 304; az += 21) T(pick(), [az + j(5), 42 + j(4)], [az + back(az) * 12 + j(6), 12 + j(6), 1.52 + j(0.06)], 6.4);
+  for (let az = 38; az <= 324; az += 26) T(pick(), [az + j(6), 64 + j(4)], [az + back(az) * 14 + j(8), 36 + j(6), 1.54 + j(0.06)], 6.6);
+  for (let az = 10; az < 360; az += 40) T(pick(), [az + j(8), 84 + j(3)], [az + 16 + j(10), 60 + j(6), 1.52 + j(0.06)], 6.6);
+  // 頭頂：幾撮往上、往前翹的呆毛
+  T(M, [30, 84], [-25, 80, 1.7], 5.5, { bend: 0.3 });
+  T(H, [150, 82], [105, 72, 1.66], 5.5, { bend: 0.25 });
+  T(H, [-110, 80], [-70, 68, 1.62], 5, { bend: 0.25 });
+  // 瀏海：鋸齒狀蓋到眼睛上緣，兩眼中間那撮最長；最外側兩撮順著臉頰往下
+  const bang = { bend: 0.04, k: 1.2, flat: 0.6 };
+  T(H, [-66, 40], [-72, 0, 1.14], 5.5, bang);
+  T(M, [-48, 48], [-54, 18, 1.16], 6, bang);
+  T(H, [-33, 52], [-38, 21, 1.16], 5.5, bang);
+  T(H, [-19, 54], [-24, 22, 1.16], 5.2, bang);
+  T(M, [-6, 55], [-11, 23, 1.16], 4.8, bang);
+  T(Dk, [7, 55], [3, 4, 1.15], 4.2, bang);
+  T(H, [20, 54], [24, 22, 1.16], 5.2, bang);
+  T(H, [34, 52], [40, 21, 1.16], 5.5, bang);
+  T(M, [48, 48], [55, 18, 1.16], 6, bang);
+  T(H, [66, 40], [74, 0, 1.14], 5.5, bang);
   return g;
 }
 
@@ -293,23 +297,57 @@ function shoeCanvas(female) {
   return c;
 }
 
+// 基本身體（男生）：皮膚軀幹、短褲、赤腳
+const SHORTS = '#5c4e58', SHORTS_D = '#2e272f', MARK = '#e3a58e';
+function bareTorsoCanvas() {
+  const [c, x] = canvas(256, 128, SKIN);
+  x.fillStyle = MARK;
+  x.fillRect(100, 44, 6, 5); x.fillRect(150, 44, 6, 5);        // 胸
+  x.fillRect(126, 92, 4, 7);                                    // 肚臍
+  x.fillRect(112, 20, 12, 2); x.fillRect(132, 20, 12, 2);       // 鎖骨
+  x.fillRect(0, 26, 3, 80); x.fillRect(253, 26, 3, 80);         // 背脊（貼圖兩端是背面）
+  x.fillRect(26, 34, 3, 22); x.fillRect(227, 34, 3, 22);        // 肩胛
+  x.fillStyle = SKIN_SH; x.fillRect(160, 0, 34, 128);           // 右側陰影
+  return c;
+}
+function shortsCanvas(stripeAt) {
+  const [c, x] = canvas(128, 32, SHORTS);
+  x.fillStyle = '#f2eff0';
+  for (const u of stripeAt) x.fillRect(Math.round(u * 128) - 4, 0, 8, 32);   // 兩側白條
+  x.fillStyle = SHORTS_D; x.fillRect(0, 0, 128, 7);                          // 褲頭
+  return c;
+}
+function footCanvas() {
+  const [c, x] = canvas(128, 64, SKIN);
+  x.fillStyle = MARK;
+  for (const px of [55, 63, 71]) x.fillRect(px, 33, 2, 9);     // 腳趾
+  x.fillStyle = SKIN_SH; x.fillRect(0, 46, 128, 18);
+  return c;
+}
+
 // ---------- 組裝 ----------
 function build(look) {
   const female = look.gender === '女';
   const pal = HAIR_COLORS[look.color] || HAIR_COLORS['深棕'];
   const root = new THREE.Group();
   const skin = mat(SKIN), skinSh = mat(SKIN_SH);
+  const base = !female && look.outfit !== 'hoodie';   // 男生預設是基本身體（照參考圖），也可以穿連帽外套
   const pants = female ? '#4c72ac' : '#322d37';
 
   // 腿與鞋
   const legs = [];
   for (const s of [-1, 1]) {
     const hip = new THREE.Group();
-    hip.position.set(s * 5.3, 21 + LEG, 0);
-    hip.add(mesh(capsule(female ? 4.6 : 5.1, 6.5 + LEG), mat(pants), 0, -8 - LEG / 2, 0));
+    hip.position.set(s * (base ? 6.6 : 5.3), 21 + LEG, 0);
+    hip.add(mesh(capsule(female ? 4.6 : base ? 5.6 : 5.1, 6.5 + LEG), base ? skin : mat(pants), 0, -8 - LEG / 2, 0));
+    if (base) {   // 短褲褲管：外側有白條，下緣深色
+      const cyl = new THREE.CylinderGeometry(6.3, 6.3, 6.5, 20);
+      hip.add(mesh(cyl, texMat(shortsCanvas([s > 0 ? 0.14 : 0.86])), 0, -3.2, 0));
+      hip.add(mesh(new THREE.CylinderGeometry(6.45, 6.45, 1.4, 20), mat(SHORTS_D), 0, -6.6, 0));
+    }
     if (female) hip.add(mesh(new THREE.CylinderGeometry(5.1, 5.1, 3, 16), mat('#7398cc'), 0, -13.5 - LEG, 0));   // 反摺褲管
-    const shoeGeo = ball(1, (v) => { v.x *= 5.9; v.y = Math.max(v.y * 4.6, -2.6); v.z *= 8.6; }, 28, 16);
-    hip.add(mesh(shoeGeo, texMat(shoeCanvas(female)), 0, -17.4 - LEG, 2.6));
+    const shoeGeo = ball(1, (v) => { v.x *= base ? 6.4 : 5.9; v.y = Math.max(v.y * 4.6, -2.6); v.z *= base ? 9 : 8.6; }, 28, 16);
+    hip.add(mesh(shoeGeo, texMat(base ? footCanvas() : shoeCanvas(female)), 0, -17.4 - LEG, 2.6));
     root.add(hip);
     legs.push(hip);
   }
@@ -318,7 +356,7 @@ function build(look) {
   upper.position.y = LEG;
   root.add(upper);
   // 骨盆（褲子上半）
-  upper.add(mesh(lathe([[9.6, 14], [10.2, 17], [10, 23]], { sx: 1.08, sz: 0.8, steps: 6 }), mat(pants)));
+  upper.add(mesh(lathe([[base ? 10.6 : 9.6, 14], [base ? 10.8 : 10.2, 17], [10, 23]], { sx: 1.08, sz: 0.8, steps: 6 }), base ? texMat(shortsCanvas([0.3, 0.7])) : mat(pants)));
 
   // 軀幹（隨呼吸起伏）
   const torso = new THREE.Group();
@@ -328,6 +366,8 @@ function build(look) {
     torso.add(mesh(new THREE.CylinderGeometry(10.4, 10.4, 2.2, 24).scale(1.08, 1, 0.8), mat('#34527f'), 0, 22.6, 0));   // 褲頭
     torso.add(mesh(new THREE.BoxGeometry(2.2, 2.2, 1), mat('#d8ac4a'), 0, 22.6, 8.2));
     torso.add(mesh(lathe([[9.4, 25.5], [9.8, 27], [9.3, 33], [9.2, 39], [9.6, 43.5], [7.6, 47.5], [4.6, 49.5]], { sx: 1.1, sz: 0.8 }), texMat(teeCanvas())));
+  } else if (base) {
+    torso.add(mesh(lathe([[8.8, 21.5], [9, 26], [9.6, 33], [10.6, 40], [10.8, 44.5], [8.6, 47.5], [5, 49.5]], { sx: 1.16, sz: 0.78 }), texMat(bareTorsoCanvas())));
   } else {
     torso.add(mesh(lathe([[10.4, 20.5], [11.6, 23], [11.6, 31], [11.1, 38], [10.6, 43.5], [8.2, 47.5], [4.8, 49.5]], { sx: 1.15, sz: 0.82 }), texMat(hoodieCanvas())));
     // 帽兜：圍在脖子後面的一圈
@@ -344,11 +384,14 @@ function build(look) {
   const arms = [];
   for (const s of [-1, 1]) {
     const shoulder = new THREE.Group();
-    shoulder.position.set(s * (female ? 11.6 : 14.6), 44.2, 0);
+    shoulder.position.set(s * (female ? 11.6 : base ? 14 : 14.6), 44.4, 0);
     const arm = new THREE.Group();
-    arm.rotation.z = s * (female ? 0.16 : 0.2);
+    arm.rotation.z = s * (female ? 0.16 : base ? 0.3 : 0.2);
     shoulder.add(arm);
-    if (female) {
+    if (base) {
+      arm.add(mesh(capsule(4.4, 9), skin, 0, -8.4, 0));
+      arm.add(mesh(new THREE.SphereGeometry(5, 14, 10), skin, 0, -18.8, 0.6));     // 拳頭
+    } else if (female) {
       arm.add(mesh(capsule(3.9, 3), mat('#ebe8e7'), 0, -4.6, 0));      // 短袖
       arm.add(mesh(capsule(3.2, 9), skin, 0, -11.5, 0));
       arm.add(mesh(new THREE.SphereGeometry(3.7, 14, 10), skin, 0, -19.2, 0.4));
@@ -364,18 +407,21 @@ function build(look) {
 
   // 頭（脖子為支點）
   const head = new THREE.Group();
-  head.position.set(0, 50.5, 0);
+  head.position.set(0, base ? 49 : 50.5, 0);
   torso.add(head);
   const faceOpen = texMat(faceCanvas({ female, blink: false })), faceBlink = texMat(faceCanvas({ female, blink: true }));
   const headMesh = mesh(headGeometry(), faceOpen, 0, 17.5, 0);
   head.add(headMesh);
   for (const s of [-1, 1]) {
-    const ear = mesh(new THREE.SphereGeometry(3.6, 12, 10), s < 0 ? skin : skinSh, s * 21.3, 15, 0.5);
-    ear.scale.set(0.55, 1, 0.8);
+    // 男生的耳朵從亂髮下面露出來，所以大一點、低一點
+    const ear = female ? mesh(new THREE.SphereGeometry(3.6, 12, 10), s < 0 ? skin : skinSh, s * 21.3, 14, 0.5)
+      : mesh(new THREE.SphereGeometry(4.6, 12, 10), s < 0 ? skin : skinSh, s * 22.4, 11.5, 0.5);
+    ear.scale.set(female ? 0.55 : 0.6, 1, female ? 0.8 : 0.85);
     head.add(ear);
   }
   const hair = female ? hairFemale(pal) : hairMale(pal);
   hair.position.set(0, 17.5, 0);
+  if (!female) hair.scale.set(0.97, 1.1, 1);   // 男生的頭髮高一點
   head.add(hair);
 
   // 腳下的影子
@@ -398,7 +444,7 @@ export class Character3D {
 
   setLook(look) {
     if (this.model) this.group.remove(this.model.root);
-    this.model = build({ gender: '男', color: '深棕', ...look });
+    this.model = build({ gender: '男', color: '深棕', outfit: 'base', ...look });
     this.group.add(this.model.root);
   }
 

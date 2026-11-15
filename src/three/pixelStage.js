@@ -15,6 +15,7 @@ uniform vec2 texel;
 uniform vec3 ink;
 uniform float depthEdge;
 uniform float normalEdge;
+uniform float outlinePx;
 varying vec2 vUv;
 void main() {
   vec4 c = texture2D(tColor, vUv);
@@ -29,7 +30,8 @@ void main() {
     vec4 nc = texture2D(tColor, vUv + offs[i]);
     float nd = texture2D(tDepth, vUv + offs[i]).r;
     vec4 nn = texture2D(tNormal, vUv + offs[i]);
-    if (c.a < 0.9 && nc.a > 0.9) outline = 1.0;                              // 外輪廓：畫在角色外面一格
+    if (c.a < 0.9 && nc.a > 0.9) outline = 1.0;                              // 外輪廓：畫在角色外面
+    if (c.a < 0.9 && outlinePx > 1.5 && texture2D(tColor, vUv + offs[i] * 2.0).a > 0.9) outline = 1.0;   // 第二格，讓外輪廓更粗
     if (c.a > 0.9 && nc.a > 0.9) {
       if (d - nd > depthEdge) outline = 1.0;                                 // 被前面的東西擋住的邊
       else if (nn.a > 0.5 && dot(n, nn.rgb * 2.0 - 1.0) < normalEdge && d >= nd) crease = 1.0;   // 表面轉折
@@ -45,7 +47,7 @@ void main() {
 
 export class PixelStage {
   // w、h：低解析度（像素格數）；pxPerUnit：1 個世界單位畫成幾格；lookY：鏡頭對準的高度
-  constructor(canvas, { w, h, pxPerUnit = 1, lookY = 45, pitch = 0.14 } = {}) {
+  constructor(canvas, { w, h, pxPerUnit = 1, lookY = 45, pitch = 0.14, outlinePx = 2 } = {}) {
     this.w = w; this.h = h;
     this.renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: false, preserveDrawingBuffer: true });
     this.renderer.setPixelRatio(1);
@@ -76,7 +78,7 @@ export class PixelStage {
       uniforms: {
         tColor: { value: this.target.texture }, tDepth: { value: this.target.depthTexture }, tNormal: { value: this.normalTarget.texture },
         texel: { value: new THREE.Vector2(1 / w, 1 / h) }, ink: { value: new THREE.Color('#17141b') },
-        depthEdge: { value: 0.004 }, normalEdge: { value: 0.45 },
+        depthEdge: { value: 0.004 }, normalEdge: { value: 0.45 }, outlinePx: { value: outlinePx },
       },
       vertexShader: POST_VERT, fragmentShader: POST_FRAG, transparent: true, depthTest: false, depthWrite: false,
     });
