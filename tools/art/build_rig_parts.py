@@ -37,8 +37,6 @@ def build(name, parts, hands, synth=None, clear=()):
     out = {}
     for pname, (inside, pivot) in parts.items():
         pts = {(x, y): px[x, y][:3] for y in range(H) for x in range(W) if px[x, y][3] > 0 and inside(x, y)}
-        if pname not in ('head', 'torso'):          # 手腳除了輪廓以外統一成膚色（去掉取樣雜點）
-            pts = {k: (ink if is_ink(v) else skin) for k, v in pts.items()}
         if synth:
             synth(pname, pts, ink, skin)
         xs = [p[0] for p in pts]; ys = [p[1] for p in pts]

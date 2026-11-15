@@ -18,10 +18,9 @@ function apply() {
   rig.setView(state.view);
   rig.setLook({ gender: state.gender, color: state.hair });
   const it = (type) => ({ type, tag: state.gear, tier: state.tier, rarity: state.rarity });
-  const sets = { bare: [{}, true], casual: [{}, false] };
+  const sets = { bare: [{}, true] };
   const [equip, bare] = sets[state.gear] || [{ weapon: it('weapon'), head: it('head'), body: it('body'), feet: it('feet') }, false];
   rig.setEquip(equip, bare);
-  rig.weapon = !sets[state.gear];
 }
 function play(name) {
   if (ANIMS[name].loop) base = name;
@@ -38,7 +37,7 @@ function renderOptions() {
   seg('view', [['side', '側面'], ['front', '正面']], () => state.view, (v) => { state.view = v; apply(); });
   seg('gender', Object.entries(GENDERS), () => state.gender, (v) => { state.gender = v; apply(); });
   seg('hair', Object.entries(HAIR_COLORS).map(([k, v]) => [k, k, v[1]]), () => state.hair, (v) => { state.hair = v; apply(); });
-  seg('gear', [['bare', '基本身體'], ['casual', '便服'], ...D.TAG_KEYS.map((t) => [t, D.TAGS[t].n])], () => state.gear, (v) => { state.gear = v; apply(); });
+  seg('gear', [['bare', '沒穿裝備'], ...D.TAG_KEYS.map((t) => [t, D.TAGS[t].n])], () => state.gear, (v) => { state.gear = v; apply(); });
   seg('rarity', D.RARITY.map((r, i) => [i, r.n, r.color]), () => state.rarity, (v) => { state.rarity = +v; apply(); });
   seg('tier', [1, 2, 3, 4, 5].map((t) => [t, 'T' + t]), () => state.tier, (v) => { state.tier = +v; apply(); });
 }
