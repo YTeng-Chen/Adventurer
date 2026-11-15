@@ -73,4 +73,4 @@ tools/art/          參考圖與零件產生工具（Python）
 
 ## 點子苗圃同步
 
-`IDEA_MAP.md` 可以匯入點子苗圃的「實作」分支。更新方式寫在 `.claude/skills/idea-map-sync/SKILL.md`。
+合併進 main 之後，直接更新點子苗圃心智圖裡這個專案的「實作」分支（不再產生 `IDEA_MAP.md`）。做法寫在 `.claude/skills/idea-map-sync/SKILL.md`。
