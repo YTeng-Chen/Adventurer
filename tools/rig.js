@@ -1,18 +1,18 @@
 // 骨架動畫原型頁：播放動作、切換裝備，旁邊放一隻史萊姆當目標。
-import { Rig, ANIMS, SIZE } from '../src/rig/rig.js';
+import { Rig, ANIMS } from '../src/rig/rig.js';
 import { sprites as SP } from '../src/ui/sprites.js';
 
 const W = 240, H = 160, GROUND = 144, HERO_X = 84, FOE_X = 178;
 const cv = document.getElementById('stage'), ctx = cv.getContext('2d');
 cv.width = W; cv.height = H;
 const params = new URLSearchParams(location.search);
-const state = { anim: params.get('anim') || 'idle', gear: params.get('gear') ?? 'leather', weapon: params.get('weapon') !== '0', bones: false };
+const state = { anim: params.get('anim') || 'idle', gear: params.get('gear') ?? 'leather', weapon: params.get('weapon') !== '0', view: params.get('view') || 'side' };
 const frozen = params.get('t') !== null ? +params.get('t') : null;   // 截圖用：停在動作的某個時間點（0–1）
-const rig = new Rig();
+const rig = new Rig(state.view);
 const slime = SP.enemyGrid('slime', '#62c46a');
 let start = performance.now(), base = 'idle';
 
-function apply() { rig.setGear(state.gear || null); rig.weapon = state.weapon; }
+function apply() { if (rig.view !== state.view) rig.setView(state.view); rig.setGear(state.gear || null); rig.weapon = state.weapon; }
 function play(name) {
   if (ANIMS[name].loop) base = name;
   state.anim = name; start = performance.now();
@@ -25,6 +25,7 @@ function seg(id, items, cur, onPick) {
 }
 function renderOptions() {
   seg('anims', Object.entries(ANIMS).map(([k, a]) => [k, a.name]), () => state.anim, (v) => play(v));
+  seg('view', [['side', '側面'], ['front', '正面']], () => state.view, (v) => { state.view = v; apply(); });
   seg('gear', [['', '基本身體'], ['leather', '冒險者皮甲']], () => state.gear, (v) => { state.gear = v; apply(); });
   seg('weapon', [['1', '拿劍'], ['0', '空手']], () => (state.weapon ? '1' : '0'), (v) => { state.weapon = v === '1'; apply(); });
 }
@@ -59,4 +60,4 @@ function frame(now) {
 apply();
 renderOptions();
 requestAnimationFrame(frame);
-window.__rig = { state, play, SIZE };
+window.__rig = { state, play };

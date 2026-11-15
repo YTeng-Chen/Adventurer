@@ -1,12 +1,13 @@
 // 2D 骨架動畫：角色拆成零件（頭、身體、左右手、左右腿），掛在關節上；動作是讓關節轉動、移動。
 // 一件裝備只要畫對應零件的圖，所有動作都能用；一個動作做一次，所有裝備都適用。
 // 全部畫在低解析度的 canvas 上（不做平滑），旋轉後仍然是一格一格的像素。
-// 座標：零件用參考圖的像素座標（60×109，腳底在 y=108）；角度單位是度，正值為順時針，0 度表示自然下垂。
+// 座標：零件用參考圖的像素座標（正面 60×109、側面 50×99）；角度單位是度，正值為順時針，0 度表示自然下垂。
 import { RIG_PARTS } from './parts-data.js';
 
-const P = RIG_PARTS;
 const RAD = Math.PI / 180;
-export const SIZE = { w: P.W, h: P.H, footX: 30, footY: 108 };
+const INK = RIG_PARTS.front.ink;
+// 兩種視角：正面（六個零件）與側面（朝右；頭、身體、靠近鏡頭的手和腿，後面的手腳是調暗的複製品）
+const FOOT = { front: [30, 108], side: [27, 98] };
 
 // ---------- 零件圖 ----------
 function rgb(hex) { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
@@ -17,8 +18,9 @@ function kind(hex) {   // 這格是輪廓、皮膚，還是其他（頭髮、短
   return 'other';
 }
 function makeCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
-// 把零件畫成 canvas；paint(x, y, 顏色, 種類) 可以回傳新的顏色（做裝備用），回傳 null 表示這格不畫
-function partCanvas(name, paint) {
+const darker = (hex, f) => { const [r, g, b] = rgb(hex); return `rgb(${Math.round(r * f)},${Math.round(g * f)},${Math.round(b * f)})`; };
+// 把零件畫成 canvas；paint(x, y, 顏色, 種類) 可以回傳新的顏色（做裝備用），回傳 null 表示這格不畫；dim 是整體調暗（後面的手腳）
+function partCanvas(P, name, paint, dim = 1) {
   const part = P.parts[name];
   const c = makeCanvas(part.rows[0].length, part.rows.length), ctx = c.getContext('2d');
   part.rows.forEach((row, j) => [...row].forEach((ch, i) => {
@@ -26,69 +28,95 @@ function partCanvas(name, paint) {
     const hex = P.pal[ch];
     const col = paint ? paint(part.x + i, part.y + j, hex, kind(hex)) : hex;
     if (!col) return;
-    ctx.fillStyle = col; ctx.fillRect(i, j, 1, 1);
+    ctx.fillStyle = dim < 1 && col[0] === '#' ? darker(col, dim) : col; ctx.fillRect(i, j, 1, 1);
   }));
   return c;
 }
 
 // ---------- 裝備：照身體零件的形狀上色，所以一定合身 ----------
+const LEATHER = { vest: '#a8683a', vestL: '#bd7b45', vestD: '#8a5230', belt: '#5a3520', gold: '#f2c14e', trim: '#c98a4a', pad: '#aac2dc', padL: '#d5e2ef',
+  glove: '#6e4a2e', pants: '#3d4470', pantsD: '#343a62', pantsL: '#5d6eaa', boot: '#84502c', bootD: '#6e4226', sole: '#5e3a1e', band: '#d0473f', bandL: '#e8736a', bandD: '#7a2630' };
 const GEAR_SETS = {
-  // 冒險者皮甲：皮背心、斜背帶、護肩、手套、長褲、皮靴、紅頭巾
+  // 冒險者皮甲：皮背心、斜背帶、護肩、手套、長褲、皮靴、紅頭巾。正面與側面各有一套上色規則（座標不同）。
   leather: {
-    torso(x, y, hex, k) {
-      if (k === 'ink') return null;
-      if (y >= 74) return k === 'other' ? (hex === '#ffffff' || rgb(hex)[0] > 200 ? '#5d6eaa' : x > 30 ? '#343a62' : '#3d4470') : null;   // 短褲 → 長褲上半
-      if (k !== 'skin') return null;
-      if (y <= 52) return null;                                              // 脖子
-      if (y <= 59 && Math.abs(x - 29.5) <= (60 - y) * 0.55) return null;       // V 領
-      if (y >= 70) return x >= 28 && x <= 31 ? '#f2c14e' : '#5a3520';          // 腰帶與扣環
-      if (Math.abs(x - 20 - (y - 55)) <= 1) return '#5a3520';                  // 斜背帶
-      if (y === 53 || y === 54) return '#c98a4a';
-      return x >= 33 ? '#8a5230' : x <= 23 ? '#bd7b45' : '#a8683a';
+    front: {
+      torso(x, y, hex, k) {
+        const C = LEATHER;
+        if (k === 'ink') return null;
+        if (y >= 74) return k === 'other' ? (rgb(hex)[0] > 200 ? C.pantsL : x > 30 ? C.pantsD : C.pants) : null;   // 短褲 → 長褲上半
+        if (k !== 'skin' || y <= 52) return null;
+        if (y <= 59 && Math.abs(x - 29.5) <= (60 - y) * 0.55) return null;       // V 領
+        if (y >= 70) return x >= 28 && x <= 31 ? C.gold : C.belt;                // 腰帶與扣環
+        if (Math.abs(x - 20 - (y - 55)) <= 1) return C.belt;                     // 斜背帶
+        if (y === 53 || y === 54) return C.trim;
+        return x >= 33 ? C.vestD : x <= 23 ? C.vestL : C.vest;
+      },
+      arm(x, y, hex, k) {
+        const C = LEATHER;
+        if (k !== 'skin') return null;
+        if (y <= 64) return y <= 60 ? C.padL : C.pad;
+        if (y <= 71) return C.vestD;
+        return y === 72 ? C.trim : C.glove;
+      },
+      leg(x, y, hex, k) {
+        const C = LEATHER;
+        if (k !== 'skin') return null;
+        if (y <= 92) return x % 15 > 8 ? C.pantsD : C.pants;
+        if (y <= 94) return C.trim;
+        return y >= 104 ? C.sole : x % 15 > 9 ? C.bootD : C.boot;
+      },
+      head(x, y, hex, k) {   // 紅頭巾：綁在額頭上，髮絲的黑線蓋在上面；右邊打結垂下
+        const C = LEATHER;
+        if (x >= 48 && x <= 51 && y >= 29 && y <= 37) return x === 48 || y === 37 ? C.bandD : y <= 31 ? C.bandL : C.band;
+        if (x < 11 || x > 48 || k === 'ink') return null;
+        const top = 27 + Math.round(((x - 29.5) / 19) ** 2 * 2);
+        return y === top ? C.bandL : y === top + 1 || y === top + 2 ? C.band : y === top + 3 ? C.bandD : null;
+      },
     },
-    arm(x, y, hex, k) {
-      if (k !== 'skin') return null;
-      if (y <= 64) return y <= 60 ? '#d5e2ef' : '#aac2dc';                     // 護肩
-      if (y <= 71) return '#8a5230';                                           // 袖子
-      if (y === 72) return '#c98a4a';
-      return '#6e4a2e';                                                        // 手套
-    },
-    leg(x, y, hex, k) {
-      if (k !== 'skin') return null;
-      if (y <= 92) return x % 15 > 8 ? '#343a62' : '#3d4470';                  // 長褲
-      if (y <= 94) return '#c98a4a';                                           // 靴口
-      if (y >= 104) return '#5e3a1e';
-      return x % 15 > 9 ? '#6e4226' : '#84502c';                               // 皮靴
-    },
-    head(x, y, hex, k) {                                                       // 紅頭巾：綁在額頭上，髮絲的黑線蓋在上面；右邊打結垂下
-      if (x >= 48 && x <= 51 && y >= 29 && y <= 37) return x === 48 || y === 37 ? '#7a2630' : y <= 31 ? '#e8736a' : '#d0473f';
-      if (x < 11 || x > 48 || k === 'ink') return null;
-      const top = 27 + Math.round(((x - 29.5) / 19) ** 2 * 2);                 // 兩側稍微往下彎
-      if (y === top) return '#e8736a';
-      if (y === top + 1 || y === top + 2) return '#d0473f';
-      if (y === top + 3) return '#7a2630';
-      return null;
+    side: {
+      torso(x, y, hex, k) {
+        const C = LEATHER;
+        if (k === 'ink') return null;
+        if (y >= 68) return k === 'other' ? C.pants : k === 'skin' ? C.pantsL : null;   // 短褲（含白條）→ 長褲上半
+        if (k === 'other' && y <= 47) return null;                                // 脖子的陰影
+        if (y <= 48) return null;
+        if (y >= 63) return x >= 30 && x <= 32 ? C.gold : C.belt;
+        if (y <= 50) return C.trim;
+        return x >= 30 ? C.vestL : C.vest;
+      },
+      arm(x, y, hex, k) {
+        const C = LEATHER;
+        if (k === 'ink') return null;
+        if (y <= 57) return y <= 54 ? C.padL : C.pad;
+        if (y <= 64) return C.vestD;
+        return y === 65 ? C.trim : C.glove;
+      },
+      leg(x, y, hex, k) {
+        const C = LEATHER;
+        if (k !== 'skin') return null;
+        if (y <= 85) return C.pants;
+        if (y <= 87) return C.trim;
+        return y >= 95 ? C.sole : x >= 30 ? C.boot : C.bootD;
+      },
+      head(x, y, hex, k) {   // 紅頭巾：繞過額頭到後腦，後面打結垂下
+        const C = LEATHER;
+        if (x >= 4 && x <= 7 && y >= 24 && y <= 33) return x === 7 || y === 33 ? C.bandD : y <= 26 ? C.bandL : C.band;
+        if (x < 7 || x > 37 || k === 'ink') return null;
+        const top = 22 + Math.round((x - 8) / 12);
+        return y === top ? C.bandL : y === top + 1 || y === top + 2 ? C.band : y === top + 3 ? C.bandD : null;
+      },
     },
   },
 };
-function gearCanvases(setName) {
-  const set = GEAR_SETS[setName];
-  if (!set) return {};
-  return {
-    head: partCanvas('head', set.head), torso: partCanvas('torso', set.torso),
-    armL: partCanvas('armL', set.arm), armR: partCanvas('armR', set.arm),
-    legL: partCanvas('legL', set.leg), legR: partCanvas('legR', set.leg),
-  };
-}
 // 劍：握柄中心是支點，劍身朝上
 function swordCanvas() {
   const c = makeCanvas(13, 44), x = c.getContext('2d');
   const r = (col, px, py, w, h) => { x.fillStyle = col; x.fillRect(px, py, w, h); };
-  r(P.ink, 3, 3, 7, 30); r(P.ink, 4, 1, 5, 2); r(P.ink, 5, 0, 3, 1);                 // 劍身輪廓
+  r(INK, 3, 3, 7, 30); r(INK, 4, 1, 5, 2); r(INK, 5, 0, 3, 1);                 // 劍身輪廓
   r('#eef3f8', 4, 3, 2, 29); r('#b9c7d8', 6, 2, 1, 30); r('#8fa0b6', 7, 3, 2, 29);
   r('#eef3f8', 5, 1, 1, 2); r('#b9c7d8', 6, 1, 1, 1); r('#8fa0b6', 7, 2, 1, 1);
-  r(P.ink, 0, 32, 13, 5); r('#f2c14e', 1, 33, 11, 2); r('#b9842a', 1, 35, 11, 1);     // 護手
-  r(P.ink, 4, 37, 5, 7); r('#84502c', 5, 37, 2, 5); r('#5e3a1e', 7, 37, 1, 5); r('#f2c14e', 5, 42, 3, 1);   // 握柄
+  r(INK, 0, 32, 13, 5); r('#f2c14e', 1, 33, 11, 2); r('#b9842a', 1, 35, 11, 1);     // 護手
+  r(INK, 4, 37, 5, 7); r('#84502c', 5, 37, 2, 5); r('#5e3a1e', 7, 37, 1, 5); r('#f2c14e', 5, 42, 3, 1);   // 握柄
   return { canvas: c, pivot: [6.5, 39.5] };
 }
 
@@ -139,59 +167,89 @@ export const ANIMS = {
 };
 
 // ---------- 骨架 ----------
+const FAR = 0.74;   // 側面時，後面的手腳調暗
 export class Rig {
-  constructor() {
-    this.body = Object.fromEntries(Object.keys(P.parts).map((k) => [k, partCanvas(k)]));
+  constructor(view = 'side') {
     this.sword = swordCanvas();
-    this.gear = {};
     this.weapon = true;
+    this.gearName = null;
+    this.setView(view);
   }
-  setGear(name) { this.gear = name ? gearCanvases(name) : {}; }
+  setView(view) {
+    this.view = view;
+    const P = this.P = RIG_PARTS[view];
+    this.foot = FOOT[view];
+    this.body = Object.fromEntries(Object.keys(P.parts).map((k) => [k, partCanvas(P, k)]));
+    if (view === 'side') { this.body.armL = partCanvas(P, 'armR', null, FAR); this.body.legL = partCanvas(P, 'legR', null, FAR); }
+    this.setGear(this.gearName);
+  }
+  setGear(name) {
+    this.gearName = name;
+    const set = name && GEAR_SETS[name] && GEAR_SETS[name][this.view], P = this.P;
+    if (!set) { this.gear = {}; return; }
+    const g = { head: partCanvas(P, 'head', set.head), torso: partCanvas(P, 'torso', set.torso), armR: partCanvas(P, 'armR', set.arm), legR: partCanvas(P, 'legR', set.leg) };
+    if (this.view === 'side') { g.armL = partCanvas(P, 'armR', set.arm, FAR); g.legL = partCanvas(P, 'legR', set.leg, FAR); }
+    else { g.armL = partCanvas(P, 'armL', set.arm); g.legL = partCanvas(P, 'legL', set.leg); }
+    this.gear = g;
+  }
+  // 側面的後手、後腿沿用前手、前腿的位置與支點
+  geo(name) { return this.P.parts[name] || this.P.parts[name === 'armL' ? 'armR' : 'legR']; }
 
   // 把一個零件畫在目前的座標系上，繞自己的支點轉 deg 度；inner() 畫跟著它動的東西（例如手上的武器）
-  part(ctx, name, deg, inner) {
-    const part = P.parts[name], [px, py] = part.pivot;
+  part(ctx, name, deg, inner, dx = 0) {
+    const part = this.geo(name), [px, py] = part.pivot;
     ctx.save();
-    ctx.translate(Math.round(part.x + px), Math.round(part.y + py));
+    ctx.translate(Math.round(part.x + px) + dx, Math.round(part.y + py));
     ctx.rotate(Math.round(deg) * RAD);
     if (inner) inner();
     ctx.drawImage(this.body[name], -Math.round(px), -Math.round(py));
     if (this.gear[name]) ctx.drawImage(this.gear[name], -Math.round(px), -Math.round(py));
     ctx.restore();
   }
+  heldWeapon(ctx, pose) {
+    const a = this.P.parts.armR, hand = this.P.hands.armR;
+    ctx.save();
+    ctx.translate(Math.round(hand[0] - a.x - a.pivot[0]), Math.round(hand[1] - a.y - a.pivot[1]));
+    ctx.rotate(Math.round(pose.weapon) * RAD);
+    ctx.drawImage(this.sword.canvas, -Math.round(this.sword.pivot[0]), -Math.round(this.sword.pivot[1]));
+    ctx.restore();
+  }
 
   // 在 (ox, oy)（腳底中心）畫出角色
   draw(ctx, ox, oy, pose) {
+    const side = this.view === 'side';
+    // 側面時持劍的手自然往前伸，劍尖朝前上方（正面的姿勢是劍豎在身旁）
+    if (side) pose = { ...pose, armR: pose.armR - 24, weapon: pose.weapon + 38 };
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    ctx.translate(Math.round(ox - SIZE.footX + pose.x), Math.round(oy - SIZE.footY + pose.y));
-    this.part(ctx, 'legL', pose.legL);
+    ctx.translate(Math.round(ox - this.foot[0] + pose.x), Math.round(oy - this.foot[1] + pose.y));
+    this.part(ctx, 'legL', pose.legL, null, side ? -1 : 0);
     this.part(ctx, 'legR', pose.legR);
     // 上半身：整體上下起伏，並繞腰部前後傾
-    const t = P.parts.torso;
+    const t = this.P.parts.torso;
     ctx.translate(0, pose.bodyY);
     ctx.translate(Math.round(t.x + t.pivot[0]), Math.round(t.y + t.pivot[1]));
     ctx.rotate(Math.round(pose.torso) * RAD);
     ctx.translate(-Math.round(t.x + t.pivot[0]), -Math.round(t.y + t.pivot[1]));
-    this.part(ctx, 'torso', 0);
-    this.part(ctx, 'armL', pose.armL);
-    this.part(ctx, 'head', pose.head);
-    this.part(ctx, 'armR', pose.armR, this.weapon ? () => {
-      // 武器握在手上，畫在手臂下面，拳頭蓋住握柄
-      const a = P.parts.armR, hand = P.hands.armR;
-      ctx.save();
-      ctx.translate(Math.round(hand[0] - a.x - a.pivot[0]), Math.round(hand[1] - a.y - a.pivot[1]));
-      ctx.rotate(Math.round(pose.weapon) * RAD);
-      ctx.drawImage(this.sword.canvas, -Math.round(this.sword.pivot[0]), -Math.round(this.sword.pivot[1]));
-      ctx.restore();
-    } : null);
+    const weapon = this.weapon ? () => this.heldWeapon(ctx, pose) : null;   // 武器畫在手臂下面，拳頭蓋住握柄
+    if (side) {
+      this.part(ctx, 'armL', pose.armL, null, 3);       // 後面的手：往前錯開一點，從身體後面露出來
+      this.part(ctx, 'torso', 0);
+      this.part(ctx, 'head', pose.head);
+      this.part(ctx, 'armR', pose.armR, weapon);
+    } else {
+      this.part(ctx, 'torso', 0);
+      this.part(ctx, 'armL', pose.armL);
+      this.part(ctx, 'head', pose.head);
+      this.part(ctx, 'armR', pose.armR, weapon);
+    }
     ctx.restore();
   }
 
   // 特效：刀光、衝擊波、火花（都用一格一格的像素畫）
   drawFx(ctx, ox, oy, pose) {
-    const sh = P.parts.armR;
-    const cx = ox - SIZE.footX + pose.x + sh.x + sh.pivot[0], cy = oy - SIZE.footY + pose.y + pose.bodyY + sh.y + sh.pivot[1];
+    const sh = this.P.parts.armR;
+    const cx = ox - this.foot[0] + pose.x + sh.x + sh.pivot[0], cy = oy - this.foot[1] + pose.y + pose.bodyY + sh.y + sh.pivot[1];
     for (const f of pose.fx) {
       if (f.type === 'arc') {
         // 刀光：沿著揮砍的弧線，越靠近劍尖越亮、越寬；尾端變細變淡
