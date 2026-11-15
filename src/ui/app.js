@@ -6,7 +6,7 @@ import { items as I } from '../core/items.js';
 import { stats as S } from '../core/stats.js';
 import { save as store } from '../core/save.js';
 import { sprites as SP } from './sprites.js';
-import { Rig, ANIMS, HAIR_COLORS, DEFAULT_HAIR } from '../rig/rig.js';
+import { Rig, ANIMS, HAIR_COLORS, DEFAULT_HAIR, GENDERS } from '../rig/rig.js';
 
 export function startUI(bus) {
   const $ = (q) => document.querySelector(q);
@@ -409,29 +409,31 @@ export function startUI(bus) {
   function drawLook(cv, view, look, equip, scale) {
     const rig = new Rig(view);
     rig.setLook(look); rig.setEquip(equip || {});
-    const w = view === 'front' ? 76 : 70, h = 116;
+    const w = view === 'front' ? 76 : 70, h = 118;
     const ctx = setupCanvas(cv, w * scale, h * scale);
     ctx.scale(scale, scale);
-    rig.draw(ctx, view === 'front' ? 34 : 28, h - 3, ANIMS.idle.pose(0));
+    rig.draw(ctx, view === 'front' ? 38 : 30, h - 3, ANIMS.idle.pose(0));
   }
   function openLook(first) {
     lookFirst = first;
     const cur = s.appearance || {};
-    lookDraft = { color: HAIR_COLORS[cur.color] ? cur.color : DEFAULT_HAIR };
+    lookDraft = { gender: GENDERS[cur.gender] ? cur.gender : 'm', color: HAIR_COLORS[cur.color] ? cur.color : DEFAULT_HAIR };
     renderLook();
   }
   function renderLook() {
     const d = lookDraft, m = $('#modal');
     m.hidden = false;
     const colors = Object.entries(HAIR_COLORS).map(([k, v]) => `<button type="button" class="swatch" data-act="look-c" data-k="${k}" aria-pressed="${d.color === k}"><i style="background:${v[1]}"></i>${k}</button>`).join('');
+    const genders = Object.entries(GENDERS).map(([k, n]) => `<button type="button" class="swatch" data-act="look-g" data-k="${k}" aria-pressed="${d.gender === k}">${n}</button>`).join('');
     m.innerHTML = `<div class="modal-card look-card" role="dialog" aria-modal="true" aria-labelledby="lookTitle">
       <h2 id="lookTitle">${lookFirst ? '建立你的冒險者' : '更換外觀'}</h2>
-      ${lookFirst ? '<p class="hint">選一個髮色，之後可以在角色面板的「更換外觀」修改。</p>' : ''}
+      ${lookFirst ? '<p class="hint">選擇性別和髮色，之後可以在角色面板的「更換外觀」修改。</p>' : ''}
       <div class="look-grid">
         <div class="look-preview"><canvas id="lookBig" aria-label="角色正面"></canvas><canvas id="lookSide" aria-label="角色側面"></canvas></div>
         <div class="look-options">
+          <span class="mini-h">性別</span><div class="row swatches">${genders}</div>
           <span class="mini-h">髮色</span><div class="row swatches">${colors}</div>
-          <p class="hint">目前只有男生和這個髮型。女生角色和其他髮型的圖還在準備中，完成後會出現在這裡。</p>
+          <p class="hint">目前男女各有一種髮型，其他髮型的圖還在準備中。</p>
         </div>
       </div>
       <div class="row"><button class="btn" data-act="look-ok">${lookFirst ? '開始冒險' : '儲存外觀'}</button>${lookFirst ? '' : '<button class="btn ghost" data-act="look-cancel">取消</button>'}</div></div>`;
@@ -525,6 +527,7 @@ export function startUI(bus) {
       case 'b-close': closeBattle(); return;
       case 'modal-close': $('#modal').hidden = true; $('#modal').innerHTML = ''; break;
       case 'look': openLook(false); return;
+      case 'look-g': lookDraft.gender = k; renderLook(); return;
       case 'look-c': lookDraft.color = k; renderLook(); return;
       case 'look-ok': closeLook(true); return;
       case 'look-cancel': closeLook(false); return;

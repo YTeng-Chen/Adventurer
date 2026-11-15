@@ -1,5 +1,5 @@
 // 骨架動畫原型頁：播放動作、切換視角、髮色與裝備，旁邊放一隻史萊姆當目標。
-import { Rig, ANIMS, HAIR_COLORS } from '../src/rig/rig.js';
+import { Rig, ANIMS, HAIR_COLORS, GENDERS } from '../src/rig/rig.js';
 import { sprites as SP } from '../src/ui/sprites.js';
 import { data as D } from '../src/core/data.js';
 
@@ -7,7 +7,7 @@ const W = 240, H = 160, GROUND = 144, HERO_X = 84, FOE_X = 178;
 const cv = document.getElementById('stage'), ctx = cv.getContext('2d');
 cv.width = W; cv.height = H;
 const params = new URLSearchParams(location.search);
-const state = { anim: params.get('anim') || 'idle', view: params.get('view') || 'side', hair: params.get('hair') || '深棕',
+const state = { anim: params.get('anim') || 'idle', view: params.get('view') || 'side', gender: params.get('gender') || 'm', hair: params.get('hair') || '深棕',
   gear: params.get('gear') ?? 'blade', rarity: +(params.get('rarity') ?? 3), tier: +(params.get('tier') ?? 3) };
 const frozen = params.get('t') !== null ? +params.get('t') : null;   // 截圖用：停在動作的某個時間點（0–1）
 const rig = new Rig(state.view);
@@ -16,7 +16,7 @@ let start = performance.now(), base = 'idle', blinkAt = 2;
 
 function apply() {
   rig.setView(state.view);
-  rig.setLook({ color: state.hair });
+  rig.setLook({ gender: state.gender, color: state.hair });
   const it = (type) => ({ type, tag: state.gear, tier: state.tier, rarity: state.rarity });
   const sets = { bare: [{}, true], casual: [{}, false] };
   const [equip, bare] = sets[state.gear] || [{ weapon: it('weapon'), head: it('head'), body: it('body'), feet: it('feet') }, false];
@@ -36,6 +36,7 @@ function seg(id, items, cur, onPick) {
 function renderOptions() {
   seg('anims', Object.entries(ANIMS).map(([k, a]) => [k, a.name]), () => state.anim, (v) => play(v));
   seg('view', [['side', '側面'], ['front', '正面']], () => state.view, (v) => { state.view = v; apply(); });
+  seg('gender', Object.entries(GENDERS), () => state.gender, (v) => { state.gender = v; apply(); });
   seg('hair', Object.entries(HAIR_COLORS).map(([k, v]) => [k, k, v[1]]), () => state.hair, (v) => { state.hair = v; apply(); });
   seg('gear', [['bare', '基本身體'], ['casual', '便服'], ...D.TAG_KEYS.map((t) => [t, D.TAGS[t].n])], () => state.gear, (v) => { state.gear = v; apply(); });
   seg('rarity', D.RARITY.map((r, i) => [i, r.n, r.color]), () => state.rarity, (v) => { state.rarity = +v; apply(); });

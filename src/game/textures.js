@@ -63,7 +63,7 @@ export class RigHero {
   // speed > 1 會播得比較快（戰鬥紀錄播得快的時候用）
   play(name, speed = 1) { this.anim = name; this.t0 = this.scene.time.now; this.speed = speed; }
   flash(ms = 110) { this.flashUntil = this.scene.time.now + ms; }
-  get topY() { return this.groundY - 100; }
+  get topY() { return this.groundY - this.rig.height - 1; }
 
   update(time) {
     let anim = ANIMS[this.anim];

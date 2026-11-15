@@ -1,26 +1,42 @@
 // 2D 骨架動畫：角色拆成零件（頭、身體、上臂、前臂、大腿、小腿），掛在關節上；動作是讓關節轉動、移動。
 // 一件裝備只要照零件的形狀上色，所有動作都能用；一個動作做一次，所有裝備都適用。
 // 全部畫在低解析度的 canvas 上（不做平滑），旋轉後仍然是一格一格的像素。
-// 座標：零件用參考圖的像素座標（正面 60×109、側面 50×99）；角度單位是度，正值為順時針，0 度表示自然下垂。
+// 座標：零件用參考圖的像素座標（男生正面 60×109、側面 50×99；女生正面 53×111、側面 48×110）；角度單位是度，正值為順時針，0 度表示自然下垂。
+// 性別：'m' 男、'f' 女，各有自己的零件圖與身體位置（LM）；動作共用。
 // 兩種視角：側面（朝右；戰鬥與掛機用，後面的手腳是調暗的複製品）與正面（角色建立與預覽用）。
 import { RIG_PARTS } from './parts-data.js';
 import { gearMats } from '../art/palette.js';
 import { CHIBI } from '../art/chibi-data.js';
 
 const RAD = Math.PI / 180;
-const INK = RIG_PARTS.front.ink;
-const FOOT = { front: [30, 108], side: [27, 98] };
+const INK = RIG_PARTS.m.front.ink;
 export const HAIR_COLORS = CHIBI.hairColors;
 export const DEFAULT_HAIR = '深棕';   // 參考圖原本的髮色，不重新上色
+export const GENDERS = { m: '男生', f: '女生' };
 
-// 各視角的身體位置（像素列）：衣服與裝備照這些位置上色
+// 各性別、各視角的身體位置（像素列）：衣服與裝備照這些位置上色
+// foot：腳底中心；crop：短版上衣的下緣（露出腰）；band：頭帶的位置
 const LM = {
-  front: { cx: 29.5, top: 53, belt: 70, shorts: 74, pad: 64, glove: 73, robe: 92, boot: 93, sole: 104,
-    light: (x) => x <= 23, dark: (x) => x >= 33, buckle: (x) => x >= 28 && x <= 31, center: (x) => x === 29 || x === 30,
-    eyes: [[16, 36, 23, 43], [32, 36, 40, 43]], blinkY: 42 },
-  side: { cx: 26, top: 49, belt: 63, shorts: 66, pad: 57, glove: 66, robe: 85, boot: 86, sole: 95,
-    light: (x) => x >= 30, dark: (x) => x <= 21, buckle: (x) => x >= 31 && x <= 32, center: (x) => x >= 32,
-    eyes: [[30, 34, 38, 39]], blinkY: 38 },
+  m: {
+    front: { foot: [30, 108], cx: 29.5, top: 53, belt: 70, shorts: 74, pad: 64, glove: 73, robe: 92, boot: 93, sole: 104, dark2: 140,
+      light: (x) => x <= 23, dark: (x) => x >= 33, buckle: (x) => x >= 28 && x <= 31, center: (x) => x === 29 || x === 30,
+      eyes: [[16, 36, 23, 43], [32, 36, 40, 43]], blinkY: 42,
+      band: { x0: 11, x1: 48, knot: [48, 29, 51, 37], top: (x) => 27 + Math.round(((x - 29.5) / 19) ** 2 * 2), gem: (x) => Math.abs(x - 29.5) <= 1.5 } },
+    side: { foot: [27, 98], cx: 26, top: 49, belt: 63, shorts: 66, pad: 57, glove: 66, robe: 85, boot: 86, sole: 95, dark2: 140,
+      light: (x) => x >= 30, dark: (x) => x <= 21, buckle: (x) => x >= 31 && x <= 32, center: (x) => x >= 32,
+      eyes: [[30, 34, 38, 39]], blinkY: 38,
+      band: { x0: 7, x1: 37, knot: [4, 24, 7, 33], top: (x) => 22 + Math.round((x - 8) / 12), gem: (x) => x >= 35 } },
+  },
+  f: {
+    front: { foot: [24.5, 110], cx: 24.5, top: 49, crop: 61, belt: 64, shorts: 66, pad: 57, glove: 69, robe: 93, boot: 95, sole: 108, dark2: 200,
+      light: (x) => x <= 19, dark: (x) => x >= 30, buckle: (x) => x >= 23 && x <= 26, center: (x) => x === 24 || x === 25,
+      eyes: [[12, 35, 19, 42], [28, 35, 34, 42]], blinkY: 40,
+      band: { x0: 4, x1: 46, knot: [44, 31, 47, 38], top: (x) => 27 + Math.round(((x - 24.5) / 21) ** 2 * 2), gem: (x) => Math.abs(x - 24.5) <= 1.5 } },
+    side: { foot: [26, 109], cx: 27, top: 48, crop: 60, belt: 63, shorts: 65, pad: 55, glove: 68, robe: 92, boot: 94, sole: 107, dark2: 200,
+      light: (x) => x >= 30, dark: (x) => x <= 22, buckle: (x) => x >= 31 && x <= 32, center: (x) => x >= 32,
+      eyes: [[31, 31, 37, 37]], blinkY: 36,
+      band: { x0: 10, x1: 46, knot: [7, 25, 10, 33], top: (x) => 22 + Math.round((x - 10) / 12), gem: (x) => x >= 43 } },
+  },
 };
 
 // ---------- 零件圖 ----------
@@ -49,23 +65,26 @@ function partCanvas(P, name, paint, dim = 1) {
 const inBox = (x, y, [x0, y0, x1, y1]) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
 
 // 頭：換髮色（眼睛的範圍不動）、眨眼
-function headPainter(view, hair, blink) {
-  const L = LM[view], pal = hair !== DEFAULT_HAIR && HAIR_COLORS[hair];
+function headPainter(L, skin, hair, blink) {
+  const pal = hair !== DEFAULT_HAIR && HAIR_COLORS[hair];
   return (x, y, hex, k) => {
     const eye = L.eyes.some((b) => inBox(x, y, b));
     if (eye && blink) {
       if (k === 'skin') return hex;
-      return y === L.blinkY ? INK : y > L.blinkY ? hex : '#fdddca';   // 眼睛換成皮膚，只留一條閉起來的線
+      return y === L.blinkY ? INK : y > L.blinkY ? hex : skin;   // 眼睛換成皮膚，只留一條閉起來的線
     }
     if (!pal || eye || k === 'skin') return hex;
     const lum = rgb(hex).reduce((a, b) => a + b, 0);
-    if (lum < 60) return hex;                          // 最外圈的輪廓
-    return lum < 140 ? pal[0] : lum < 300 ? pal[1] : pal[2];
+    if (lum < 60 || lum > 650) return hex;             // 最外圈的輪廓；白色的蝴蝶結與反光
+    return lum < L.dark2 ? pal[0] : lum < 300 ? pal[1] : pal[2];
   };
 }
 
 // ---------- 衣服與裝備：照身體零件的形狀上色，所以一定合身 ----------
-const BASIC = { tee: '#e9e6e5', teeD: '#c4bdc0', pants: '#3d4470', pantsD: '#343a62', shoe: '#3a3540', sole: '#f2eff0' };
+const BASICS = {
+  m: { tee: '#e9e6e5', teeD: '#c4bdc0', pants: '#3d4470', pantsD: '#343a62', shoe: '#3a3540', sole: '#f2eff0' },
+  f: { tee: '#f4f1f0', teeD: '#cfc8cb', pants: '#4f74ad', pantsD: '#3f5f93', shoe: '#3a3540', sole: '#f2eff0' },   // 短版白 T＋牛仔褲
+};
 function mats(it) {
   const m = gearMats(it), c = (k) => ({ d: m[k].ramp[1], b: m[k].ramp[2], l: m[k].ramp[3] });
   return { metal: c('metal'), leather: c('leather'), cloth: c('cloth'), trim: it.rarity >= 1 ? m.trim.ramp[2] : null, gem: it.rarity >= 2 ? m.gem.ramp[2] : null,
@@ -75,23 +94,26 @@ const shadeX = (L, x, c) => (L.light(x) ? c.l : L.dark(x) ? c.d : c.b);
 
 // 每個零件一個上色函式。equip = { head, body, feet }（遊戲裡的裝備物件）；沒穿的部位用基本服裝（白 T、長褲、鞋子）。
 // bare 為 true 時不穿任何東西（只在設計稿頁面看基本身體用）。
-function painters(view, equip, bare) {
+function painters(L, view, BASIC, skin, equip, bare) {
   if (bare) return { torso: () => null, arm: () => null, leg: () => null, head: null };
-  const L = LM[view];
   const body = equip.body && { it: equip.body, m: mats(equip.body) }, feet = equip.feet && { it: equip.feet, m: mats(equip.feet) }, head = equip.head && { it: equip.head, m: mats(equip.head) };
   const robe = body && body.it.tag === 'arcane';
   const torso = (x, y, hex, k) => {
     if (k === 'ink') return null;
     if (y >= L.shorts) return robe ? shadeX(L, x, body.m.cloth) : L.dark(x) ? BASIC.pantsD : BASIC.pants;   // 短褲 → 長褲（法袍會蓋住）
-    if (k !== 'skin' || y < L.top) return null;
-    if (!body) return view === 'front' && y <= 56 && Math.abs(x - L.cx) <= (57 - y) * 0.9 ? null : L.dark(x) ? BASIC.teeD : BASIC.tee;   // 白 T，圓領
+    if (y < L.top) return null;
+    if (!body) {
+      if (L.crop && y > L.crop) return skin;                                                               // 短版上衣：露出腰
+      if (view === 'front' && y <= L.top + 3 && Math.abs(x - L.cx) <= (L.top + 4 - y) * 0.9) return skin;  // 圓領
+      return L.dark(x) ? BASIC.teeD : BASIC.tee;
+    }
     const { it, m } = body, tag = it.tag;
     if (y >= L.belt) return L.buckle(x) ? (m.gem || m.gold) : m.belt;
     if (m.trim && y <= L.top + 1) return m.trim;
     if (tag === 'guard') return L.center(x) ? m.metal.l : y === L.top + 7 || y === L.top + 12 ? m.metal.d : shadeX(L, x, m.metal);   // 板甲：中線與甲片接縫
     if (tag === 'arcane') return L.center(x) ? (m.trim || m.cloth.l) : shadeX(L, x, m.cloth);                                       // 法袍：中央滾邊
-    if (view === 'front' && y <= 59 && Math.abs(x - L.cx) <= (60 - y) * 0.55) return null;                                             // 皮甲：V 領
-    if (view === 'front' && Math.abs(x - 20 - (y - 55)) <= 1) return m.belt;                                                           // 斜背帶
+    if (view === 'front' && y <= L.top + 6 && Math.abs(x - L.cx) <= (L.top + 7 - y) * 0.55) return skin;                                             // 皮甲：V 領
+    if (view === 'front' && Math.abs(x - (L.cx - 9.5) - (y - L.top - 2)) <= 1) return m.belt;                                                           // 斜背帶
     return shadeX(L, x, m.leather);
   };
   const arm = (x, y, hex, k) => {
@@ -122,13 +144,11 @@ function painters(view, equip, bare) {
     const main = it.tag === 'blade' && m.trim ? { l: m.trim, b: m.trim, d: c.d } : c;
     const h = it.tag === 'guard' ? 4 : 3;
     return (x, y, hex, k) => {
-      const front = view === 'front';
-      const [x0, x1] = front ? [11, 48] : [7, 37];
-      const knot = front ? [48, 29, 51, 37] : [4, 24, 7, 33];
+      const B = L.band, knot = B.knot;
       if (it.tag !== 'guard' && inBox(x, y, knot)) return y <= knot[1] + 2 ? main.l : main.b;   // 打結垂下的布
-      if (x < x0 || x > x1 || k === 'ink') return null;
-      const top = front ? 27 + Math.round(((x - 29.5) / 19) ** 2 * 2) : 22 + Math.round((x - 8) / 12);
-      if (m.gem && (front ? Math.abs(x - 29.5) <= 1.5 : x >= 35) && y > top && y < top + h) return m.gem;   // 中央的寶石
+      if (x < B.x0 || x > B.x1 || k === 'ink') return null;
+      const top = B.top(x);
+      if (m.gem && B.gem(x) && y > top && y < top + h) return m.gem;   // 中央的寶石
       return y === top ? main.l : y > top && y < top + h ? main.b : y === top + h ? (m.trim || main.d) : null;
     };
   })();
@@ -221,16 +241,21 @@ export const ANIMS = {
 const FAR = 0.74;   // 側面時，後面的手腳調暗
 const LIMBS = ['armL', 'armLf', 'armR', 'armRf', 'legL', 'legLf', 'legR', 'legRf'];
 export class Rig {
-  constructor(view = 'side') {
+  constructor(view = 'side', gender = 'm') {
     this.view = view;
-    this.look = { color: DEFAULT_HAIR };
+    this.look = { gender, color: DEFAULT_HAIR };
     this.equip = {};
     this.weapon = true;
     this.bare = false;
     this.rebuild();
   }
   setView(view) { if (view !== this.view) { this.view = view; this.rebuild(); } }
-  setLook(look) { const color = HAIR_COLORS[look && look.color] ? look.color : DEFAULT_HAIR; if (color !== this.look.color) { this.look = { color }; this.rebuild(); } }
+  // look：{ gender: 'm' | 'f', color: 髮色名稱 }；缺少或不認得的值用預設（男生、原本的髮色）
+  setLook(look) {
+    const color = HAIR_COLORS[look && look.color] ? look.color : DEFAULT_HAIR, gender = look && RIG_PARTS[look.gender] ? look.gender : 'm';
+    if (color !== this.look.color || gender !== this.look.gender) { this.look = { gender, color }; this.rebuild(); }
+  }
+  get height() { return this.P.H; }
   // equip：{ weapon, head, body, feet }，內容是遊戲裡的裝備物件（需要 tag、tier、rarity）
   setEquip(equip, bare = false) {
     const e = equip || {};
@@ -240,12 +265,12 @@ export class Rig {
     this.rebuild();
   }
   rebuild() {
-    const P = this.P = RIG_PARTS[this.view], side = this.view === 'side';
-    this.foot = FOOT[this.view];
+    const g = this.look.gender, P = this.P = RIG_PARTS[g][this.view], L = LM[g][this.view], side = this.view === 'side';
+    this.foot = L.foot;
     const src = (n) => (P.parts[n] ? n : n.replace('L', 'R'));       // 側面的後手、後腿沿用前手、前腿的圖
     const far = (n) => (side && n.includes('L') ? FAR : 1);
-    const paint = painters(this.view, this.equip, this.bare);
-    this.body = { torso: partCanvas(P, 'torso'), head: partCanvas(P, 'head', headPainter(this.view, this.look.color, false)), headBlink: partCanvas(P, 'head', headPainter(this.view, this.look.color, true)) };
+    const paint = painters(L, this.view, BASICS[g], P.skin, this.equip, this.bare);
+    this.body = { torso: partCanvas(P, 'torso'), head: partCanvas(P, 'head', headPainter(L, P.skin, this.look.color, false)), headBlink: partCanvas(P, 'head', headPainter(L, P.skin, this.look.color, true)) };
     this.gear = { torso: partCanvas(P, 'torso', paint.torso), head: paint.head ? partCanvas(P, 'head', paint.head) : null };
     for (const n of LIMBS) {
       this.body[n] = partCanvas(P, src(n), null, far(n));
