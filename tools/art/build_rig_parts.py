@@ -7,12 +7,13 @@ from extract_ref import extract
 HERE = os.path.dirname(os.path.abspath(__file__))
 LETTERS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
-def build(src, parts, hands, synth=None, clear=(), plain_limbs=False, cell=12):
+def build(src, parts, hands, synth=None, clear=(), plain_limbs=False, cell=12, squeeze=None):
     """parts: {名稱: (判斷函式, 支點)}；synth(name, pts, px, ink)：補上被其他零件擋住的像素
     clear：要清成透明的格子 (x0, y0, x1, y1)（被頭髮圍住、沒被去背的白色背景，或取樣雜點）
     plain_limbs：手腳除了輪廓以外全部統一成膚色（去掉取樣雜點）
-    cell：參考圖上每一格的像素數（可用小數）；調小會讓角色變高"""
-    im = extract(os.path.join(HERE, 'ref', src), cell)
+    cell：參考圖上每一格的像素數（可用小數）；調小會讓角色變高
+    squeeze：(起始列, 比例, 中心欄)，把這一列以下的身體橫向收窄（見 extract_ref.py）"""
+    im = extract(os.path.join(HERE, 'ref', src), cell, 20, squeeze)
     W, H = im.size
     px = im.load()
     for x0, y0, x1, y1 in clear:
@@ -41,63 +42,6 @@ def build(src, parts, hands, synth=None, clear=(), plain_limbs=False, cell=12):
     print(src, {k: (v['x'], v['y'], len(v['rows'][0]), len(v['rows'])) for k, v in out.items()}, len(colors), 'colors')
     return {'W': W, 'H': H, 'skin': '#%02x%02x%02x' % skin, 'ink': '#%02x%02x%02x' % ink, 'pal': {c: '#%02x%02x%02x' % rgb for rgb, c in colors.items()}, 'hands': hands, 'parts': out}
 
-# ---------- 正面 ----------
-def arm_l(x, y):
-    if 59 <= y <= 62: return x <= 20
-    if 63 <= y <= 67: return x <= 21
-    if 68 <= y <= 75: return x <= 20 if y <= 71 else x <= 19
-    if 76 <= y <= 81: return x <= (17 if y == 79 else 18)
-    return False
-def arm_r(x, y):
-    if 59 <= y <= 62: return x >= 37
-    if 63 <= y <= 67: return x >= 36
-    if 68 <= y <= 75: return x >= 38
-    if 76 <= y <= 81: return x >= 40
-    return False
-def front_synth(name, pts, px, ink):
-    if name == 'torso':   # 手臂抬起來時，肩膀下面要有輪廓（平常被手臂蓋住）
-        for y in range(59, 63):
-            pts[(20, y)] = ink; pts[(37, y)] = ink
-# 手腳各拆成兩段（上臂／前臂、大腿／小腿），在關節處重疊兩列，彎曲時才不會露出縫隙
-def split(inside, joint_y, pivot_top, pivot_joint, a, b):
-    return {a: (lambda x, y: inside(x, y) and y <= joint_y + 1, pivot_top),
-            b: (lambda x, y: inside(x, y) and y >= joint_y - 1, pivot_joint)}
-FRONT = build('male-base-front.webp', {
-    'head':  (lambda x, y: y <= 49, (29.5, 50)),
-    'torso': (lambda x, y: 50 <= y <= 83 and not arm_l(x, y) and not arm_r(x, y), (29.5, 83)),
-    **split(arm_l, 70, (17.5, 61.5), (14.5, 70), 'armL', 'armLf'),
-    **split(arm_r, 70, (40.5, 61.5), (45, 70), 'armR', 'armRf'),
-    **split(lambda x, y: y >= 84 and x <= 28, 95, (22.5, 85), (21.5, 95), 'legL', 'legLf'),
-    **split(lambda x, y: y >= 84 and x >= 30, 95, (36.5, 85), (37.5, 95), 'legR', 'legRf'),
-}, {'armL': [13, 76], 'armR': [46, 76]}, front_synth)
-
-# ---------- 側面（朝右）：只看得到靠近鏡頭的手和腿；後面的手腳由程式複製並調暗 ----------
-# 這張參考圖的角色畫得比其他三張小，所以用比較細的格子（10.85）取樣，讓身高和正面、女生一致（約 109 格）。
-def side_arm(x, y):
-    if 57 <= y <= 78: return x <= 29
-    if y == 79: return x <= 28
-    if y == 80: return x <= 27
-    if 81 <= y <= 82: return x <= 25
-    return False
-def side_neck(x, y): return 50 <= y <= 51 and 25 <= x <= 30
-def side_synth(name, pts, px, ink):
-    if name != 'torso':
-        return
-    skin, shorts = px[25, 55][:3], px[31, 75][:3]
-    for y in range(57, 83):          # 被手臂擋住的背部與短褲
-        for x in range(20, 30):
-            if (x, y) in pts:
-                continue
-            pts[(x, y)] = ink if x <= 21 else skin if y <= 72 else shorts
-SIDE = build('male-base-right.webp', {
-    'head':  (lambda x, y: y <= 51 and not side_neck(x, y), (27.5, 50)),
-    'torso': (lambda x, y: (side_neck(x, y) or 52 <= y <= 85) and not side_arm(x, y), (28.5, 85)),
-    **split(side_arm, 69, (24, 60), (23, 69), 'armR', 'armRf'),
-    **split(lambda x, y: y >= 86, 96, (29, 87), (28.5, 96), 'legR', 'legRf'),
-}, {'armR': [22, 78]}, side_synth, clear=[(5, 16, 5, 16), (3, 18, 3, 18), (3, 37, 3, 38)], cell=10.85)
-
-# ==================== 女生 ====================
-# 頭髮垂到肩膀兩側，所以頭的零件包含下巴以下、身體兩旁的頭髮。
 def table(spec):
     """{(y0, y1): x} → {y: x}"""
     return {y: x for (y0, y1), x in spec.items() for y in range(y0, y1 + 1)}
@@ -109,6 +53,56 @@ def outline(pts, ink, rows):
         for x, d in ((min(xs), -1), (max(xs), 1)):
             if sum(pts[(x, y)]) >= 140: pts[(x + d, y)] = ink
 
+# ==================== 男生 ====================
+# 參考圖的身體比較寬，取樣時把脖子以下橫向收窄成 78%，和女生一樣纖細；頭不變。
+SLIM = 0.78
+# 手腳各拆成兩段（上臂／前臂、大腿／小腿），在關節處重疊兩列，彎曲時才不會露出縫隙
+def split(inside, joint_y, pivot_top, pivot_joint, a, b):
+    return {a: (lambda x, y: inside(x, y) and y <= joint_y + 1, pivot_top),
+            b: (lambda x, y: inside(x, y) and y >= joint_y - 1, pivot_joint)}
+
+# ---------- 正面 ----------
+M_ARM_L = table({(59, 62): 21, (63, 67): 23, (68, 73): 22, (74, 75): 21, (76, 81): 20})
+M_ARM_R = table({(59, 62): 37, (63, 67): 35, (68, 68): 36, (69, 75): 37, (76, 81): 39})
+def arm_l(x, y): return y in M_ARM_L and x <= M_ARM_L[y]
+def arm_r(x, y): return y in M_ARM_R and x >= M_ARM_R[y]
+def front_synth(name, pts, px, ink):
+    if name == 'torso': outline(pts, ink, range(59, 82))   # 手臂抬起來時，身體兩側要有輪廓（平常被手臂蓋住）
+FRONT = build('male-base-front.webp', {
+    'head':  (lambda x, y: y <= 49, (29.5, 50)),
+    'torso': (lambda x, y: 50 <= y <= 83 and not arm_l(x, y) and not arm_r(x, y), (29, 83)),
+    **split(arm_l, 70, (19.5, 61.5), (17.5, 70), 'armL', 'armLf'),
+    **split(arm_r, 70, (38.5, 61.5), (41.5, 70), 'armR', 'armRf'),
+    **split(lambda x, y: y >= 84 and x <= 29, 95, (24, 85), (23, 95), 'legL', 'legLf'),
+    **split(lambda x, y: y >= 84 and x >= 30, 95, (35, 85), (35.5, 95), 'legR', 'legRf'),
+}, {'armL': [17, 76], 'armR': [42.5, 76]}, front_synth, squeeze=(50, SLIM, 30))
+
+# ---------- 側面（朝右）：只看得到靠近鏡頭的手和腿；後面的手腳由程式複製並調暗 ----------
+# 這張參考圖的角色畫得比其他三張小，所以用比較細的格子（10.85）取樣，讓身高和正面、女生一致（約 109 格）。
+def side_arm(x, y):
+    if 57 <= y <= 78: return x <= 29
+    if y == 79: return x <= 28
+    if 80 <= y <= 82: return x <= 27
+    return False
+def side_neck(x, y): return 50 <= y <= 51 and 25 <= x <= 30
+def side_synth(name, pts, px, ink):
+    if name != 'torso':
+        return
+    skin, shorts = px[26, 55][:3], px[30, 76][:3]
+    for y in range(57, 83):          # 被手臂擋住的背部與短褲
+        for x in range(22, 30):
+            if (x, y) in pts:
+                continue
+            pts[(x, y)] = ink if x <= 23 else skin if y <= 72 else shorts
+SIDE = build('male-base-right.webp', {
+    'head':  (lambda x, y: y <= 51 and not side_neck(x, y), (27.5, 50)),
+    'torso': (lambda x, y: (side_neck(x, y) or 52 <= y <= 85) and not side_arm(x, y), (29, 85)),
+    **split(side_arm, 69, (25, 60), (24, 69), 'armR', 'armRf'),
+    **split(lambda x, y: y >= 86, 96, (29, 87), (28, 96), 'legR', 'legRf'),
+}, {'armR': [23.5, 78]}, side_synth, clear=[(5, 16, 5, 16), (3, 18, 3, 18), (3, 37, 3, 38), (20, 57, 20, 57)], cell=10.85, squeeze=(52, SLIM, 28))
+
+# ==================== 女生 ====================
+# 頭髮垂到肩膀兩側，所以頭的零件包含下巴以下、身體兩旁的頭髮。
 F_HAIR_L = table({(49, 50): 15, (51, 51): 14, (52, 55): 13, (56, 57): 12, (58, 59): 11})   # 這一格以左是頭髮
 F_HAIR_R = table({(49, 50): 33, (51, 51): 34, (52, 56): 35, (57, 57): 36, (58, 58): 37, (59, 59): 36})
 F_ARM_L = table({(52, 53): 17, (54, 63): 18, (64, 67): 16, (68, 71): 15, (72, 73): 14, (74, 74): 15, (75, 76): 14, (77, 77): 13})

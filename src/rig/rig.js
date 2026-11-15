@@ -18,12 +18,12 @@ export const GENDERS = { m: '男生', f: '女生' };
 // foot：腳底中心；face：臉的範圍（換髮色時不動）；crop：短版上衣的下緣（露出腰）；band：頭帶的位置
 const LM = {
   m: {
-    front: { foot: [30, 108], cx: 29.5, top: 53, belt: 70, shorts: 74, pad: 64, glove: 73, robe: 92, boot: 93, sole: 104, dark2: 140,
-      light: (x) => x <= 23, dark: (x) => x >= 33, buckle: (x) => x >= 28 && x <= 31, center: (x) => x === 29 || x === 30,
+    front: { foot: [29.5, 108], cx: 28.5, top: 53, belt: 70, shorts: 74, pad: 64, glove: 73, robe: 92, boot: 93, sole: 104, dark2: 140,
+      light: (x) => x <= 24, dark: (x) => x >= 34, buckle: (x) => x >= 27 && x <= 30, center: (x) => x === 28 || x === 29,
       eyes: [[16, 36, 23, 43], [32, 36, 40, 43]], blinkY: 42,
       band: { x0: 11, x1: 48, knot: [48, 29, 51, 37], top: (x) => 27 + Math.round(((x - 29.5) / 19) ** 2 * 2), gem: (x) => Math.abs(x - 29.5) <= 1.5 } },
     side: { foot: [29, 108], cx: 28.5, top: 53, belt: 70, shorts: 73, pad: 63, glove: 73, robe: 94, boot: 95, sole: 105, dark2: 140,
-      light: (x) => x >= 33, dark: (x) => x <= 23, buckle: (x) => x >= 34 && x <= 35, center: (x) => x >= 35,
+      light: (x) => x >= 32, dark: (x) => x <= 24, buckle: (x) => x >= 32 && x <= 33, center: (x) => x >= 33,
       eyes: [[34, 37, 42, 42]], blinkY: 41, face: [19, 37, 45, 51],
       band: { x0: 8, x1: 45, knot: [6, 27, 9, 36], top: (x) => 25 + Math.round((x - 9) / 13), gem: (x) => x >= 42 } },
   },

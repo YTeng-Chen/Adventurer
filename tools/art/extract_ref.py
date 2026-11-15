@@ -4,7 +4,19 @@ import sys
 from collections import Counter, deque
 from PIL import Image
 
-def extract(src, cell=12, colors=20):
+def extract(src, cell=12, colors=20, squeeze=None):
+    """squeeze = (起始列, 比例, 中心欄)：這一列以下的身體橫向收窄成原本的幾成（以中心欄為軸），頭不變。
+    座標是輸出圖（去背、裁切後）的像素格。直接從原圖取樣，比縮放小圖乾淨。"""
+    plain, box = _grid(src, cell, colors, None)
+    if squeeze:
+        y_from, factor, cx = squeeze
+        slim, _ = _grid(src, cell, colors, (y_from + box[1], factor, cx + box[0]))
+        top = plain.crop((0, 0, plain.width, y_from + box[1]))      # 頭沿用收窄前的像素與配色
+        slim.paste(top, (0, 0))
+        plain = slim
+    return plain.crop(box)
+
+def _grid(src, cell, colors, squeeze):
     im = Image.open(src).convert('RGB')
     w, h = int(im.width / cell), int(im.height / cell)
     px = im.load()
@@ -13,8 +25,14 @@ def extract(src, cell=12, colors=20):
     for y in range(h):
         for x in range(w):
             # 取格子中央區域最常見的顏色（先粗略量化）
-            x0, y0 = int(x * cell), int(y * cell)
-            x1, y1 = int((x + 1) * cell), int((y + 1) * cell)
+            y0, y1 = int(y * cell), int((y + 1) * cell)
+            if squeeze and y >= squeeze[0]:
+                gx = squeeze[2] + 0.5 + (x - squeeze[2] - 0.5) / squeeze[1]      # 這一格對應到原圖的哪一欄
+                x0, x1 = int(gx * cell), int((gx + 1 / squeeze[1]) * cell)
+                if x0 < 0 or x1 >= im.width:
+                    small.putpixel((x, y), (255, 255, 255)); continue
+            else:
+                x0, x1 = int(x * cell), int((x + 1) * cell)
             box = [px[xx, yy] for yy in range(y0 + m, y1 - m + 1, 2) for xx in range(x0 + m, x1 - m + 1, 2)]
             key = Counter(tuple(v // 12 for v in p) for p in box).most_common(1)[0][0]
             pts = [p for p in box if tuple(v // 12 for v in p) == key]
@@ -34,7 +52,7 @@ def extract(src, cell=12, colors=20):
             continue
         op[x, y] = (0, 0, 0, 0)
         dq.extend([(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)])
-    return out.crop(out.getbbox())
+    return out, out.getbbox()
 
 if __name__ == '__main__':
     cell = float(sys.argv[3]) if len(sys.argv) > 3 else 12
