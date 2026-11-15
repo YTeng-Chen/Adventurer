@@ -9,6 +9,7 @@
 import { RIG_PARTS } from './parts-data.js';
 import { gearMats } from '../art/palette.js';
 import { CHIBI } from '../art/chibi-data.js';
+import { hatCanvas } from './hats.js';
 
 const RAD = Math.PI / 180;
 const INK = RIG_PARTS.m.front.ink;
@@ -18,27 +19,23 @@ export const GENDERS = { m: '男生', f: '女生' };
 
 // 各性別、各視角的身體位置（單位是大格）：衣服與裝備照這些位置上色
 // foot：腳底中心；top：肩膀；belt：腰帶；shorts：褲子開始；pad：袖子／護肩到哪一列；
-// glove：手套開始；robe：法袍下襬；boot：靴子開始；sole：鞋底；eyes、blinkY：眨眼；band：頭帶
+// glove：手套開始；robe：法袍下襬；boot：靴子開始；sole：鞋底；eyes、blinkY：眨眼（頭飾的位置在 hats.js）
 const LM = {
   m: {
     front: { foot: [15.5, 56], cx: 15.5, top: 29, belt: 38, shorts: 39, pad: 34, glove: 40, robe: 47, boot: 48, sole: 54,
       light: (x) => x <= 11, dark: (x) => x >= 20, buckle: (x) => x === 15, center: (x) => x === 15,
-      eyes: [[8, 20, 12, 23], [18, 20, 22, 23]], blinkY: 23,
-      band: { x0: 2, x1: 29, knot: [29, 16, 30, 19], top: (x) => 14 + Math.round(((x - 15.5) / 13) ** 2), gem: (x) => x === 15 || x === 16 } },
+      eyes: [[8, 20, 12, 23], [18, 20, 22, 23]], blinkY: 23 },
     side: { foot: [15, 56], cx: 15, top: 29, belt: 38, shorts: 39, pad: 34, glove: 40, robe: 47, boot: 48, sole: 54,
       light: (x) => x >= 17, dark: (x) => x <= 12, buckle: (x) => x >= 18, center: (x) => x >= 18,
-      eyes: [[19, 21, 22, 23]], blinkY: 23,
-      band: { x0: 2, x1: 26, knot: [1, 14, 2, 18], top: (x) => 13 + Math.round((x - 3) / 12), gem: (x) => x >= 25 } },
+      eyes: [[19, 21, 22, 23]], blinkY: 23 },
   },
   f: {
     front: { foot: [16.1, 56], cx: 16.5, top: 29, belt: 38, shorts: 39, pad: 33, glove: 41, robe: 47, boot: 48, sole: 54,
       light: (x) => x <= 12, dark: (x) => x >= 21, buckle: (x) => x === 16, center: (x) => x === 16,
-      eyes: [[9, 19, 13, 23], [18, 19, 22, 23]], blinkY: 22,
-      band: { x0: 3, x1: 29, knot: [29, 16, 30, 19], top: (x) => 14 + Math.round(((x - 16.5) / 13) ** 2), gem: (x) => x === 16 || x === 17 } },
+      eyes: [[9, 19, 13, 23], [18, 19, 22, 23]], blinkY: 22 },
     side: { foot: [15, 56], cx: 15.5, top: 29, belt: 38, shorts: 39, pad: 33, glove: 40, robe: 47, boot: 48, sole: 54,
       light: (x) => x >= 18, dark: (x) => x <= 13, buckle: (x) => x >= 19, center: (x) => x >= 19,
-      eyes: [[19, 21, 22, 23]], blinkY: 23,
-      band: { x0: 2, x1: 27, knot: [1, 14, 2, 18], top: (x) => 13 + Math.round((x - 4) / 13), gem: (x) => x >= 26 } },
+      eyes: [[19, 21, 22, 23]], blinkY: 23 },
   },
 };
 
@@ -69,9 +66,11 @@ function partCanvas(P, name, paint, dim = 1) {
 const inBox = (x, y, [x0, y0, x1, y1]) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
 
 // 頭：換髮色（皮膚、眼白、蝴蝶結不動）、眨眼
-function headPainter(L, skin, hair, blink) {
+// cut：戴帽子時，這一列（大格）以上的頭髮藏起來（被帽子壓住）
+function headPainter(L, skin, hair, blink, cut = -1) {
   const pal = hair !== DEFAULT_HAIR && HAIR_COLORS[hair];
   return (x, y, hex, k) => {
+    if (y < cut && k !== 'skin') return null;
     if (blink && L.eyes.some((b) => inBox(x, y, b))) return y === L.blinkY ? INK : y < L.blinkY ? skin : hex;   // 閉眼：只留一條線
     const lum = rgb(hex).reduce((a, b) => a + b, 0);
     if (!pal || lum < 130 || lum >= 440 || L.eyes.some((b) => inBox(x, y, b))) return hex;   // 輪廓、皮膚、白色、眼睛
@@ -95,8 +94,8 @@ const shadeX = (L, x, c) => (L.light(x) ? c.l : L.dark(x) ? c.d : c.b);
 // 每個零件一個上色函式。equip = { head, body, feet }（遊戲裡的裝備物件）；沒穿裝備的部位維持參考圖原本的樣子。
 // bare 為 true 時不穿任何東西（預覽頁用）。
 function painters(L, view, BASIC, skin, equip, bare) {
-  if (bare) return { torso: () => null, arm: () => null, leg: () => null, head: null };
-  const body = equip.body && { it: equip.body, m: mats(equip.body) }, feet = equip.feet && { it: equip.feet, m: mats(equip.feet) }, head = equip.head && { it: equip.head, m: mats(equip.head) };
+  if (bare) return { torso: () => null, arm: () => null, leg: () => null };
+  const body = equip.body && { it: equip.body, m: mats(equip.body) }, feet = equip.feet && { it: equip.feet, m: mats(equip.feet) };
   const robe = body && body.it.tag === 'arcane', front = view === 'front';
   const torso = (x, y, hex, k) => {
     if (k === 'ink' || y < L.top) return null;
@@ -134,20 +133,7 @@ function painters(L, view, BASIC, skin, equip, bare) {
     if (robe && y <= L.robe) return y === L.robe ? (body.m.trim || body.m.cloth.d) : shadeX(L, x, body.m.cloth);   // 法袍下襬蓋到膝蓋
     return body ? (L.dark(x) ? BASIC.pantsD : BASIC.pants) : null;                  // 長褲跟著上衣；只穿鞋子時腿還是原樣
   };
-  // 頭飾：綁在額頭上的頭帶（劍士布頭巾、守衛金屬護額、術士飾帶），髮絲的黑線蓋在上面
-  const band = head && (() => {
-    const { it, m } = head, c = it.tag === 'guard' ? m.metal : it.tag === 'arcane' ? m.cloth : m.leather;
-    const main = it.tag === 'blade' && m.trim ? { l: m.trim, b: m.trim, d: c.d } : c;
-    return (x, y, hex, k) => {
-      const B = L.band, knot = B.knot;
-      if (it.tag !== 'guard' && inBox(x, y, knot)) return y === knot[1] ? main.l : main.b;   // 打結垂下的布
-      if (x < B.x0 || x > B.x1 || k === 'ink') return null;
-      const top = B.top(x);
-      if (m.gem && B.gem(x) && (y === top || y === top + 1)) return m.gem;   // 中央的寶石
-      return y === top ? main.l : y === top + 1 ? (it.tag === 'guard' ? main.b : m.trim || main.d) : null;
-    };
-  })();
-  return { torso, arm, leg, head: band };
+  return { torso, arm, leg };
 }
 
 // ---------- 武器：握柄是支點，朝上 ----------
@@ -421,8 +407,10 @@ export class Rig {
     const src = (n) => (P.parts[n] ? n : n.replace('L', 'R'));       // 側面的後手、後腿沿用前手、前腿的圖
     const far = (n) => (side && n.includes('L') ? FAR : 1);
     const paint = painters(L, this.view, BASICS[g], P.skin, this.equip, this.bare);
-    this.body = { torso: partCanvas(P, 'torso'), head: partCanvas(P, 'head', headPainter(L, P.skin, this.look.color, false)), headBlink: partCanvas(P, 'head', headPainter(L, P.skin, this.look.color, true)) };
-    this.gear = { torso: partCanvas(P, 'torso', paint.torso), head: paint.head ? partCanvas(P, 'head', paint.head) : null };
+    this.hat = this.equip.head && !this.bare ? hatCanvas(g, this.view, this.equip.head, mats(this.equip.head), INK, P.unit) : null;
+    const cut = this.hat ? this.hat.cut : -1;
+    this.body = { torso: partCanvas(P, 'torso'), head: partCanvas(P, 'head', headPainter(L, P.skin, this.look.color, false, cut)), headBlink: partCanvas(P, 'head', headPainter(L, P.skin, this.look.color, true, cut)) };
+    this.gear = { torso: partCanvas(P, 'torso', paint.torso), head: null };
     for (const n of LIMBS) {
       this.body[n] = partCanvas(P, src(n), null, far(n));
       this.gear[n] = partCanvas(P, src(n), n.startsWith('arm') ? paint.arm : paint.leg, far(n));
@@ -437,6 +425,7 @@ export class Rig {
     const [px, py] = part.pivot;
     ctx.drawImage(name === 'head' && blink ? this.body.headBlink : this.body[name], -Math.round(px), -Math.round(py));
     if (this.gear[name]) ctx.drawImage(this.gear[name], -Math.round(px), -Math.round(py));
+    if (name === 'head' && this.hat) ctx.drawImage(this.hat.canvas, this.hat.x - this.G.head.x - Math.round(px), this.hat.y - this.G.head.y - Math.round(py));   // 帽子跟著頭轉
   }
   // 單一零件（頭、身體）：繞自己的支點轉
   part(ctx, name, deg, blink) {
