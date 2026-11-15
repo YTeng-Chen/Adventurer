@@ -1,6 +1,7 @@
 // 戰鬥播放：把 combat.fight() 回傳的紀錄一行一行播出來。戰鬥結果在播放前就已經算好。
 import * as Phaser from 'phaser';
 import { RigHero, enemyTexture } from './textures.js';
+import { Scenery } from './scenery.js';
 import { W, H, GROUND, FONT, HERO_X, FOE_X, ENEMY_SCALE, BOSS_SCALE } from './config.js';
 
 const FLOAT = { attack: '#ffffff', double: '#9fe0ff', chain: '#7af0ff', counter: '#d0d6e0', burn: '#ffa040' };
@@ -19,23 +20,21 @@ export class BattleScene extends Phaser.Scene {
     const { foe, r, equip, look } = this.payload;
     this.r = r;
 
-    const g = this.add.graphics();
-    g.fillStyle(0x1d2740).fillRect(0, 0, W, GROUND);
-    g.fillStyle(0x2a3554).fillRect(0, GROUND, W, H - GROUND);
-    g.fillStyle(0x34416a);
-    for (let x = 0; x < W; x += 32) g.fillRect(x, GROUND, 16, 4);
+    this.scenery = new Scenery(this, this.payload.scene || 0);   // 狩獵用那張地圖的場景，試煉照關卡輪流
+    this.add.rectangle(0, 0, W, 64, 0x0a0d13, 0.35).setOrigin(0, 0).setDepth(3);   // 血條後面壓暗一點，比較好讀
 
     this.hero = new RigHero(this, HERO_X, GROUND);
+    this.hero.image.setDepth(2);
     this.hero.setLook(equip, look);
 
     const es = foe.boss ? BOSS_SCALE : ENEMY_SCALE;
-    this.foe = this.add.image(FOE_X, GROUND + 6, enemyTexture(this, foe.shape, foe.c)).setOrigin(0, 1).setScale(es);   // 站在刀光砍得到的距離
+    this.foe = this.add.image(FOE_X, GROUND + 6, enemyTexture(this, foe.shape, foe.c)).setOrigin(0, 1).setScale(es).setDepth(1);   // 站在刀光砍得到的距離
     this.foeX = this.foe.x;
     this.tweens.add({ targets: this.foe, y: '-=4', duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
 
-    this.bars = this.add.graphics();
-    this.hpTextP = this.add.text(32, 44, '', FONT(18, '#ece4d2'));
-    this.hpTextE = this.add.text(W - 32, 44, '', FONT(18, '#ece4d2')).setOrigin(1, 0);
+    this.bars = this.add.graphics().setDepth(4);
+    this.hpTextP = this.add.text(32, 44, '', FONT(18, '#ece4d2')).setDepth(4);
+    this.hpTextE = this.add.text(W - 32, 44, '', FONT(18, '#ece4d2')).setOrigin(1, 0).setDepth(4);
     this.hpP = r.maxHpP; this.hpE = r.maxHpE;
     this.drawBars();
 
@@ -91,6 +90,8 @@ export class BattleScene extends Phaser.Scene {
     this.timer = this.time.delayedCall(wait, () => this.next());
   }
 
+  update(time, dt) { this.scenery.update(time, Math.min(dt, 50)); }
+
   setHp(line) { this.hpP = line.hpP; this.hpE = line.hpE; this.drawBars(); }
 
   // 玩家攻擊：一般攻擊是三段連招，傷害照比例分三次跳出來；追擊、連鎖、反擊是單發快攻。回傳這個動作要播多久
@@ -124,7 +125,7 @@ export class BattleScene extends Phaser.Scene {
     else { x = HERO_X; y = this.hero.topY; }
     const color = line.crit && line.kind === 'attack' ? '#f2b84b' : FLOAT[line.kind] || '#ffffff';
     const size = (big > 1 ? 24 : 16) + (line.crit ? 4 : 0);
-    const t = this.add.text(x, y + 20, (line.crit ? '!' : '') + Math.round(dmg).toLocaleString('en-US'), FONT(size, color)).setOrigin(0.5, 1);
+    const t = this.add.text(x, y + 20, (line.crit ? '!' : '') + Math.round(dmg).toLocaleString('en-US'), FONT(size, color)).setOrigin(0.5, 1).setDepth(6);
     if (big > 1) { t.setScale(1.6); this.tweens.add({ targets: t, scale: 1, duration: 140, ease: 'Back.out' }); }   // 彈一下
     this.tweens.add({ targets: t, y: t.y - 44, alpha: 0, duration: 850, delay: big > 1 ? 120 : 0, ease: 'Quad.out', onComplete: () => t.destroy() });
   }

@@ -3,7 +3,7 @@
 // 介面 → Phaser
 //   state          遊戲狀態變了（換地點、換裝備…），場景重新整理
 //   tick           一次掛機結算完成，payload 是結算摘要
-//   battle:start   開始播放戰鬥 { foe, r, equip }
+//   battle:start   開始播放戰鬥 { foe, r, scene, equip, look }（scene：用第幾種場景）
 //   battle:skip    跳到戰鬥結尾
 //   battle:close   關閉戰鬥，回到掛機場景
 //   stage:show     戰鬥畫面顯示或隱藏了（true / false）；只有在戰鬥地圖掛機或播放戰鬥時才顯示

@@ -361,7 +361,7 @@ export function startUI(bus) {
     if (l.kind === 'burn') return `${l.who === 'p' ? eName : pName}受到燃燒（${l.stacks} 層）${fmt(l.dmg)} 傷害${l.crit ? '・暴擊' : ''}`;
     return `${who}${KIND[l.kind]}，造成 ${fmt(l.dmg)} 傷害${l.crit ? '・暴擊' : ''}`;
   }
-  function playBattle({ title, foe, r, resultHtml }) {
+  function playBattle({ title, foe, r, resultHtml, scene = 0 }) {
     battle = { foe, r, resultHtml, done: false, lines: [] };
     $('#battleBar').hidden = false;
     $('#bTitle').textContent = title;
@@ -372,7 +372,7 @@ export function startUI(bus) {
     renderAll();
     window.scrollTo({ top: 0, behavior: 'smooth' });
     // 戰鬥畫面交給 Phaser；沒有人接（例如畫面還沒準備好）就直接顯示結果
-    if (!bus.emit('battle:start', { foe, r, equip: { ...s.equip }, look: s.appearance })) endBattle();
+    if (!bus.emit('battle:start', { foe, r, scene, equip: { ...s.equip }, look: s.appearance })) endBattle();
   }
   function battleLine({ line }) {
     if (!battle || battle.done) return;
@@ -527,7 +527,7 @@ export function startUI(bus) {
         const res = out.r.win
           ? `<p class="result win">勝利！</p><p class="hint">金幣 +${fmt(rw.gold)}・${Object.entries(rw.mats).map(([kk, n]) => `${matName(kk)} ×${n}`).join('、')}${rw.item ? `・<span style="color:${D.RARITY[rw.item.rarity].color}">${esc(rw.item.name)}</span>` : ''}${rw.unlocked ? `<br>解鎖新地圖「${esc(rw.unlocked)}」` : ''}</p>`
           : `<p class="result lose">${out.r.timeout ? '時間到，沒能打倒' : '落敗'}</p><p class="hint">造成 ${fmt(out.r.dealt)} 傷害（頭目生命的 ${Math.round((out.r.dealt / out.r.maxHpE) * 100)}%）。</p>`;
-        playBattle({ title: `魔物狩獵：${out.boss.n}`, foe: { shape: out.boss.shape, c: out.boss.c, name: out.boss.n, boss: true }, r: out.r, resultHtml: res });
+        playBattle({ title: `魔物狩獵：${out.boss.n}`, foe: { shape: out.boss.shape, c: out.boss.c, name: out.boss.n, boss: true }, r: out.r, resultHtml: res, scene: +i });
         return;
       }
       case 'trial-fight': {
@@ -538,7 +538,7 @@ export function startUI(bus) {
         const res = out.r.win
           ? `<p class="result win">通過第 ${out.floor} 關</p>${out.rewards ? `<p class="hint">首次通過獎勵：金幣 +${fmt(out.rewards.gold)}${out.rewards.mat ? `・${matName(out.rewards.mat.key)} ×${out.rewards.mat.n}` : ''}</p>` : ''}${s.trial.offer ? '<p class="hint">可以選擇一個祝福了。</p>' : ''}`
           : `<p class="result lose">在第 ${out.floor} 關落敗</p>`;
-        playBattle({ title: `神之試煉・第 ${out.floor} 關`, foe: { ...out.foe, name: out.foe.name }, r: out.r, resultHtml: res });
+        playBattle({ title: `神之試煉・第 ${out.floor} 關`, foe: { ...out.foe, name: out.foe.name }, r: out.r, resultHtml: res, scene: out.floor - 1 });
         return;
       }
       case 'bless': if (T.choose(s, id)) toast(`得到祝福「${D.BLESSINGS.find((b) => b.id === id).n}」`); break;
