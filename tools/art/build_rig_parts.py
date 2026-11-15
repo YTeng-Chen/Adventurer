@@ -1,17 +1,18 @@
 # 把正面參考圖切成骨架動畫用的零件，輸出 src/rig/parts-data.js（需要 Pillow）。
 # 執行：python3 tools/art/build_rig_parts.py
-# 座標是重新取樣後的像素格（男生正面 60×109、側面 50×99；女生正面 53×111、側面 48×110）。每個零件記錄它在整張圖裡的位置、支點（關節），以及每格的顏色代號。
+# 座標是重新取樣後的像素格（男生正面 60×109、側面 55×109；女生正面 53×111、側面 48×110）。每個零件記錄它在整張圖裡的位置、支點（關節），以及每格的顏色代號。
 import os, json
 from extract_ref import extract
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LETTERS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
-def build(src, parts, hands, synth=None, clear=(), plain_limbs=False):
+def build(src, parts, hands, synth=None, clear=(), plain_limbs=False, cell=12):
     """parts: {名稱: (判斷函式, 支點)}；synth(name, pts, px, ink)：補上被其他零件擋住的像素
     clear：要清成透明的格子 (x0, y0, x1, y1)（被頭髮圍住、沒被去背的白色背景，或取樣雜點）
-    plain_limbs：手腳除了輪廓以外全部統一成膚色（去掉取樣雜點）"""
-    im = extract(os.path.join(HERE, 'ref', src))
+    plain_limbs：手腳除了輪廓以外全部統一成膚色（去掉取樣雜點）
+    cell：參考圖上每一格的像素數（可用小數）；調小會讓角色變高"""
+    im = extract(os.path.join(HERE, 'ref', src), cell)
     W, H = im.size
     px = im.load()
     for x0, y0, x1, y1 in clear:
@@ -71,33 +72,29 @@ FRONT = build('male-base-front.webp', {
 }, {'armL': [13, 76], 'armR': [46, 76]}, front_synth)
 
 # ---------- 側面（朝右）：只看得到靠近鏡頭的手和腿；後面的手腳由程式複製並調暗 ----------
+# 這張參考圖的角色畫得比其他三張小，所以用比較細的格子（10.85）取樣，讓身高和正面、女生一致（約 109 格）。
 def side_arm(x, y):
-    if 52 <= y <= 53: return x <= 25
-    if 54 <= y <= 59: return x <= 27
-    if 60 <= y <= 71: return x <= 26
-    if 72 <= y <= 73: return x <= 24
-    if y == 74: return x <= 23
-    if y == 75: return x <= 22
+    if 57 <= y <= 78: return x <= 29
+    if y == 79: return x <= 28
+    if y == 80: return x <= 27
+    if 81 <= y <= 82: return x <= 25
     return False
-def side_neck(x, y): return 45 <= y <= 47 and 22 <= x <= 27
+def side_neck(x, y): return 50 <= y <= 51 and 25 <= x <= 30
 def side_synth(name, pts, px, ink):
     if name != 'torso':
         return
-    skin, shorts = px[22, 50][:3], px[27, 69][:3]
-    for y in range(52, 76):          # 被手臂擋住的背部與短褲
-        for x in range(18, 28):
+    skin, shorts = px[25, 55][:3], px[31, 75][:3]
+    for y in range(57, 83):          # 被手臂擋住的背部與短褲
+        for x in range(20, 30):
             if (x, y) in pts:
                 continue
-            if x <= 19 or y in (66, 67): pts[(x, y)] = ink
-            elif y <= 65: pts[(x, y)] = skin
-            elif x <= 26: pts[(x, y)] = shorts
+            pts[(x, y)] = ink if x <= 21 else skin if y <= 72 else shorts
 SIDE = build('male-base-right.webp', {
-    'head':  (lambda x, y: y <= 47 and not side_neck(x, y), (25, 46)),
-    'torso': (lambda x, y: (side_neck(x, y) or 48 <= y <= 77) and not side_arm(x, y), (26, 77)),
-    **split(side_arm, 63, (21.5, 54.5), (21, 63), 'armR', 'armRf'),
-    **split(lambda x, y: y >= 78, 87, (26, 79), (26, 87), 'legR', 'legRf'),
-}, {'armR': [20, 71]}, side_synth)
-
+    'head':  (lambda x, y: y <= 51 and not side_neck(x, y), (27.5, 50)),
+    'torso': (lambda x, y: (side_neck(x, y) or 52 <= y <= 85) and not side_arm(x, y), (28.5, 85)),
+    **split(side_arm, 69, (24, 60), (23, 69), 'armR', 'armRf'),
+    **split(lambda x, y: y >= 86, 96, (29, 87), (28.5, 96), 'legR', 'legRf'),
+}, {'armR': [22, 78]}, side_synth, clear=[(5, 16, 5, 16), (3, 18, 3, 18), (3, 37, 3, 38)], cell=10.85)
 
 # ==================== 女生 ====================
 # 頭髮垂到肩膀兩側，所以頭的零件包含下巴以下、身體兩旁的頭髮。

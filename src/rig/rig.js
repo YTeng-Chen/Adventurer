@@ -1,7 +1,7 @@
 // 2D 骨架動畫：角色拆成零件（頭、身體、上臂、前臂、大腿、小腿），掛在關節上；動作是讓關節轉動、移動。
 // 一件裝備只要照零件的形狀上色，所有動作都能用；一個動作做一次，所有裝備都適用。
 // 全部畫在低解析度的 canvas 上（不做平滑），旋轉後仍然是一格一格的像素。
-// 座標：零件用參考圖的像素座標（男生正面 60×109、側面 50×99；女生正面 53×111、側面 48×110）；角度單位是度，正值為順時針，0 度表示自然下垂。
+// 座標：零件用參考圖的像素座標（男生正面 60×109、側面 55×109；女生正面 53×111、側面 48×110）；角度單位是度，正值為順時針，0 度表示自然下垂。
 // 性別：'m' 男、'f' 女，各有自己的零件圖與身體位置（LM）；動作共用。
 // 兩種視角：側面（朝右；戰鬥與掛機用，後面的手腳是調暗的複製品）與正面（角色建立與預覽用）。
 import { RIG_PARTS } from './parts-data.js';
@@ -15,17 +15,17 @@ export const DEFAULT_HAIR = '深棕';   // 參考圖原本的髮色，不重新�
 export const GENDERS = { m: '男生', f: '女生' };
 
 // 各性別、各視角的身體位置（像素列）：衣服與裝備照這些位置上色
-// foot：腳底中心；crop：短版上衣的下緣（露出腰）；band：頭帶的位置
+// foot：腳底中心；face：臉的範圍（換髮色時不動）；crop：短版上衣的下緣（露出腰）；band：頭帶的位置
 const LM = {
   m: {
     front: { foot: [30, 108], cx: 29.5, top: 53, belt: 70, shorts: 74, pad: 64, glove: 73, robe: 92, boot: 93, sole: 104, dark2: 140,
       light: (x) => x <= 23, dark: (x) => x >= 33, buckle: (x) => x >= 28 && x <= 31, center: (x) => x === 29 || x === 30,
       eyes: [[16, 36, 23, 43], [32, 36, 40, 43]], blinkY: 42,
       band: { x0: 11, x1: 48, knot: [48, 29, 51, 37], top: (x) => 27 + Math.round(((x - 29.5) / 19) ** 2 * 2), gem: (x) => Math.abs(x - 29.5) <= 1.5 } },
-    side: { foot: [27, 98], cx: 26, top: 49, belt: 63, shorts: 66, pad: 57, glove: 66, robe: 85, boot: 86, sole: 95, dark2: 140,
-      light: (x) => x >= 30, dark: (x) => x <= 21, buckle: (x) => x >= 31 && x <= 32, center: (x) => x >= 32,
-      eyes: [[30, 34, 38, 39]], blinkY: 38,
-      band: { x0: 7, x1: 37, knot: [4, 24, 7, 33], top: (x) => 22 + Math.round((x - 8) / 12), gem: (x) => x >= 35 } },
+    side: { foot: [29, 108], cx: 28.5, top: 53, belt: 70, shorts: 73, pad: 63, glove: 73, robe: 94, boot: 95, sole: 105, dark2: 140,
+      light: (x) => x >= 33, dark: (x) => x <= 23, buckle: (x) => x >= 34 && x <= 35, center: (x) => x >= 35,
+      eyes: [[34, 37, 42, 42]], blinkY: 41, face: [19, 37, 45, 51],
+      band: { x0: 8, x1: 45, knot: [6, 27, 9, 36], top: (x) => 25 + Math.round((x - 9) / 13), gem: (x) => x >= 42 } },
   },
   f: {
     front: { foot: [24.5, 110], cx: 24.5, top: 49, crop: 61, belt: 64, shorts: 66, pad: 57, glove: 69, robe: 93, boot: 95, sole: 108, dark2: 200,
@@ -75,6 +75,7 @@ function headPainter(L, skin, hair, blink) {
     }
     if (!pal || eye || k === 'skin') return hex;
     const lum = rgb(hex).reduce((a, b) => a + b, 0);
+    if (L.face && lum >= 300 && inBox(x, y, L.face)) return hex;   // 臉上的陰影和頭髮反光同色，不要染到
     if (lum < 60 || lum > 650) return hex;             // 最外圈的輪廓；白色的蝴蝶結與反光
     return lum < L.dark2 ? pal[0] : lum < 300 ? pal[1] : pal[2];
   };
