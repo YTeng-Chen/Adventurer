@@ -5,12 +5,16 @@
 // 混色：火焰本體（火柱、火龍、新月斬、火焰粒子）用一般混色，才保得住火的顏色；加亮混色只用在小亮點和光暈，
 // 不然疊在白天的天空上會整片變白。
 // 時間點都用連招的進度（0–1）表示，跟著 rig.js 的 COMBOS.greatsword 走。
+// 擴充：新的武器形態要有大型特效，就在 StageFx 加一個和形態同名的方法（例如 greatsword(ms, calm)），
+// 並把形態加進 STAGE_STYLES；RigHero 播連招時會自動呼叫。套裝的畫面光環寫在 update() 裡，看 this.sets。
 import * as Phaser from 'phaser';
 import { W, H, GROUND } from './config.js';
 
 const FIRE = [0xfff6d6, 0xffd166, 0xff8a2a, 0xe8461a, 0x8a1c10];
 const ADD = Phaser.BlendModes.ADD, NORMAL = Phaser.BlendModes.NORMAL;
 // 大劍連招裡各段的時間點（連招進度 0–1）。命中時間和 rig.js 的 hits 一致
+export const STAGE_STYLES = new Set(['greatsword']);   // 有戰鬥畫面尺度連招特效的武器形態
+export const STAGE_SETS = new Set(['dragon']);         // 有戰鬥畫面尺度光環的套裝
 export const GS = { ignite: 0.02, hit1: 0.123, hit2: 0.292, charge: 0.36, launch: 0.577, hit3: 0.769, end: 1 };
 
 // ---------- 用程式畫的貼圖（像素風：光暈是一圈一圈的階梯，不是平滑漸層） ----------
@@ -121,7 +125,7 @@ export class StageFx {
     // 穿齊套裝時的火光輪廓：用角色同一張圖再畫一份，塗成橘紅、加亮、放大一點墊在後面（比濾鏡省很多）
     this.aura = scene.add.image(hero.x, hero.groundY, hero.tex.key).setOrigin(hero.image.originX, hero.image.originY)
       .setTint(0xff5a1a).setTintMode(Phaser.TintModes.FILL).setBlendMode(ADD).setDepth(1.95).setVisible(false);
-    this.lastEmit = 0; this.dragonSet = 0;
+    this.lastEmit = 0; this.sets = {};
   }
 
   // 每一格：劍上的火、套裝光環
@@ -131,7 +135,7 @@ export class StageFx {
       this.lastEmit = time;
       for (let i = 0; i < 2; i++) { const k = Math.random(); this.flames.emitParticleAt(b.base[0] + (b.tip[0] - b.base[0]) * k, b.base[1] + (b.tip[1] - b.base[1]) * k, 1); }
     }
-    const n = this.dragonSet;
+    const n = this.sets.dragon || 0;
     if (n >= 2 && Math.random() < (n >= 4 ? 0.5 : 0.18)) this.embers.emitParticleAt(h.x + (Math.random() - 0.5) * 36, h.groundY - Math.random() * 50, 1);
     this.halo.setPosition(h.x, h.groundY - 26).setAlpha(n >= 4 ? 0.28 + 0.12 * Math.sin(time / 260) : 0);
     if (n >= 4) {
@@ -141,7 +145,7 @@ export class StageFx {
   }
 
   // 穿了幾件炎龍套裝：2 件以上飄火星，穿齊時角色外圍有一圈火光輪廓、背後有脈動的火光
-  setSet(n) { this.dragonSet = n; }
+  setSets(counts) { this.sets = counts || {}; }
 
   // ---------- 大劍連招：ms 是整套連招播多久；calm 為 true 時（掛機）暗場淡一點 ----------
   greatsword(ms, calm = false) {

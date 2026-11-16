@@ -120,6 +120,8 @@ const BODY_LOOKS = {
 };
 // 裝備的額外零件（超出身體輪廓的部分，例如護肩尖刺、披風、龍爪）：外觀 → 產生零件的函式
 const EXTRAS = { dragonmail: dragonBodyExtras, dragonclaw: dragonFeetExtras };
+// 套裝的光環（跟著角色的小特效）：套裝代號 → (ctx, env, 穿了幾件) => 畫出來。新套裝在這裡加一種
+const SET_AURAS = { dragon: dragonAura };
 // 鞋子的外觀 → 鞋筒從哪裡開始（相對 L.boot）、用哪種材質
 const FEET_LOOKS = {
   boots: { start: 0, mat: 'leather' },
@@ -502,10 +504,11 @@ export class Rig {
       this.gear[n] = partCanvas(P, src(n), n.startsWith('arm') ? paint.arm : paint.leg, far(n));
     }
     this.held = weaponCanvas(this.equip.weapon);
-    // 額外零件（護肩尖刺、披風、龍爪），以及身上炎龍套裝的件數（決定光環）
+    // 額外零件（護肩尖刺、披風、龍爪），以及身上各套裝的件數（決定光環）
     this.extra = {};
     if (!this.bare) for (const k of ['body', 'feet']) { const it = this.equip[k]; if (it && EXTRAS[it.look]) Object.assign(this.extra, EXTRAS[it.look](P, this.view, it, INK)); }
-    this.dragonSet = this.bare ? 0 : ['weapon', 'head', 'body', 'feet', 'acc1', 'acc2'].filter((k) => this.equip[k] && this.equip[k].set === 'dragon').length;
+    this.setCount = {};   // 各套裝穿了幾件（決定光環）
+    if (!this.bare) for (const k of ['weapon', 'head', 'body', 'feet', 'acc1', 'acc2']) { const set = this.equip[k] && this.equip[k].set; if (set) this.setCount[set] = (this.setCount[set] || 0) + 1; }
     const best = Math.max(-1, ...['weapon', 'head', 'body', 'feet'].map((k) => (this.equip[k] ? this.equip[k].rarity : -1)));
     this.glow = best >= 3 ? gearMats({ tier: 1, rarity: best }).trim.ramp[3] : null;   // 史詩以上會冒光點
   }
@@ -605,9 +608,9 @@ export class Rig {
     const sh = this.G.armR;
     const cx = ox - this.foot[0] + pose.x + sh.x + sh.pivot[0], cy = oy - this.foot[1] + pose.y + pose.bodyY + sh.y + sh.pivot[1];
     const dot = (x, y, col, w = 1, h = w) => { ctx.fillStyle = col; ctx.fillRect(Math.round(x), Math.round(y), w, h); };
-    // 炎龍：套裝光環、劍上一直燒著的火（連招自己有 bladefire 時用連招的）
+    // 套裝光環、炎龍大劍上一直燒著的火（連招自己有 bladefire 時用連招的）
     const env = { ox: ox + pose.x, oy, cx, cy, dot, time, blade: this.bladeAt() };
-    dragonAura(ctx, env, this.dragonSet);
+    for (const k in this.setCount) if (SET_AURAS[k]) SET_AURAS[k](ctx, env, this.setCount[k]);
     if (env.blade && !pose.fx.some((f) => f.type === 'bladefire')) fireFx(ctx, { type: 'bladefire', p: 0.3 + 0.08 * (this.equip.weapon.rarity || 0) }, env);
     env.ox = ox;
     ctx.globalAlpha = 1;

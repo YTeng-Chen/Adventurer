@@ -19,7 +19,7 @@ function apply() {
   rig.setLook({ gender: state.gender, color: state.hair });
   const set = OUTFITS[state.gear];
   if (!set) { rig.setEquip({}, true); return; }
-  const it = (type, look) => ({ type, look, form: type === 'weapon' ? (look === 'dragonblade' ? 'greatsword' : look) : undefined, tier: state.tier, rarity: state.rarity, set: set.set });
+  const it = (type, look) => ({ type, look, form: type === 'weapon' ? (set.form || look) : undefined, tier: state.tier, rarity: state.rarity, set: set.set });
   rig.setEquip(Object.fromEntries(Object.entries(set.looks).map(([type, look]) => [type, it(type, look)])), false);
 }
 // 預覽用的整套外觀（gear.js 的 look）；武器的 look 剛好等於它的形態
@@ -28,8 +28,12 @@ const OUTFITS = {
   bow: { n: '弓＋皮甲', looks: { weapon: 'bow', head: 'cap', body: 'leather', feet: 'boots' } },
   hammer: { n: '鎚＋板甲', looks: { weapon: 'hammer', head: 'helm', body: 'plate', feet: 'greaves' } },
   staff: { n: '法杖＋法袍', looks: { weapon: 'staff', head: 'wizard', body: 'robe', feet: 'shoes' } },
-  dragon: { n: '炎龍套裝', set: 'dragon', looks: { weapon: 'dragonblade', head: 'dragonhelm', body: 'dragonmail', feet: 'dragonclaw' } },
 };
+// 每一套套裝自動多一個選項（data.js 的 SETS 和 gear.js 裡 set 相同的款式）
+for (const [k, st] of Object.entries(D.SETS)) {
+  const pieces = D.GEAR.filter((g) => g.set === k), weapon = pieces.find((g) => g.type === 'weapon');
+  OUTFITS[k] = { n: st.n, set: k, form: weapon && weapon.form, looks: Object.fromEntries(pieces.filter((g) => g.type !== 'acc').map((g) => [g.type, g.look])) };
+}
 function play(name) {
   if (ANIMS[name].loop) base = name;
   state.anim = name; start = performance.now();

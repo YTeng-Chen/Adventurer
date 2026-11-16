@@ -4,7 +4,7 @@ import * as Phaser from 'phaser';
 import { sprites } from '../ui/sprites.js';
 import { Rig, ANIMS, attackStyle } from '../rig/rig.js';
 import { HERO_SCALE } from './config.js';
-import { StageFx } from './stagefx.js';
+import { StageFx, STAGE_STYLES, STAGE_SETS } from './stagefx.js';
 
 export function gridTexture(scene, key, grid) {
   if (scene.textures.exists(key)) return key;
@@ -64,10 +64,10 @@ export class RigHero {
   }
   setLook(equip, look) {
     this.rig.setEquip(equip); this.rig.setLook(look); this.style = attackStyle(equip && equip.weapon);
-    // 炎龍：拿大劍或穿 2 件以上才建立戰鬥畫面尺度的特效（stagefx.js）
-    const n = this.rig.dragonSet || 0;
-    if (!this.fx && (this.style === 'greatsword' || n >= 2)) this.fx = new StageFx(this.scene, this);
-    if (this.fx) this.fx.setSet(n);
+    // 拿有大型特效的武器、或某一套穿 2 件以上，才建立戰鬥畫面尺度的特效（stagefx.js）
+    const sets = this.rig.setCount || {};
+    if (!this.fx && (STAGE_STYLES.has(this.style) || Object.keys(sets).some((k) => STAGE_SETS.has(k) && sets[k] >= 2))) this.fx = new StageFx(this.scene, this);
+    if (this.fx) this.fx.setSets(sets);
   }
   // 目標在畫面上的 x（魔物中心）：魔法球、箭、命中的爆光會飛到那裡
   setTarget(screenX) { this.reach = (screenX - this.x) / HERO_SCALE; this.targetX = screenX; }
@@ -76,7 +76,7 @@ export class RigHero {
     const name = `${full ? 'combo' : 'quick'}_${this.style || 'sword'}`, anim = ANIMS[name];
     this.play(name, speed);
     const ms = (anim.dur * 1000) / speed;
-    if (this.fx && this.style === 'greatsword') { if (full) this.fx.greatsword(ms, this.scene.sys.settings.key === 'Idle'); else this.fx.quick(ms); }
+    if (this.fx && STAGE_STYLES.has(this.style)) { if (full) this.fx[this.style](ms, this.scene.sys.settings.key === 'Idle'); else this.fx.quick(ms); }
     return anim.hits.map((h) => ({ ms: (h.t * anim.dur * 1000) / speed, w: h.w, power: h.power }));
   }
   // 命中時停頓一下（動作停住，之後接著播）
