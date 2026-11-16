@@ -203,14 +203,16 @@ test('祝福會改變戰鬥行為：連鎖只在有暴擊加成時出現', () =>
   assert.ok(storm.log.filter((l) => l.kind === 'chain').length > 0);
 });
 
-test('魔物狩獵：擊敗頭目解鎖下一張地圖，消耗狩獵券', () => {
+test('魔物狩獵：消耗狩獵券，首次擊敗金幣比較多', () => {
   const s = W.newGame(NOW, 1);
   s.hero.level = 25;
   const out = W.hunt(s, 0, NOW);
   assert.ok(out.r.win);
-  assert.equal(s.unlockedArea, 1);
+  assert.equal(s.bossKills[0], 1);
   assert.equal(s.hunt.tickets, W.HUNT_MAX - 1);
-  W.hunt(s, 0, NOW); W.hunt(s, 0, NOW);
+  const again = W.hunt(s, 0, NOW);
+  assert.ok(again.rewards.gold < out.rewards.gold);
+  W.hunt(s, 0, NOW);
   assert.equal(W.hunt(s, 0, NOW), null);
   W.refreshTickets(s, NOW + W.HUNT_REFILL_MS);
   assert.equal(s.hunt.tickets, 1);
@@ -237,30 +239,42 @@ test('武器有形態（決定攻擊動作），其他部位沒有', () => {
   assert.equal(I.createItem(rng, { def: 'huntbow', tier: 1, rarity: 0, seq: 100 }).form, 'bow');
 });
 
-test('冒險者階級：看聲望；裝備照材料階級需要對應的階級才能穿', () => {
+test('冒險者階級：看聲望，階級夠了才能去戰鬥地圖、狩獵頭目，晉升會記下來', () => {
   const s = W.newGame(NOW, 1);
-  const rng = R.make(11);
+  s.hero.level = 40;
   assert.equal(D.RANKS[W.rank(s)].n, '新手');
-  const t1 = I.createItem(rng, { def: 'warhammer', tier: 1, rarity: 0, seq: 90 });
-  const t3 = I.createItem(rng, { def: 'staff', tier: 3, rarity: 0, seq: 91 });
-  assert.equal(I.reqRank(t1), 0);
-  assert.equal(D.RANKS[I.reqRank(t3)].n, '中級冒險者');
-  s.bag.push(t1, t3);
-  assert.equal(W.equip(s, t3.id), false, '新手穿不了 T3');
-  assert.ok(s.bag.includes(t3));
-  assert.ok(W.equip(s, t1.id));
-  s.guild.rep = D.RANKS[2].rep;
-  assert.equal(W.rank(s), 2);
-  assert.ok(W.equip(s, t3.id));
-  assert.equal(s.equip.weapon.id, t3.id);
+  assert.ok(W.areaOpen(s, 0));
+  assert.equal(W.areaOpen(s, 1), false);
+  assert.equal(W.setArea(s, 1), false);
+  assert.equal(s.areaIdx, 0);
+  assert.equal(W.hunt(s, 1, NOW), null);
+  assert.equal(s.hunt.tickets, W.HUNT_MAX, '階級不夠不會扣狩獵券');
+  W.addRep(s, D.RANKS[D.AREAS[1].rank].rep, NOW);
+  assert.match(s.log[0].msg, /晉升為初級冒險者，可以前往「幽暗森林」/);
+  assert.ok(W.setArea(s, 1));
+  assert.equal(W.topArea(s), 1);
+  assert.ok(W.hunt(s, 1, NOW));
 });
 
-test('樣式表可以把個別款式的門檻提高', () => {
-  D.GEAR_BY_ID.testblade = { id: 'testblade', type: 'weapon', n: '試煉劍', form: 'sword', look: 'sword', rank: 4, base: () => ({ atk: 1 }) };
-  try {
-    const it = I.createItem(R.make(1), { def: 'testblade', tier: 1, rarity: 0, seq: 1 });
-    assert.equal(I.reqRank(it), 4, '比 T1 的門檻高時用樣式表的');
-    assert.equal(I.reqRank({ ...it, tier: 5 }), 4);
-    assert.equal(I.reqRank({ ...it, def: 'longsword', tier: 5 }), D.TIER_RANK[5]);
-  } finally { delete D.GEAR_BY_ID.testblade; }
+test('高級地圖掉高階材料，裝備不限階級都能穿', () => {
+  const s = W.newGame(NOW, 1);
+  s.hero.level = 60;
+  s.guild.rep = D.RANKS[D.AREAS[4].rank].rep;
+  assert.ok(W.setArea(s, 4));
+  W.settle(s, 200, NOW);
+  assert.ok(s.mats[W.matKey(5)] > 0);
+  const it = I.createItem(R.make(2), { def: 'staff', tier: 5, rarity: 0, seq: 500 });
+  const fresh = W.newGame(NOW, 1);
+  fresh.bag.push(it);
+  assert.ok(W.equip(fresh, it.id), '新手也能穿 T5');
+});
+
+test('舊存檔：打頭目解鎖過的地圖，聲望補到去得了的階級', async () => {
+  const { save } = await import('../src/core/save.js');
+  const old = JSON.parse(JSON.stringify(W.newGame(NOW, 1)));
+  old.unlockedArea = 2; old.guild.rep = 5;
+  const m = save.migrate(old, NOW);
+  assert.equal(m.unlockedArea, undefined);
+  assert.ok(W.areaOpen(m, 2));
+  assert.equal(W.areaOpen(m, 3), false);
 });

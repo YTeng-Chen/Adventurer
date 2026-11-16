@@ -23,7 +23,7 @@ function newGame(now, seed = (now ^ 0x5eed) >>> 0) {
     devices: Object.fromEntries(D.DEVICES.map((d) => [d.k, d.unlock === 0 ? 1 : 0])),
     trainDevice: 'dummy',
     location: 'battle',
-    areaIdx: 0, unlockedArea: 0, bossKills: {},
+    areaIdx: 0, bossKills: {},
     forge: { level: 1, type: 'auto', def: 'auto', progress: 0, status: '' },
     market: { rep: 0, keep: 8 },
     guild: { rep: 0, quests: [], qSeq: 0 },
@@ -99,6 +99,7 @@ function battleEnemy(rng, area) {
 }
 
 function tickBattle(s, rng, sum, h) {
+  if (!areaOpen(s, s.areaIdx)) s.areaIdx = topArea(s);
   const area = D.AREAS[s.areaIdx];
   const { lv, enemy } = battleEnemy(rng, area);
   const r = combat.fight(rng, h, enemy, { maxActions: 40 });
@@ -179,14 +180,29 @@ function rankOf(rep) {
   return r;
 }
 const rank = (s) => rankOf(s.guild.rep);
-// 冒險者階級夠高才能穿
-function canEquip(s, it) { return rank(s) >= I().reqRank(it); }
+// 冒險者階級夠高才能去這張地圖、狩獵這張地圖的頭目
+const areaOpen = (s, i) => !!D.AREAS[i] && rank(s) >= D.AREAS[i].rank;
+// 目前能去的最高一張地圖
+function topArea(s) {
+  let top = 0;
+  D.AREAS.forEach((a, i) => { if (areaOpen(s, i)) top = i; });
+  return top;
+}
+// 增加冒險者聲望；晉升時記下來，並列出新開放的地圖
+function addRep(s, n, now) {
+  const before = rank(s);
+  s.guild.rep += n;
+  const after = rank(s);
+  if (after === before) return;
+  const opened = D.AREAS.filter((a) => a.rank > before && a.rank <= after).map((a) => `「${a.n}」`);
+  addLog(s, `晉升為${D.RANKS[after].n}${opened.length ? `，可以前往${opened.join('、')}` : ''}`, now);
+}
 
-function tickGuild(s, rng, sum) {
+function tickGuild(s, rng, sum, now) {
   const g = D.RANKS[rank(s)];
   const gold = Math.round(g.gold * (1 + s.hero.level * 0.05));
   s.gold += gold; sum.gold += gold;
-  s.guild.rep += 1; sum.guildRep += 1;
+  addRep(s, 1, now); sum.guildRep += 1;
   s.counters.guildTicks++;
   return gainExp(s, 1, sum);
 }
@@ -203,7 +219,7 @@ function settle(s, ticks, now = Date.now()) {
     else if (s.location === 'battle') up = tickBattle(s, rng, sum, h);
     else if (s.location === 'forge') up = tickForge(s, rng, sum, now);
     else if (s.location === 'market') up = tickMarket(s, rng, sum);
-    else if (s.location === 'guild') up = tickGuild(s, rng, sum);
+    else if (s.location === 'guild') up = tickGuild(s, rng, sum, now);
     if (up || s.location === 'training') h = hero(s);
   }
   if (sum.levels) addLog(s, `升到 ${s.hero.level} 級`, now);
@@ -227,6 +243,11 @@ function catchUp(s, now = Date.now()) {
 
 // ---------- 玩家操作 ----------
 function setLocation(s, k) { if (D.LOCATIONS.some((l) => l.k === k)) s.location = k; }
+// 選擇戰鬥地圖：冒險者階級不夠就不能去
+function setArea(s, i) {
+  if (!areaOpen(s, i)) return false;
+  s.areaIdx = i; return true;
+}
 
 function unlockDevice(s, k) {
   const d = D.DEVICES.find((x) => x.k === k);
@@ -257,7 +278,7 @@ function equip(s, id, slotK) {
     else slot = it.type;
   }
   const def = D.SLOTS.find((x) => x.k === slot);
-  if (!def || def.type !== it.type || !canEquip(s, it)) return false;
+  if (!def || def.type !== it.type) return false;
   s.bag.splice(i, 1);
   if (s.equip[slot]) s.bag.push(s.equip[slot]);
   s.equip[slot] = it;
@@ -285,14 +306,14 @@ function makeQuest(s, rng) {
   const k = 1 + r * 0.6;
   const opts = [
     { kind: 'kills', n: '擊敗魔物', need: Math.round(30 * k) },
-    { kind: 'kill' + s.unlockedArea, n: `在${D.AREAS[s.unlockedArea].n}擊敗魔物`, need: Math.round(20 * k) },
+    { kind: 'kill' + topArea(s), n: `在${D.AREAS[topArea(s)].n}擊敗魔物`, need: Math.round(20 * k) },
     { kind: 'crafts', n: '鍛造裝備', need: Math.round(4 * k) },
     { kind: 'sold', n: '在市集賣出材料', need: Math.round(25 * k) },
     { kind: 'trainTicks', n: '在鍛鍊室鍛鍊', need: Math.round(20 * k) },
     { kind: 'guildTicks', n: '完成雜事委託', need: Math.round(20 * k) },
   ];
   const q = rng.pick(opts);
-  const tier = D.AREAS[s.unlockedArea].tier;
+  const tier = D.AREAS[topArea(s)].tier;
   const reward = { gold: Math.round(60 * k * tier), rep: Math.round(15 * k) };
   if (rng.chance(0.5)) reward.mat = { key: matKey(tier), n: 3 + r };
   return { id: 'q' + (++s.guild.qSeq), kind: q.kind, n: q.n, need: q.need, base: s.counters[q.kind] || 0, reward };
@@ -304,7 +325,7 @@ function claimQuest(s, id, now) {
   const q = s.guild.quests[i];
   if (questProgress(s, q) < q.need) return null;
   s.gold += q.reward.gold;
-  s.guild.rep += q.reward.rep;
+  addRep(s, q.reward.rep, now);
   if (q.reward.mat) addMat(s, q.reward.mat.key, q.reward.mat.n);
   const rng = R().make(s.seed);
   s.guild.quests[i] = makeQuest(s, rng);
@@ -329,13 +350,13 @@ function bossEnemy(areaIdx) {
 }
 function hunt(s, areaIdx, now) {
   refreshTickets(s, now);
-  if (s.hunt.tickets <= 0 || areaIdx > s.unlockedArea) return null;
+  if (s.hunt.tickets <= 0 || !areaOpen(s, areaIdx)) return null;
   if (s.hunt.tickets === HUNT_MAX) s.hunt.refillAt = now;
   s.hunt.tickets--;
   const rng = R().make(s.seed);
   const enemy = bossEnemy(areaIdx);
   const r = combat.fight(rng, hero(s), enemy, { maxActions: 30, log: true });
-  const rewards = { gold: 0, mats: {}, item: null, unlocked: null };
+  const rewards = { gold: 0, mats: {}, item: null };
   const a = D.AREAS[areaIdx];
   if (r.win) {
     s.counters.bossKills++;
@@ -350,17 +371,14 @@ function hunt(s, areaIdx, now) {
         tier: a.tier, rarity: Math.max(2, I().rollRarity(rng, D.FORGE[3].odds)), seq: s.itemSeq++ });
       s.bag.push(it); rewards.item = it;
     }
-    if (first && areaIdx === s.unlockedArea && areaIdx + 1 < D.AREAS.length) {
-      s.unlockedArea = areaIdx + 1; rewards.unlocked = D.AREAS[areaIdx + 1].n;
-      addLog(s, `擊敗${a.boss.n}，解鎖新地圖「${rewards.unlocked}」`, now);
-    } else addLog(s, `擊敗${a.boss.n}`, now);
+    addLog(s, `${first ? '首次' : ''}擊敗${a.boss.n}`, now);
   }
   s.seed = rng.state;
   return { r, rewards, boss: a.boss, enemy };
 }
 
 export const world = {
-  expNeed, matKey, matTier, marketBonus, marketSpeed, newGame, hero, settle, catchUp, setLocation, unlockDevice, upgradeDevice, upgradeForge,
-  equip, unequip, canEquip, sell, sellBelow, rankOf, rank, questProgress, claimQuest, refreshTickets, hunt, bossEnemy,
+  expNeed, matKey, matTier, marketBonus, marketSpeed, newGame, hero, settle, catchUp, setLocation, setArea, unlockDevice, upgradeDevice, upgradeForge,
+  equip, unequip, sell, sellBelow, rankOf, rank, areaOpen, topArea, addRep, questProgress, claimQuest, refreshTickets, hunt, bossEnemy,
   addLog, gainExp, HUNT_MAX, HUNT_REFILL_MS,
 };

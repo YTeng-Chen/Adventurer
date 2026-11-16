@@ -92,9 +92,10 @@ const EFFECTS = [
 const MATS = { 1: '獸牙', 2: '古木芯', 3: '鐵礦石', 4: '冥骨', 5: '熔岩核心' };
 const MAT_PRICE = (tier) => Math.round(3 * Math.pow(tier, 1.6));
 
+// 戰鬥地圖：tier 是掉落的材料階級，rank 是要幾階冒險者才能去（RANKS 的位置），同一張地圖的頭目也一樣
 const AREAS = [
   {
-    n: '綠風草原', tier: 1, lv: 1, sky: '#9fd6ef', ground: '#6fb257',
+    n: '綠風草原', tier: 1, rank: 0, lv: 1, sky: '#9fd6ef', ground: '#6fb257',
     monsters: [
       { n: '史萊姆', shape: 'slime', c: '#62c46a', m: { hp: 0.8, atk: 0.8 }, magic: true },
       { n: '草原狼', shape: 'beast', c: '#b08a5a', m: { hp: 0.9, atk: 1.0 } },
@@ -103,7 +104,7 @@ const AREAS = [
     boss: { n: '史萊姆王', shape: 'slime', c: '#3fae55', magic: true },
   },
   {
-    n: '幽暗森林', tier: 2, lv: 6, sky: '#3d5a52', ground: '#2f5233',
+    n: '幽暗森林', tier: 2, rank: 1, lv: 6, sky: '#3d5a52', ground: '#2f5233',
     monsters: [
       { n: '影狼', shape: 'beast', c: '#4a4f6a', m: { hp: 0.9, atk: 1.1 } },
       { n: '樹精', shape: 'golem', c: '#7a5a3a', m: { hp: 1.3, atk: 0.8 } },
@@ -112,7 +113,7 @@ const AREAS = [
     boss: { n: '古樹守衛', shape: 'golem', c: '#5a7a3a' },
   },
   {
-    n: '鐵鏽礦坑', tier: 3, lv: 12, sky: '#4a3a30', ground: '#5a4a3a',
+    n: '鐵鏽礦坑', tier: 3, rank: 2, lv: 12, sky: '#4a3a30', ground: '#5a4a3a',
     monsters: [
       { n: '礦坑哥布林', shape: 'humanoid', c: '#7aa04a', m: { hp: 0.9, atk: 1.1 } },
       { n: '鐵甲蟲', shape: 'bug', c: '#8a8a9a', m: { hp: 1.3, atk: 0.9 } },
@@ -121,7 +122,7 @@ const AREAS = [
     boss: { n: '鏽蝕巨像', shape: 'golem', c: '#a0603a' },
   },
   {
-    n: '亡者墓穴', tier: 4, lv: 19, sky: '#2a2638', ground: '#3a3648',
+    n: '亡者墓穴', tier: 4, rank: 3, lv: 19, sky: '#2a2638', ground: '#3a3648',
     monsters: [
       { n: '骷髏劍士', shape: 'humanoid', c: '#d8d4c4', m: { hp: 0.9, atk: 1.15 } },
       { n: '墓碑魔像', shape: 'golem', c: '#6a6a7a', m: { hp: 1.35, atk: 0.9 } },
@@ -130,7 +131,7 @@ const AREAS = [
     boss: { n: '亡靈君主', shape: 'humanoid', c: '#8a5ab0', magic: true },
   },
   {
-    n: '熔岩火山', tier: 5, lv: 27, sky: '#5a2a20', ground: '#3a2020',
+    n: '熔岩火山', tier: 5, rank: 4, lv: 27, sky: '#5a2a20', ground: '#3a2020',
     monsters: [
       { n: '火蜥蜴', shape: 'beast', c: '#e0603a', m: { hp: 1.0, atk: 1.15 } },
       { n: '熔岩巨人', shape: 'golem', c: '#a04a2a', m: { hp: 1.4, atk: 0.95 } },
@@ -161,7 +162,7 @@ const DEVICE_MAX_LV = 5;
 const deviceUpgradeCost = (lv) => Math.round(250 * Math.pow(3, lv - 1));
 
 // 冒險者階級：看冒險者聲望（在公會掛機、完成公會任務會增加）。
-// 決定能穿哪些裝備，也決定在公會接委託的收入（gold 是每次結算的基本金幣）。
+// 決定能去哪些戰鬥地圖、狩獵哪些頭目（AREAS 的 rank），也決定在公會接委託的收入（gold 是每次結算的基本金幣）。
 const RANKS = [
   { n: '新手', rep: 0, gold: 3 },
   { n: '初級冒險者', rep: 120, gold: 6 },
@@ -170,9 +171,6 @@ const RANKS = [
   { n: '資深冒險者', rep: 2500, gold: 26 },
   { n: '傳奇冒險者', rep: 6000, gold: 40 },
 ];
-// 各材料階級的裝備要幾階才能穿（RANKS 的位置）：T1 新手就能穿、T2 要初級冒險者……T5 要資深冒險者。
-// 個別款式可以在 gear.js 用 rank 提高門檻。
-const TIER_RANK = [0, 0, 1, 2, 3, 4];
 
 // 神之試煉的祝福：四個等級
 const BLESS_TIERS = [
@@ -209,5 +207,5 @@ export const data = {
   TICK_MS, OFFLINE_CAP_MS, AFFIX_CAP, BAG_CAP,
   STATS, STAT_NAME, STAT_PCT, FORMS, MECHS, SLOTS, TYPE_NAME, ITEM_TYPES, GEAR, GEAR_BY_ID,
   RARITY, FORGE, CRAFT_COST, AFFIXES, EFFECTS, MATS, MAT_PRICE, AREAS, LOCATIONS,
-  DEVICES, DEVICE_MAX_LV, deviceUpgradeCost, RANKS, TIER_RANK, BLESS_TIERS, BLESSINGS, BLESS_EVERY,
+  DEVICES, DEVICE_MAX_LV, deviceUpgradeCost, RANKS, BLESS_TIERS, BLESSINGS, BLESS_EVERY,
 };

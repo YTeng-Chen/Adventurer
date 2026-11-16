@@ -1,6 +1,7 @@
 // 存檔：存在瀏覽器的 localStorage。讀不到或寫不進去時遊戲照常運作，只是不會保留進度。
 import { world } from './world.js';
 import { items } from './items.js';
+import { data as D } from './data.js';
 const KEY = 'adventurer-save-v1';
 
 function load(now) {
@@ -23,8 +24,17 @@ function migrate(s, now) {
   for (const k of ['forge', 'market', 'guild', 'counters', 'hunt', 'training', 'devices', 'equip']) {
     s[k] = { ...fresh[k], ...s[k] };
   }
+  fromBossUnlock(s);
   for (const it of allItems(s)) items.hydrate(it);
   return s;
+}
+
+// 以前打倒頭目才解鎖下一張地圖，現在看冒險者階級：已經解鎖的地圖，把聲望補到去得了的階級，不讓舊玩家被擋在外面
+function fromBossUnlock(s) {
+  if (s.unlockedArea === undefined) return;
+  const area = D.AREAS[Math.min(s.unlockedArea, D.AREAS.length - 1)];
+  if (area) s.guild.rep = Math.max(s.guild.rep || 0, D.RANKS[area.rank].rep);
+  delete s.unlockedArea;
 }
 
 function allItems(s) {

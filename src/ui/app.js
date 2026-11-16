@@ -150,12 +150,12 @@ export function startUI(bus) {
 
   function battleView() {
     const rows = D.AREAS.map((a, i) => {
-      const locked = i > s.unlockedArea;
+      const locked = !W.areaOpen(s, i);
       const sel = s.areaIdx === i;
       return `<tr class="${sel ? 'sel' : ''}"><td><b>${a.n}</b><br><span class="hint">${a.monsters.map((m) => m.n).join('、')}</span></td>
         <td class="num">Lv ${a.lv}–${a.lv + 2}</td>
         <td><span class="chip">${D.MATS[a.tier]}</span></td>
-        <td class="r">${locked ? `<span class="hint">擊敗${D.AREAS[i - 1].boss.n}解鎖</span>` : sel ? '<b style="color:var(--gold)">目前地圖</b>' : `<button class="btn small" data-act="area" data-i="${i}">選擇</button>`}</td></tr>`;
+        <td class="r">${locked ? `<span class="hint">需要${D.RANKS[a.rank].n}</span>` : sel ? '<b style="color:var(--gold)">目前地圖</b>' : `<button class="btn small" data-act="area" data-i="${i}">選擇</button>`}</td></tr>`;
     }).join('');
     const last = lastTickSum && s.location === 'battle' ? `<p class="hint">最近一次結算：擊敗 ${lastTickSum.kills}、落敗 ${lastTickSum.losses}</p>` : '';
     return `<div class="sub-h"><h3>戰鬥地圖</h3><span class="hint">每 5 秒遇到一隻魔物。勝利得到經驗、金幣，有機會掉材料或裝備。</span></div>
@@ -183,7 +183,7 @@ export function startUI(bus) {
     const pct = s.location === 'forge' ? (f.progress / cur.ticks) * 100 : 0;
     return `<div class="sub-h"><h3>鍛造室・${cur.n} <span class="num" style="color:var(--gold)">Lv ${f.level}</span></h3>
         ${next ? `<button class="btn small" data-act="forge-up" ${s.gold < next.cost ? 'disabled' : ''}>升級為${next.n} <span class="num">${fmt(next.cost)}</span></button>` : '<span class="hint">已是最高級設備</span>'}</div>
-      <p class="hint">每件裝備用 ${D.CRAFT_COST} 個同階材料，${cur.ticks * 5} 秒完成一件。會先用最高階的材料，材料是哪一階，做出來的裝備就是哪一階；高階裝備要冒險者階級夠高才能穿。</p>
+      <p class="hint">每件裝備用 ${D.CRAFT_COST} 個同階材料，${cur.ticks * 5} 秒完成一件。會先用最高階的材料，材料是哪一階，做出來的裝備就是哪一階。高階材料要到高級的戰鬥地圖或狩獵頭目取得（冒險者階級夠高才能去）。</p>
       ${oddsBar(cur.odds)}
       <div class="row">
         <label class="field" for="forgeType">要鍛造的部位<select id="forgeType" data-set="forge-type">${typeOpts.map(([k, n]) => `<option value="${k}" ${f.type === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
@@ -220,7 +220,7 @@ export function startUI(bus) {
     }).join('');
     return `<div class="sub-h"><h3>公會・<span style="color:var(--gold)">${g.n}</span></h3>
         <span class="hint">${rankProgress()}</span></div>
-      <p class="hint">冒險者階級越高，能穿的裝備越好（T2 裝備要${D.RANKS[D.TIER_RANK[2]].n}、T3 要${D.RANKS[D.TIER_RANK[3]].n}……），接委託的收入也越多。</p>
+      <p class="hint">冒險者階級越高，能去的戰鬥地圖和能狩獵的頭目越多（${D.AREAS.filter((a) => a.rank > 0).map((a) => `${a.n}要${D.RANKS[a.rank].n}`).join('、')}），掉落的材料越高階，接委託的收入也越多。</p>
       <p class="hint">在公會掛機會接雜事委託，每 5 秒約 <b class="num">${fmt(g.gold * (1 + s.hero.level * 0.05))}</b> 金幣、聲望 +1。任務在任何地點都會累計，完成後回來領取。</p>
       <div class="slots">${quests}</div>`;
   }
@@ -252,14 +252,8 @@ export function startUI(bus) {
   }
   function itemChips(it) {
     return `<div class="chips"><span class="chip" style="color:${D.RARITY[it.rarity].color}">${D.RARITY[it.rarity].n}</span>
-      ${itemKindChip(it)}${rankChip(it)}
+      ${itemKindChip(it)}
       <span class="chip" style="color:var(--muted)">T${it.tier}</span></div>`;
-  }
-  // 需要的冒險者階級：新手就能穿的不標；階級不夠時標成紅色
-  function rankChip(it) {
-    const r = I.reqRank(it);
-    if (!r) return '';
-    return `<span class="chip" style="color:${W.canEquip(s, it) ? 'var(--muted)' : 'var(--bad)'}">需要${D.RANKS[r].n}</span>`;
   }
   // 武器標出職業（顏色是職業機制），其他部位標出部位
   function itemKindChip(it) {
@@ -288,16 +282,15 @@ export function startUI(bus) {
     const filters = [['all', '全部'], ['weapon', '武器'], ['head', '頭飾'], ['body', '上衣'], ['feet', '鞋子'], ['acc', '飾品']];
     const list = s.bag.filter((it) => bagFilter === 'all' || it.type === bagFilter)
       .map((it) => ({ it, slot: slotFor(it) }))
-      .map((o) => ({ ...o, d: powerWith(o.slot, o.it) - curPow, ok: W.canEquip(s, o.it) }))
-      .sort((a, b) => b.ok - a.ok || b.d - a.d || b.it.rarity - a.it.rarity);   // 能穿的排前面
+      .map((o) => ({ ...o, d: powerWith(o.slot, o.it) - curPow }))
+      .sort((a, b) => b.d - a.d || b.it.rarity - a.it.rarity);
     const bag = list.map(({ it, d }) => `<div class="card"><div class="row spread"><span class="slot-name">${D.TYPE_NAME[it.type]}</span>
         <span class="delta ${d > 0 ? 'up' : d < 0 ? 'down' : ''}">戰力 ${d > 0 ? '+' : ''}${fmt(d)}</span></div>
         ${itemHead(it)}${itemChips(it)}${itemLines(it)}
-        <div class="row">${W.canEquip(s, it) ? `<button class="btn small" data-act="equip" data-id="${it.id}">穿上</button>`
-          : `<button class="btn small" disabled title="需要${D.RANKS[I.reqRank(it)].n}">階級不足</button>`}
+        <div class="row"><button class="btn small" data-act="equip" data-id="${it.id}">穿上</button>
         <button class="btn ghost small" data-act="sell" data-id="${it.id}">賣出 <span class="num">${fmt(I.sellPrice(it))}</span></button></div></div>`).join('');
     const cheap = s.bag.filter((it) => it.rarity < 2).length;
-    return `<div class="row spread"><h2>裝備</h2><span class="hint">武器決定職業；飾品只提供詞條。高階裝備要冒險者階級夠高才能穿（在公會累積聲望）。外觀會隨裝備改變。</span></div>
+    return `<div class="row spread"><h2>裝備</h2><span class="hint">武器決定職業；飾品只提供詞條。外觀會隨裝備改變。</span></div>
       <div class="slots">${slots}</div>
       <div class="row spread"><h2>背包 <span class="num hint">${s.bag.length} / ${D.BAG_CAP}</span></h2>
         <div class="row"><div class="filter">${filters.map(([k, n]) => `<button data-act="bag-filter" data-k="${k}" aria-pressed="${bagFilter === k}">${n}</button>`).join('')}</div>
@@ -313,13 +306,13 @@ export function startUI(bus) {
     const h = s.hunt;
     const next = h.tickets < W.HUNT_MAX ? `，下一張 ${dur(h.refillAt + W.HUNT_REFILL_MS - now)} 後恢復` : '';
     const list = D.AREAS.map((a, i) => {
-      const locked = i > s.unlockedArea;
+      const locked = !W.areaOpen(s, i);
       const boss = W.bossEnemy(i);
       const kills = s.bossKills[i] || 0;
       return `<div class="card boss"><div class="row"><canvas data-boss="${i}" width="64" height="64"></canvas>
           <div><b>${a.boss.n}</b><br><span class="hint">${a.n}・Lv ${a.lv + 4}</span><br><span class="hint num">生命 ${fmt(boss.stats.hp)}</span></div></div>
-        <span class="hint">${kills ? `已擊敗 ${kills} 次` : i === s.unlockedArea && i + 1 < D.AREAS.length ? `首次擊敗解鎖「${D.AREAS[i + 1].n}」` : '尚未擊敗'}</span>
-        ${locked ? '<span class="hint">先擊敗前一隻頭目</span>' : `<button class="btn" data-act="hunt" data-i="${i}" ${h.tickets <= 0 ? 'disabled' : ''}>挑戰</button>`}</div>`;
+        <span class="hint">${kills ? `已擊敗 ${kills} 次` : '尚未擊敗（首次擊敗金幣 ×3）'}</span>
+        ${locked ? `<span class="hint">需要${D.RANKS[a.rank].n}</span>` : `<button class="btn" data-act="hunt" data-i="${i}" ${h.tickets <= 0 ? 'disabled' : ''}>挑戰</button>`}</div>`;
     }).join('');
     return `<div class="row spread"><h2>魔物狩獵</h2><span class="hint">狩獵券 <b class="num" style="color:var(--gold)">${h.tickets} / ${W.HUNT_MAX}</b>${next}</span></div>
       <p class="hint">頭目血量每次挑戰都會重置，要在 30 回合內打倒才算勝利。裝備的特殊效果、職業機制會直接改變戰鬥過程。</p>
@@ -329,7 +322,7 @@ export function startUI(bus) {
     document.querySelectorAll('canvas[data-boss]').forEach((cv) => {
       const a = D.AREAS[+cv.dataset.boss];
       const ctx = setupCanvas(cv, 64, 64);
-      const locked = +cv.dataset.boss > s.unlockedArea;
+      const locked = !W.areaOpen(s, +cv.dataset.boss);
       SP.draw(ctx, SP.enemyGrid(a.boss.shape, locked ? '#3a4256' : a.boss.c), 0, 0, 64 / SP.ENEMY_W, { alpha: locked ? 0.6 : 1 });
     });
   }
@@ -527,10 +520,10 @@ export function startUI(bus) {
       case 'unlock': if (W.unlockDevice(s, k)) toast('設備已解鎖'); break;
       case 'dev-up': if (W.upgradeDevice(s, k)) toast('設備升級了，訓練上限提高'); break;
       case 'train': s.trainDevice = k; break;
-      case 'area': s.areaIdx = +i; break;
+      case 'area': if (!W.setArea(s, +i)) toast(`需要${D.RANKS[D.AREAS[+i].rank].n}才能去`); break;
       case 'forge-up': if (W.upgradeForge(s)) toast(`鍛造室升級為${D.FORGE[s.forge.level].n}`); break;
       case 'claim': { const q = W.claimQuest(s, id, now); if (q) toast(`領到 ${fmt(q.reward.gold)} 金幣`); break; }
-      case 'equip': if (!W.equip(s, id, slotFor(s.bag.find((x) => x.id === id)))) toast('冒險者階級不夠，還不能穿'); break;
+      case 'equip': W.equip(s, id, slotFor(s.bag.find((x) => x.id === id))); break;
       case 'unequip': if (!W.unequip(s, k)) toast('背包滿了，先賣掉一些裝備'); break;
       case 'sell': toast(`賣出，得到 ${fmt(W.sell(s, id))} 金幣`); break;
       case 'sell-cheap': { const r = W.sellBelow(s, 2); toast(`賣出 ${r.n} 件，得到 ${fmt(r.total)} 金幣`); break; }
@@ -538,11 +531,11 @@ export function startUI(bus) {
       case 'hunt': {
         if (battle) { toast('先看完或關閉目前的戰鬥'); return; }
         const out = W.hunt(s, +i, now);
-        if (!out) { toast('狩獵券用完了'); break; }
+        if (!out) { toast(W.areaOpen(s, +i) ? '狩獵券用完了' : `需要${D.RANKS[D.AREAS[+i].rank].n}才能狩獵`); break; }
         persist();
         const rw = out.rewards;
         const res = out.r.win
-          ? `<p class="result win">勝利！</p><p class="hint">金幣 +${fmt(rw.gold)}・${Object.entries(rw.mats).map(([kk, n]) => `${matName(kk)} ×${n}`).join('、')}${rw.item ? `・<span style="color:${D.RARITY[rw.item.rarity].color}">${esc(rw.item.name)}</span>` : ''}${rw.unlocked ? `<br>解鎖新地圖「${esc(rw.unlocked)}」` : ''}</p>`
+          ? `<p class="result win">勝利！</p><p class="hint">金幣 +${fmt(rw.gold)}・${Object.entries(rw.mats).map(([kk, n]) => `${matName(kk)} ×${n}`).join('、')}${rw.item ? `・<span style="color:${D.RARITY[rw.item.rarity].color}">${esc(rw.item.name)}</span>` : ''}</p>`
           : `<p class="result lose">${out.r.timeout ? '時間到，沒能打倒' : '落敗'}</p><p class="hint">造成 ${fmt(out.r.dealt)} 傷害（頭目生命的 ${Math.round((out.r.dealt / out.r.maxHpE) * 100)}%）。</p>`;
         playBattle({ title: `魔物狩獵：${out.boss.n}`, foe: { shape: out.boss.shape, c: out.boss.c, name: out.boss.n, boss: true }, r: out.r, resultHtml: res, scene: +i });
         return;
