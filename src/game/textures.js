@@ -4,6 +4,7 @@ import * as Phaser from 'phaser';
 import { sprites } from '../ui/sprites.js';
 import { Rig, ANIMS, attackStyle } from '../rig/rig.js';
 import { HERO_SCALE } from './config.js';
+import { StageFx } from './stagefx.js';
 
 export function gridTexture(scene, key, grid) {
   if (scene.textures.exists(key)) return key;
@@ -61,23 +62,34 @@ export class RigHero {
     scene.events.once('shutdown', () => { scene.events.off('update', this.update); scene.textures.remove(this.tex.key); });
     this.update(scene.time.now);
   }
-  setLook(equip, look) { this.rig.setEquip(equip); this.rig.setLook(look); this.style = attackStyle(equip && equip.weapon); }
+  setLook(equip, look) {
+    this.rig.setEquip(equip); this.rig.setLook(look); this.style = attackStyle(equip && equip.weapon);
+    // 炎龍：拿大劍或穿 2 件以上才建立戰鬥畫面尺度的特效（stagefx.js）
+    const n = this.rig.dragonSet || 0;
+    if (!this.fx && (this.style === 'greatsword' || n >= 2)) this.fx = new StageFx(this.scene, this);
+    if (this.fx) this.fx.setSet(n);
+  }
   // 目標在畫面上的 x（魔物中心）：魔法球、箭、命中的爆光會飛到那裡
-  setTarget(screenX) { this.reach = (screenX - this.x) / HERO_SCALE; }
+  setTarget(screenX) { this.reach = (screenX - this.x) / HERO_SCALE; this.targetX = screenX; }
   // 依武器播放攻擊：full 為 true 是三段連招，否則是單發快攻。回傳命中的時間表 [{ ms, w, power }]
   attack(full, speed = 1) {
     const name = `${full ? 'combo' : 'quick'}_${this.style || 'sword'}`, anim = ANIMS[name];
     this.play(name, speed);
+    const ms = (anim.dur * 1000) / speed;
+    if (this.fx && this.style === 'greatsword') { if (full) this.fx.greatsword(ms, this.scene.sys.settings.key === 'Idle'); else this.fx.quick(ms); }
     return anim.hits.map((h) => ({ ms: (h.t * anim.dur * 1000) / speed, w: h.w, power: h.power }));
   }
+  // 命中時停頓一下（動作停住，之後接著播）
+  hold(ms) { this.holdFrom = this.scene.time.now; this.holdUntil = this.holdFrom + ms; }
   // speed > 1 會播得比較快（戰鬥紀錄播得快的時候用）
   play(name, speed = 1) { this.anim = name; this.t0 = this.scene.time.now; this.speed = speed; }
   flash(ms = 110) { this.flashUntil = this.scene.time.now + ms; }
   get topY() { return this.groundY - (this.rig.height + 1) * HERO_SCALE; }
 
   update(time) {
+    if (this.holdUntil && time >= this.holdUntil) { this.t0 += this.holdUntil - this.holdFrom; this.holdUntil = 0; }
     let anim = ANIMS[this.anim];
-    let t = ((time - this.t0) / 1000 / anim.dur) * this.speed;
+    let t = (((this.holdUntil ? this.holdFrom : time) - this.t0) / 1000 / anim.dur) * this.speed;
     if (anim.loop) t %= 1;
     else if (t >= 1) { this.anim = 'idle'; this.t0 = time; this.speed = 1; anim = ANIMS.idle; t = 0; }
     let blink = false;
@@ -93,5 +105,9 @@ export class RigHero {
     }
     this.rig.drawFx(ctx, this.footX, this.footY, pose, time / 1000);
     this.tex.refresh();
+    // 劍身在戰鬥畫面上的位置（給大型特效用）
+    const b = this.rig.bladeAt(), at = (p) => [this.x + (p[0] - this.footX) * HERO_SCALE, this.groundY + (p[1] - this.footY) * HERO_SCALE];
+    this.bladeStage = b ? { base: at(b.base), tip: at(b.tip) } : null;
+    if (this.fx) this.fx.update(time);
   }
 }

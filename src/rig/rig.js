@@ -378,51 +378,44 @@ const COMBOS = {
       hitFx(fx, t, this.hits, T, [C.wind, C.wind, C.gold]);
       return p;
     } },
-  // 大劍：龍炎三式。高舉蓄火斜劈 → 往後拉再橫掃、地面炸出火焰波 → 蹲低蓄力（火焰漩渦、腳下熔岩圈），
-  // 高高躍起斬落：劍上射出火龍撲向敵人，命中處火柱沖天、地面裂出熔岩。雙手握劍（後面的手跟著前面的手）
-  greatsword: { name: '大劍・龍炎三式', dur: 1.55, hits: [{ t: 0.2, w: 0.25, power: 2 }, { t: 0.47, w: 0.3, power: 2 }, { t: 0.87, w: 0.45, power: 4 }],
+  // 大劍：龍炎三式（約 2.6 秒）。前兩斬俐落：蓄火斜劈 → 往後拉再橫掃；終結技慢慢演：蹲低蓄力 → 高高躍起 → 斬落。
+  // 這裡只畫跟著角色的部分（劍上的火、火焰刀光、腳下熔岩圈）；火龍、火柱、火焰波、暗場等大型特效在 src/game/stagefx.js，
+  // 兩邊的時間點要一致（stagefx.js 的 GS）。雙手握劍（後面的手跟著前面的手）
+  greatsword: { name: '大劍・龍炎三式', dur: 2.6, hits: [{ t: 0.123, w: 0.25, power: 2 }, { t: 0.292, w: 0.3, power: 2 }, { t: 0.769, w: 0.45, power: 4 }],
     pose(t, T = REACH) {
+      const S = (sec) => sec / 2.6;   // 用秒寫關鍵格比較好讀
       const slam = { armR: -40, elbowR: 0, weapon: 208, armL: -32, elbowL: -4, torso: 19, x: 34, bodyY: 6, legL: -28, legR: -28, kneeL: 56, kneeR: 56 };
+      const crouch = { armR: -106, elbowR: -62, weapon: 60, armL: -100, elbowL: -62, torso: -5, x: 20, bodyY: 7, legL: -32, legR: -32, kneeL: 64, kneeR: 64 };
       const p = kf(t, [
         [0, {}],
-        [0.12, { armR: -168, elbowR: -48, weapon: 150, armL: -158, elbowL: -48, torso: -10, head: -5, x: -4, legL: -8, legR: 12 }],
-        [0.2, { armR: -55, elbowR: -6, weapon: 200, armL: -46, elbowL: -10, torso: 15, x: 12, bodyY: 3, legL: -16, legR: 16, kneeL: 24, kneeR: 10 }],
-        [0.3, { armR: -12, elbowR: -10, weapon: 226, armL: -6, elbowL: -12, torso: 17, x: 14, bodyY: 4, legL: -16, legR: 16, kneeL: 28, kneeR: 12 }],
-        [0.39, { armR: 46, elbowR: -22, weapon: 252, armL: 38, elbowL: -22, torso: -12, head: -6, x: 10, legL: 10, legR: -10 }],
-        [0.47, { armR: -94, elbowR: -4, weapon: 168, armL: -86, elbowL: -8, torso: 14, x: 22, legL: -18, legR: 18, kneeL: 16 }],
-        [0.55, { armR: -150, elbowR: -32, weapon: 140, armL: -142, elbowL: -32, torso: 4, x: 22 }],
-        [0.62, { armR: -104, elbowR: -62, weapon: 58, armL: -98, elbowL: -62, torso: -4, x: 20, bodyY: 6, legL: -30, legR: -30, kneeL: 60, kneeR: 60 }],
-        [0.73, { armR: -108, elbowR: -62, weapon: 62, armL: -102, elbowL: -62, torso: -6, x: 20, bodyY: 7, legL: -32, legR: -32, kneeL: 64, kneeR: 64 }],
-        [0.8, { armR: -176, elbowR: -30, weapon: 178, armL: -170, elbowL: -30, torso: -12, head: -8, x: 28, y: -62, legL: -40, kneeL: 72, legR: -6, kneeR: 58 }],
-        [0.87, slam],
-        [0.96, slam],
+        [S(0.22), { armR: -168, elbowR: -48, weapon: 150, armL: -158, elbowL: -48, torso: -10, head: -5, x: -4, legL: -8, legR: 12 }],
+        [S(0.32), { armR: -55, elbowR: -6, weapon: 200, armL: -46, elbowL: -10, torso: 15, x: 12, bodyY: 3, legL: -16, legR: 16, kneeL: 24, kneeR: 10 }],
+        [S(0.46), { armR: -12, elbowR: -10, weapon: 226, armL: -6, elbowL: -12, torso: 17, x: 14, bodyY: 4, legL: -16, legR: 16, kneeL: 28, kneeR: 12 }],
+        [S(0.62), { armR: 46, elbowR: -22, weapon: 252, armL: 38, elbowL: -22, torso: -12, head: -6, x: 10, legL: 10, legR: -10 }],
+        [S(0.76), { armR: -94, elbowR: -4, weapon: 168, armL: -86, elbowL: -8, torso: 14, x: 22, legL: -18, legR: 18, kneeL: 16 }],
+        [S(0.9), { armR: -150, elbowR: -32, weapon: 140, armL: -142, elbowL: -32, torso: 4, x: 22 }],
+        [S(1.02), crouch],
+        [S(1.4), { ...crouch, bodyY: 8, kneeL: 68, kneeR: 68, torso: -7 }],
+        [S(1.62), { armR: -176, elbowR: -30, weapon: 178, armL: -170, elbowL: -30, torso: -12, head: -8, x: 28, y: -66, legL: -40, kneeL: 72, legR: -6, kneeR: 58 }],
+        [S(1.86), { armR: -178, elbowR: -26, weapon: 182, armL: -172, elbowL: -26, torso: -14, head: -8, x: 31, y: -58, legL: -40, kneeL: 72, legR: -6, kneeR: 58 }],
+        [S(2.0), slam],
+        [S(2.35), slam],
         [1, {}],
       ]);
       const fx = p.fx;
       // 劍上的火：起手就點燃，蓄力時最旺，收招時變小
-      const fire = t < 0.6 ? lerp(0.35, 0.8, seg(t, 0, 0.12)) : t < 0.9 ? lerp(0.8, 1.3, seg(t, 0.6, 0.76)) : lerp(1.3, 0.35, seg(t, 0.9, 1));
+      const fire = t < S(1.0) ? lerp(0.35, 0.8, seg(t, 0, S(0.22))) : t < S(2.05) ? lerp(0.8, 1.35, seg(t, S(1.0), S(1.4))) : lerp(1.35, 0.35, seg(t, S(2.1), 1));
       fx.push({ type: 'bladefire', p: fire });
       // 一：斜劈
-      if (t > 0.12 && t < 0.36) fx.push({ type: 'flamearc', from: -190, to: lerp(-190, -35, seg(t, 0.12, 0.21)), r: 84, width: 18, alpha: 1 - seg(t, 0.24, 0.36) });
-      if (t > 0.2 && t < 0.4) fx.push({ type: 'embers', x: T - 10, y: TY - 20, w: 40, h: 50, n: 14, speed: 2, alpha: 1 - seg(t, 0.3, 0.4) });
-      // 二：橫掃，地面炸出往兩邊衝的火焰波
-      if (t > 0.38 && t < 0.62) fx.push({ type: 'flamearc', from: 60, to: lerp(60, -125, seg(t, 0.38, 0.48)), r: 80, width: 17, alpha: 1 - seg(t, 0.5, 0.62) });
-      if (t > 0.47 && t < 0.66) { const k = seg(t, 0.47, 0.66); fx.push({ type: 'groundfire', x0: 10 - 50 * k, x1: 30 + (T + 40) * k, h: 26 * (1 - k * 0.5), alpha: 1 - seg(t, 0.58, 0.66) }); }
-      // 三：蹲低蓄力（火焰漩渦、腳下熔岩圈、火星往上竄）
-      if (t > 0.56 && t < 0.76) fx.push({ type: 'vortex', x: 18, y: 60, r: 80, p: seg(t, 0.56, 0.76), n: 34 });
-      if (t > 0.56 && t < 0.92) fx.push({ type: 'heat', x: 18, rx: lerp(10, 34, seg(t, 0.56, 0.7)), alpha: Math.min(seg(t, 0.56, 0.62), 1 - seg(t, 0.84, 0.92)) });
-      if (t > 0.6 && t < 0.86) fx.push({ type: 'embers', x: 18, y: 0, w: 60, h: 110, n: 18, speed: 1.6 });
-      // 躍起斬落：巨大的火焰劍光，劍上射出火龍
-      if (t > 0.79 && t < 0.97) fx.push({ type: 'flamearc', from: -205, to: lerp(-205, -20, seg(t, 0.79, 0.87)), r: 88, width: 24, alpha: 1 - seg(t, 0.88, 0.97) });
-      if (t > 0.74 && t < 0.9) fx.push({ type: 'firedragon', from: [26, 215], to: [T + 6, TY], k: seg(t, 0.74, 0.87), amp: 20, size: 1.9, alpha: 1 - seg(t, 0.86, 0.9) });
-      // 命中：火柱沖天、熔岩裂縫、衝擊波、碎石、滿天火星
-      if (t >= 0.87) {
-        const k = seg(t, 0.87, 1);
-        fx.push({ type: 'pillar', x: T, w: 46, h: 175, p: k, alpha: 1 - seg(t, 0.93, 1) },
-          { type: 'lavacrack', x0: 30, x1: T + 46, p: k, alpha: 1 - seg(t, 0.95, 1) },
-          { type: 'shock', x: T, p: k, power: 2 }, { type: 'debris', x: T, p: k }, { type: 'sparks', x: T, p: k },
-          { type: 'embers', x: T, y: 0, w: 70, h: 140, n: 26, speed: 1.8, alpha: 1 - seg(t, 0.94, 1) });
-      }
+      if (t > S(0.24) && t < S(0.6)) fx.push({ type: 'flamearc', from: -190, to: lerp(-190, -35, seg(t, S(0.24), S(0.33))), r: 84, width: 18, alpha: 1 - seg(t, S(0.4), S(0.6)) });
+      // 二：橫掃
+      if (t > S(0.64) && t < S(0.98)) fx.push({ type: 'flamearc', from: 60, to: lerp(60, -125, seg(t, S(0.64), S(0.77))), r: 80, width: 17, alpha: 1 - seg(t, S(0.8), S(0.98)) });
+      // 三：蓄力時腳下的熔岩圈與往上竄的火星
+      if (t > S(0.95) && t < S(2.1)) fx.push({ type: 'heat', x: 18, rx: lerp(10, 34, seg(t, S(0.95), S(1.3))), alpha: Math.min(seg(t, S(0.95), S(1.05)), 1 - seg(t, S(1.95), S(2.1))) });
+      if (t > S(1.0) && t < S(1.95)) fx.push({ type: 'embers', x: 18, y: 0, w: 60, h: 110, n: 18, speed: 1.6 });
+      // 斬落：巨大的火焰刀光，落地的衝擊波與碎石（火龍、火柱在 stagefx.js）
+      if (t > S(1.88) && t < S(2.3)) fx.push({ type: 'flamearc', from: -205, to: lerp(-205, -20, seg(t, S(1.88), S(2.0))), r: 88, width: 24, alpha: 1 - seg(t, S(2.05), S(2.3)) });
+      if (t >= S(2.0)) { const k = seg(t, S(2.0), S(2.5)); fx.push({ type: 'shock', x: 40, p: k, power: 1.4 }, { type: 'debris', x: 40, p: k }); }
       hitFx(fx, t, this.hits, T, [C.fire, C.fire, C.dragon]);
       return p;
     } },
@@ -451,7 +444,7 @@ export const ANIMS = {
   } },
   combo_sword: COMBOS.sword, combo_hammer: COMBOS.hammer, combo_staff: COMBOS.staff, combo_bow: COMBOS.bow, combo_greatsword: COMBOS.greatsword,
   quick_sword: quick(COMBOS.sword, 0.27), quick_hammer: quick(COMBOS.hammer, 0.31), quick_staff: quick(COMBOS.staff, 0.27), quick_bow: quick(COMBOS.bow, 0.24),
-  quick_greatsword: quick(COMBOS.greatsword, 0.26),
+  quick_greatsword: quick(COMBOS.greatsword, 0.16),
   // 受擊：往後仰一下
   hurt: { name: '受擊', dur: 0.32, pose(t) {
     const k = Math.sin(seg(t, 0, 1) * Math.PI);

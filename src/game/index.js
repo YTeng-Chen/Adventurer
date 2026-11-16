@@ -20,6 +20,8 @@ export function createGame(parent, { bus, getState }) {
     scene: [IdleScene, BattleScene],
   });
 
+  if (import.meta.env && import.meta.env.DEV) window.__game = game;   // 開發時方便在瀏覽器裡檢查（打包後不會有）
+
   // 戰鬥：掛機場景先睡著，播完再叫醒
   bus.on('battle:start', (payload) => {
     game.scene.sleep('Idle');
