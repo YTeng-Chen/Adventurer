@@ -25,8 +25,16 @@ function migrate(s, now) {
     s[k] = { ...fresh[k], ...s[k] };
   }
   fromBossUnlock(s);
+  fromIdleGuild(s, now);
   for (const it of allItems(s)) items.hydrate(it);
   return s;
+}
+
+// 公會以前可以掛機、任務做完馬上換新的；現在不能掛機，改成每日委託。舊的任務換成今天的委託
+function fromIdleGuild(s, now) {
+  if (s.location === 'guild') s.location = 'battle';
+  if (s.guild.quests.some((q) => q.kind !== 'kill' && q.kind !== 'deliver')) s.guild.day = null;
+  world.refreshQuests(s, now);
 }
 
 // 以前只要打倒頭目就解鎖下一張地圖，現在還要冒險者階級夠：已經解鎖的地圖，
@@ -52,9 +60,6 @@ function fromV1(s) {
     if (tier) mats[world.matKey(tier)] = (mats[world.matKey(tier)] || 0) + n;
   }
   s.mats = mats;
-  for (const q of (s.guild && s.guild.quests) || []) {
-    if (q.reward && q.reward.mat) q.reward.mat.key = world.matKey(+q.reward.mat.key.split('-')[1]);
-  }
   if (s.forge) { delete s.forge.tag; s.forge.def = 'auto'; }
   for (const it of allItems(s)) items.fromLegacy(it);
   s.v = 2;

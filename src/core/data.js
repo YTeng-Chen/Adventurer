@@ -146,7 +146,6 @@ const LOCATIONS = [
   { k: 'battle', n: '戰鬥地圖', d: '掛機打魔物，獲得經驗、金幣與材料' },
   { k: 'forge', n: '鍛造室', d: '掛機把材料鍛造成裝備' },
   { k: 'market', n: '市集', d: '掛機販賣多餘材料，累積市集聲望' },
-  { k: 'guild', n: '公會', d: '掛機接雜事委託賺金幣，累積冒險者聲望、提升冒險者階級' },
 ];
 
 // 鍛鍊室設備：每次結算加多少、每級上限、解鎖費用
@@ -161,16 +160,25 @@ const DEVICES = [
 const DEVICE_MAX_LV = 5;
 const deviceUpgradeCost = (lv) => Math.round(250 * Math.pow(3, lv - 1));
 
-// 冒險者階級：看冒險者聲望（在公會掛機、完成公會任務會增加）。
-// 決定能去哪些戰鬥地圖、狩獵哪些頭目（AREAS 的 rank），也決定在公會接委託的收入（gold 是每次結算的基本金幣）。
+// 冒險者階級：看冒險者聲望（完成公會的每日委託會增加），決定能去哪些戰鬥地圖、狩獵哪些頭目（AREAS 的 rank）。
 const RANKS = [
-  { n: '新手', rep: 0, gold: 3 },
-  { n: '初級冒險者', rep: 120, gold: 6 },
-  { n: '中級冒險者', rep: 400, gold: 10 },
-  { n: '高級冒險者', rep: 1000, gold: 16 },
-  { n: '資深冒險者', rep: 2500, gold: 26 },
-  { n: '傳奇冒險者', rep: 6000, gold: 40 },
+  { n: '新手', rep: 0 },
+  { n: '初級冒險者', rep: 120 },
+  { n: '中級冒險者', rep: 400 },
+  { n: '高級冒險者', rep: 1000 },
+  { n: '資深冒險者', rep: 2500 },
+  { n: '傳奇冒險者', rep: 6000 },
 ];
+// 公會的每日委託：每天幾個、要擊敗幾隻／交付幾個（隨機挑一個）、多常出在目前最高的地圖，
+// 以及完成的獎勵（依委託那張地圖的材料階級 T1–T5）
+const GUILD = {
+  quests: 3,
+  killNeed: [25, 30, 35, 40],
+  deliverNeed: [12, 16, 20, 24],
+  topChance: 0.7,
+  rep: [0, 40, 60, 90, 130, 180],
+  gold: [0, 80, 200, 400, 700, 1100],
+};
 
 // 神之試煉的祝福：四個等級
 const BLESS_TIERS = [
@@ -207,5 +215,5 @@ export const data = {
   TICK_MS, OFFLINE_CAP_MS, AFFIX_CAP, BAG_CAP,
   STATS, STAT_NAME, STAT_PCT, FORMS, MECHS, SLOTS, TYPE_NAME, ITEM_TYPES, GEAR, GEAR_BY_ID,
   RARITY, FORGE, CRAFT_COST, AFFIXES, EFFECTS, MATS, MAT_PRICE, AREAS, LOCATIONS,
-  DEVICES, DEVICE_MAX_LV, deviceUpgradeCost, RANKS, BLESS_TIERS, BLESSINGS, BLESS_EVERY,
+  DEVICES, DEVICE_MAX_LV, deviceUpgradeCost, RANKS, GUILD, BLESS_TIERS, BLESSINGS, BLESS_EVERY,
 };

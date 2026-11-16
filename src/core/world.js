@@ -1,4 +1,4 @@
-// 遊戲狀態與掛機結算：鍛鍊室、戰鬥地圖、鍛造室、市集、公會、魔物狩獵、公會任務。
+// 遊戲狀態與掛機結算：鍛鍊室、戰鬥地圖、鍛造室、市集，以及魔物狩獵、公會的每日委託、冒險者階級。
 // 全部是純函式（改動傳進來的 state），不碰畫面，方便測試與離線結算。
 import { data } from './data.js';
 import { rng as RNG } from './rng.js';
@@ -26,8 +26,9 @@ function newGame(now, seed = (now ^ 0x5eed) >>> 0) {
     areaIdx: 0, bossKills: {},
     forge: { level: 1, type: 'auto', def: 'auto', progress: 0, status: '' },
     market: { rep: 0, keep: 8 },
-    guild: { rep: 0, quests: [], qSeq: 0 },
-    counters: { kills: 0, crafts: 0, sold: 0, trainTicks: 0, guildTicks: 0, bossKills: 0 },
+    guild: { rep: 0, quests: [], qSeq: 0, day: null },   // 每日委託：day 是委託所屬的那一天（dayId）
+    counters: { kills: 0, crafts: 0, sold: 0, trainTicks: 0, bossKills: 0 },
+    monKills: {},   // 各種魔物的擊敗數，鍵是「地圖-魔物」的位置，例如 '1-0'
     mats: {}, bag: [], equip: { weapon: null, head: null, body: null, feet: null, acc1: null, acc2: null },
     itemSeq: 1,
     trial: null,
@@ -39,8 +40,7 @@ function newGame(now, seed = (now ^ 0x5eed) >>> 0) {
   const rng = R().make(seed);
   s.equip.weapon = I().createItem(rng, { def: 'longsword', tier: 1, rarity: 0, seq: s.itemSeq++ });
   s.seed = rng.state;
-  while (s.guild.quests.length < 3) s.guild.quests.push(makeQuest(s, rng));
-  s.seed = rng.state;
+  refreshQuests(s, now);
   return s;
 }
 
@@ -74,7 +74,7 @@ function addMat(s, key, n, sum) {
 
 function newSummary() {
   return { ticks: 0, exp: 0, gold: 0, levels: 0, kills: 0, losses: 0, mats: {}, items: [], train: {}, sold: 0,
-    guildRep: 0, marketRep: 0, notes: new Set() };
+    marketRep: 0, notes: new Set() };
 }
 
 // ---------- 各地點的單次結算 ----------
@@ -93,20 +93,21 @@ function tickTraining(s, rng, sum) {
 }
 
 function battleEnemy(rng, area) {
-  const mon = rng.pick(area.monsters);
+  const mi = rng.int(0, area.monsters.length - 1), mon = area.monsters[mi];
   const lv = area.lv + rng.int(0, 2);
-  return { mon, lv, enemy: { name: mon.n, stats: combat.enemyStats(lv, mon.m, mon.magic) } };
+  return { mon, mi, lv, enemy: { name: mon.n, stats: combat.enemyStats(lv, mon.m, mon.magic) } };
 }
 
 function tickBattle(s, rng, sum, h) {
   if (!areaOpen(s, s.areaIdx)) s.areaIdx = topArea(s);
   const area = D.AREAS[s.areaIdx];
-  const { lv, enemy } = battleEnemy(rng, area);
+  const { mi, lv, enemy } = battleEnemy(rng, area);
   const r = combat.fight(rng, h, enemy, { maxActions: 40 });
   if (!r.win) { sum.losses++; return 0; }
   sum.kills++;
   s.counters.kills++;
-  s.counters['kill' + s.areaIdx] = (s.counters['kill' + s.areaIdx] || 0) + 1;
+  const mk = s.areaIdx + '-' + mi;
+  s.monKills[mk] = (s.monKills[mk] || 0) + 1;
   const gold = 1 + Math.round(lv * 0.6);
   s.gold += gold; sum.gold += gold;
   if (rng.chance(0.6)) addMat(s, matKey(area.tier), rng.chance(0.15) ? 2 : 1, sum);
@@ -157,11 +158,13 @@ const marketSpeed = (rep) => 2 + Math.min(10, Math.floor(rep / 200)); // 最多�
 function tickMarket(s, rng, sum) {
   const m = s.market;
   let cap = marketSpeed(m.rep);
-  const keys = Object.keys(s.mats).filter((k) => s.mats[k] > m.keep)
+  // 保留數量：玩家設定的，或公會交付委託還需要的，取多的
+  const keep = (k) => Math.max(m.keep, ...s.guild.quests.filter((q) => q.kind === 'deliver' && !q.done && matKey(q.tier) === k).map((q) => q.need));
+  const keys = Object.keys(s.mats).filter((k) => s.mats[k] > keep(k))
     .sort((a, b) => s.mats[b] - s.mats[a]);
   let sold = 0;
   for (const k of keys) {
-    while (cap > 0 && s.mats[k] > m.keep) {
+    while (cap > 0 && s.mats[k] > keep(k)) {
       const tier = matTier(k);
       const price = Math.round(D.MAT_PRICE(tier) * marketBonus(m.rep));
       s.mats[k]--; s.gold += price; sum.gold += price; cap--; sold++;
@@ -213,14 +216,6 @@ function addRep(s, n, now) {
   if (!logOpened(s, was, msg, now)) addLog(s, msg, now);
 }
 
-function tickGuild(s, rng, sum, now) {
-  const g = D.RANKS[rank(s)];
-  const gold = Math.round(g.gold * (1 + s.hero.level * 0.05));
-  s.gold += gold; sum.gold += gold;
-  addRep(s, 1, now); sum.guildRep += 1;
-  s.counters.guildTicks++;
-  return gainExp(s, 1, sum);
-}
 
 // ---------- 結算 ----------
 function settle(s, ticks, now = Date.now()) {
@@ -234,7 +229,6 @@ function settle(s, ticks, now = Date.now()) {
     else if (s.location === 'battle') up = tickBattle(s, rng, sum, h);
     else if (s.location === 'forge') up = tickForge(s, rng, sum, now);
     else if (s.location === 'market') up = tickMarket(s, rng, sum);
-    else if (s.location === 'guild') up = tickGuild(s, rng, sum, now);
     if (up || s.location === 'training') h = hero(s);
   }
   if (sum.levels) addLog(s, `升到 ${s.hero.level} 級`, now);
@@ -315,37 +309,67 @@ function sellBelow(s, rarity) {
   return { total, n };
 }
 
-// ---------- 公會任務 ----------
-function makeQuest(s, rng) {
-  const r = rank(s);
-  const k = 1 + r * 0.6;
-  const opts = [
-    { kind: 'kills', n: '擊敗魔物', need: Math.round(30 * k) },
-    { kind: 'kill' + topArea(s), n: `在${D.AREAS[topArea(s)].n}擊敗魔物`, need: Math.round(20 * k) },
-    { kind: 'crafts', n: '鍛造裝備', need: Math.round(4 * k) },
-    { kind: 'sold', n: '在市集賣出材料', need: Math.round(25 * k) },
-    { kind: 'trainTicks', n: '在鍛鍊室鍛鍊', need: Math.round(20 * k) },
-    { kind: 'guildTicks', n: '完成雜事委託', need: Math.round(20 * k) },
-  ];
-  const q = rng.pick(opts);
-  const tier = D.AREAS[topArea(s)].tier;
-  const reward = { gold: Math.round(60 * k * tier), rep: Math.round(15 * k) };
-  if (rng.chance(0.5)) reward.mat = { key: matKey(tier), n: 3 + r };
-  return { id: 'q' + (++s.guild.qSeq), kind: q.kind, n: q.n, need: q.need, base: s.counters[q.kind] || 0, reward };
+// ---------- 公會：每日委託 ----------
+// 公會不能掛機。每天（當地時間 00:00）刷新 GUILD.quests 個委託：擊敗指定魔物，或交付指定的材料。
+// 完成後到公會領取金幣與冒險者聲望，每個委託一天只能完成一次。
+function dayId(now) { return Math.floor((now - new Date(now).getTimezoneOffset() * 60000) / 86400000); }
+function dayResetAt(now) {
+  const localMs = (dayId(now) + 1) * 86400000;
+  return localMs + new Date(localMs).getTimezoneOffset() * 60000;
 }
-function questProgress(s, q) { return Math.min(q.need, (s.counters[q.kind] || 0) - q.base); }
-function claimQuest(s, id, now) {
-  const i = s.guild.quests.findIndex((q) => q.id === id);
-  if (i < 0) return null;
-  const q = s.guild.quests[i];
-  if (questProgress(s, q) < q.need) return null;
-  s.gold += q.reward.gold;
-  addRep(s, q.reward.rep, now);
-  if (q.reward.mat) addMat(s, q.reward.mat.key, q.reward.mat.n);
+
+// 委託的地圖：多半是目前能去的最高一張，有時是前面的地圖
+function questArea(s, rng) {
+  const open = D.AREAS.map((a, i) => i).filter((i) => areaOpen(s, i));
+  return rng.chance(D.GUILD.topChance) ? open[open.length - 1] : rng.pick(open);
+}
+// 同一天的委託不重複：擊敗的魔物不同、交付的材料不同。taken 記已經用過的目標
+const questKey = (q) => (q.kind === 'kill' ? `k${q.area}-${q.mon}` : `d${q.tier}`);
+function makeQuest(s, rng, kind, taken) {
+  const G = D.GUILD;
+  for (let tries = 0; tries < 20; tries++) {
+    const ai = questArea(s, rng), a = D.AREAS[ai];
+    const reward = { gold: G.gold[a.tier], rep: G.rep[a.tier] };
+    const q = kind === 'kill'
+      ? { kind, area: ai, mon: rng.int(0, a.monsters.length - 1), need: rng.pick(G.killNeed), reward, done: false }
+      : { kind, tier: a.tier, need: rng.pick(G.deliverNeed), reward, done: false };
+    if (taken.has(questKey(q))) continue;
+    taken.add(questKey(q));
+    if (kind === 'kill') q.base = s.monKills[q.area + '-' + q.mon] || 0;   // 接到之後才開始算
+    return { id: 'q' + (++s.guild.qSeq), ...q };
+  }
+  return kind === 'deliver' ? makeQuest(s, rng, 'kill', taken) : null;   // 能交付的材料都用過了：改成擊敗
+}
+// 換日就換一批新委託（至少一個擊敗、一個交付）。回傳是否換了
+function refreshQuests(s, now) {
+  const day = dayId(now);
+  if (s.guild.day === day) return false;
   const rng = R().make(s.seed);
-  s.guild.quests[i] = makeQuest(s, rng);
+  const kinds = ['kill', 'deliver'];
+  while (kinds.length < D.GUILD.quests) kinds.push(rng.pick(['kill', 'deliver']));
+  const taken = new Set();
+  s.guild.quests = kinds.map((k) => makeQuest(s, rng, k, taken)).filter(Boolean);
+  s.guild.day = day;
   s.seed = rng.state;
-  addLog(s, `完成公會任務「${q.n} ${q.need} 次」`, now);
+  return true;
+}
+function questText(q) {
+  if (q.kind === 'kill') { const a = D.AREAS[q.area]; return `在${a.n}擊敗${a.monsters[q.mon].n}`; }
+  return `交付${D.MATS[q.tier]}`;
+}
+function questProgress(s, q) {
+  const have = q.kind === 'kill' ? (s.monKills[q.area + '-' + q.mon] || 0) - q.base : s.mats[matKey(q.tier)] || 0;
+  return Math.max(0, Math.min(q.need, have));
+}
+const questReady = (s, q) => !q.done && questProgress(s, q) >= q.need;
+function claimQuest(s, id, now) {
+  const q = s.guild.quests.find((x) => x.id === id);
+  if (!q || !questReady(s, q)) return null;
+  if (q.kind === 'deliver') s.mats[matKey(q.tier)] -= q.need;   // 交付：材料交出去
+  q.done = true;
+  s.gold += q.reward.gold;
+  addLog(s, `完成公會委託「${questText(q)} ${q.need} ${q.kind === 'kill' ? '隻' : '個'}」`, now);
+  addRep(s, q.reward.rep, now);
   return q;
 }
 
@@ -401,6 +425,7 @@ function hunt(s, areaIdx, now) {
 
 export const world = {
   expNeed, matKey, matTier, marketBonus, marketSpeed, newGame, hero, settle, catchUp, setLocation, setArea, unlockDevice, upgradeDevice, upgradeForge,
-  equip, unequip, sell, sellBelow, rankOf, rank, areaNeeds, areaOpen, topArea, addRep, questProgress, claimQuest, refreshTickets, hunt, bossEnemy,
+  equip, unequip, sell, sellBelow, rankOf, rank, areaNeeds, areaOpen, topArea, addRep,
+  dayId, dayResetAt, refreshQuests, questText, questProgress, questReady, claimQuest, refreshTickets, hunt, bossEnemy,
   addLog, gainExp, HUNT_MAX, HUNT_REFILL_MS,
 };

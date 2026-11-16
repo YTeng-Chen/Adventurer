@@ -113,7 +113,7 @@ test('舊存檔（有流派）：材料併成每階一種，裝備對應到樣�
   old.v = 1;
   old.mats = { 'blade-1': 3, 'guard-1': 4, 'arcane-3': 2 };
   old.forge = { ...old.forge, tag: 'guard' }; delete old.forge.def;
-  old.guild.quests[0].reward.mat = { key: 'guard-2', n: 3 };
+  old.guild.quests[0] = { id: 'qo', kind: 'crafts', n: '鍛造裝備', need: 4, base: 0, reward: { gold: 60, rep: 15, mat: { key: 'guard-2', n: 3 } } };
   old.equip.weapon = { id: 'a', name: '新手長劍', type: 'weapon', tag: 'blade', tier: 1, rarity: 0, base: { atk: 12 }, affixes: [], effect: null, form: 'sword' };
   old.bag = [
     { id: 'b', name: '連擊之森林長弓', type: 'weapon', tag: 'blade', tier: 2, rarity: 3, base: { atk: 30 }, affixes: [], effect: { k: 'doubleChance', n: '連擊', v: 0.2, stat: false, d: 'old' }, form: 'bow' },
@@ -123,7 +123,7 @@ test('舊存檔（有流派）：材料併成每階一種，裝備對應到樣�
   const m = save.migrate(old, NOW);
   assert.equal(m.v, 2);
   assert.deepEqual(m.mats, { [W.matKey(1)]: 7, [W.matKey(3)]: 2 });
-  assert.equal(m.guild.quests[0].reward.mat.key, W.matKey(2));
+  assert.ok(m.guild.quests.every((q) => q.kind === 'kill' || q.kind === 'deliver'), '舊任務換成每日委託');
   assert.equal(m.forge.def, 'auto');
   assert.equal(m.forge.tag, undefined);
   assert.equal(m.equip.weapon.def, 'longsword');
@@ -136,25 +136,72 @@ test('舊存檔（有流派）：材料併成每階一種，裝備對應到樣�
   assert.equal(m.bag[2].look, 'earring');
 });
 
-test('市集只賣超過保留數量的材料', () => {
+test('市集只賣超過保留數量的材料，公會交付委託要的會留著', () => {
   const s = W.newGame(NOW, 1);
   s.location = 'market';
+  s.guild.quests = [];
   s.mats[W.matKey(1)] = 20;
   W.settle(s, 50, NOW);
   assert.equal(s.mats[W.matKey(1)], s.market.keep);
   assert.ok(s.gold > 0);
   assert.equal(s.market.rep, 20 - s.market.keep);
+  s.guild.quests = [{ id: 'qd', kind: 'deliver', tier: 1, need: 15, reward: { gold: 1, rep: 1 }, done: false }];
+  s.mats[W.matKey(1)] = 30;
+  W.settle(s, 50, NOW);
+  assert.equal(s.mats[W.matKey(1)], 15);
 });
 
-test('公會任務完成後可以領獎並換新任務', () => {
+test('公會：每天刷新委託（擊敗指定魔物、交付材料），完成拿金幣與聲望，一天只能領一次', () => {
   const s = W.newGame(NOW, 1);
-  s.guild.quests[0] = { id: 'qx', kind: 'kills', n: '擊敗魔物', need: 3, base: 0, reward: { gold: 99, rep: 5 } };
-  assert.equal(W.claimQuest(s, 'qx', NOW), null);
-  s.counters.kills = 3;
+  assert.equal(s.guild.quests.length, D.GUILD.quests);
+  assert.ok(s.guild.quests.some((q) => q.kind === 'kill') && s.guild.quests.some((q) => q.kind === 'deliver'));
+  assert.ok(D.LOCATIONS.every((l) => l.k !== 'guild'), '公會不能掛機');
+  assert.equal(W.refreshQuests(s, NOW + 1000), false, '同一天不會換');
+
+  // 擊敗指定魔物：只算接到委託之後、那一種魔物
+  const kill = { id: 'qk', kind: 'kill', area: 0, mon: 1, need: 5, base: s.monKills['0-1'] || 0, reward: { gold: 80, rep: 40 }, done: false };
+  const deliver = { id: 'qd', kind: 'deliver', tier: 1, need: 12, reward: { gold: 80, rep: 80 }, done: false };
+  s.guild.quests = [kill, deliver];
+  assert.equal(W.questText(kill), '在綠風草原擊敗草原狼');
+  assert.equal(W.claimQuest(s, 'qk', NOW), null);
+  s.hero.level = 10;
+  W.settle(s, 60, NOW);
+  assert.ok(s.monKills['0-1'] >= 5);
   const gold = s.gold;
-  assert.ok(W.claimQuest(s, 'qx', NOW));
-  assert.equal(s.gold, gold + 99);
-  assert.notEqual(s.guild.quests[0].id, 'qx');
+  assert.ok(W.claimQuest(s, 'qk', NOW));
+  assert.equal(s.gold, gold + 80);
+  assert.equal(s.guild.rep, 40);
+  assert.equal(W.claimQuest(s, 'qk', NOW), null, '一天只能領一次');
+
+  // 交付：材料夠才能交，交了會扣掉
+  s.mats[W.matKey(1)] = 20;
+  assert.equal(W.questText(deliver), '交付獸牙');
+  assert.ok(W.claimQuest(s, 'qd', NOW));
+  assert.equal(s.mats[W.matKey(1)], 8);
+  assert.match(s.log[0].msg, /晉升為初級冒險者/);
+
+  // 隔天換一批新的
+  assert.ok(W.refreshQuests(s, NOW + 86400e3));
+  assert.ok(s.guild.quests.every((q) => !q.done && q.id !== 'qk' && q.id !== 'qd'));
+  assert.ok(W.dayResetAt(NOW) > NOW && W.dayResetAt(NOW) - NOW <= 86400e3);
+});
+
+test('委託只出在能去的地圖', () => {
+  const s = W.newGame(NOW, 1);
+  for (let d = 1; d <= 20; d++) {
+    W.refreshQuests(s, NOW + d * 86400e3);
+    assert.equal(s.guild.quests.length, D.GUILD.quests);
+    assert.ok(s.guild.quests.every((q) => (q.kind === 'kill' ? q.area === 0 : q.tier === 1)));
+    const keys = s.guild.quests.map((q) => (q.kind === 'kill' ? `k${q.mon}` : 'd'));
+    assert.equal(new Set(keys).size, keys.length, '同一天不重複');
+  }
+  s.guild.rep = D.RANKS[2].rep; s.bossKills = { 0: 1, 1: 1 };
+  const areas = new Set();
+  for (let d = 21; d <= 60; d++) {
+    W.refreshQuests(s, NOW + d * 86400e3);
+    for (const q of s.guild.quests) if (q.kind === 'kill') areas.add(q.area);
+  }
+  assert.ok(areas.has(2) && [...areas].every((a) => a <= 2));
 });
 
 test('裝備穿脫：替換下來的回到背包', () => {

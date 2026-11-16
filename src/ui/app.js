@@ -16,7 +16,7 @@ export function startUI(bus) {
   const fmtV = (k, v) => (D.STAT_PCT[k] ? (Math.round(v * 10) / 10) + '%' : fmt(v));
 
   let s = null;
-  let tab = null;           // 目前打開的功能：掛機地點的代號，或 hero、gear、hunt、trial、settings（開機時設為掛機中的地點）
+  let tab = null;           // 目前打開的功能：掛機地點的代號，或 guild、hero、gear、hunt、trial、settings（開機時設為掛機中的地點）
   let stageShown = false;
   let bagFilter = 'all';
   let battle = null;        // 播放中的戰鬥
@@ -99,17 +99,21 @@ export function startUI(bus) {
   }
 
   // ---------- 分頁 ----------
-  const TOOLS = [{ k: 'hero', n: '角色' }, { k: 'gear', n: '背包' }, { k: 'hunt', n: '狩獵' }, { k: 'trial', n: '試煉' }, { k: 'settings', n: '設定' }];
+  const TOOLS = [{ k: 'guild', n: '公會' }, { k: 'hero', n: '角色' }, { k: 'gear', n: '背包' }, { k: 'hunt', n: '狩獵' }, { k: 'trial', n: '試煉' }, { k: 'settings', n: '設定' }];
   const isLoc = (k) => D.LOCATIONS.some((l) => l.k === k);
   function renderTiles() {
+    const ready = s.guild.quests.filter((q) => W.questReady(s, q)).length;
+    const badge = (k) => (k === s.location ? '<span class="tile-on">掛機中</span>'
+      : k === 'guild' && ready ? `<span class="tile-on gold">可領取 ${ready}</span>` : '');
     const tile = (k, n) => `<button class="tile" data-tab="${k}" id="tab-${k}" aria-pressed="${k === tab}">
-      ${k === s.location ? '<span class="tile-on">掛機中</span>' : ''}${navIcon(k)}<span class="tile-n">${n}</span></button>`;
+      ${badge(k)}${navIcon(k)}<span class="tile-n">${n}</span></button>`;
     $('#tiles').innerHTML = D.LOCATIONS.map((l) => tile(l.k, l.n.replace('地圖', ''))).join('') + TOOLS.map((t) => tile(t.k, t.n)).join('');
   }
   function renderPanel() {
     renderTiles();
     const p = $('#panel');
     if (isLoc(tab)) p.innerHTML = locPanel(tab);
+    else if (tab === 'guild') p.innerHTML = guildPanel();
     else if (tab === 'hero') p.innerHTML = heroPanel();
     else if (tab === 'gear') p.innerHTML = gearPanel();
     else if (tab === 'hunt') { p.innerHTML = huntPanel(); drawBossThumbs(); }
@@ -120,7 +124,7 @@ export function startUI(bus) {
   // ---------- 掛機地點 ----------
   function locPanel(v) {
     const loc = D.LOCATIONS.find((l) => l.k === v);
-    const body = { training: trainingView, battle: battleView, forge: forgeView, market: marketView, guild: guildView }[v]();
+    const body = { training: trainingView, battle: battleView, forge: forgeView, market: marketView }[v]();
     const state = '<span class="on-chip">掛機中</span>';
     return `<div class="row spread"><h2>${loc.n}</h2>${state}</div>
       <p class="hint">${loc.d}。點下面的地點方塊就會改到那裡掛機，同一時間只能在一個地點，離線也會繼續（最多 12 小時）。</p>
@@ -210,21 +214,26 @@ export function startUI(bus) {
     const nx = D.RANKS[W.rank(s) + 1];
     return `冒險者聲望 <b class="num">${fmt(s.guild.rep)}</b>${nx ? ` / ${fmt(nx.rep)} 升為${nx.n}` : '（最高階）'}`;
   }
-  function guildView() {
-    const r = W.rank(s), g = D.RANKS[r], nx = D.RANKS[r + 1];
-    const quests = s.guild.quests.map((q) => {
-      const p = W.questProgress(s, q);
-      const done = p >= q.need;
-      const reward = [`<span class="num">${fmt(q.reward.gold)}</span> 金幣`, `聲望 +${q.reward.rep}`, q.reward.mat ? `${matName(q.reward.mat.key)} ×${q.reward.mat.n}` : ''].filter(Boolean).join('、');
-      return `<div class="card"><div class="row spread"><b>${esc(q.n)} ${q.need} 次</b>${done ? `<button class="btn small" data-act="claim" data-id="${q.id}">領取</button>` : ''}</div>
-        <div class="bar good"><span style="width:${(p / q.need) * 100}%"></span></div>
-        <span class="hint"><span class="num">${p} / ${q.need}</span>・獎勵：${reward}</span></div>`;
-    }).join('');
-    return `<div class="sub-h"><h3>公會・<span style="color:var(--gold)">${g.n}</span></h3>
-        <span class="hint">${rankProgress()}</span></div>
-      <p class="hint">要去下一張戰鬥地圖（和狩獵它的頭目），冒險者階級要夠，也要打倒前一張地圖的頭目（${D.AREAS.filter((a) => a.rank > 0).map((a) => `${a.n}要${D.RANKS[a.rank].n}`).join('、')}）。越高級的地圖掉越高階的材料。階級越高，接委託的收入也越多。</p>
-      <p class="hint">在公會掛機會接雜事委託，每 5 秒約 <b class="num">${fmt(g.gold * (1 + s.hero.level * 0.05))}</b> 金幣、聲望 +1。任務在任何地點都會累計，完成後回來領取。</p>
-      <div class="slots">${quests}</div>`;
+  // ---------- 公會：每日委託 ----------
+  function questCard(q) {
+    const p = W.questProgress(s, q), a = q.kind === 'kill' && D.AREAS[q.area];
+    const unit = q.kind === 'kill' ? '隻' : '個';
+    const btn = q.done ? '<span class="chip" style="color:var(--good)">已完成</span>'
+      : W.questReady(s, q) ? `<button class="btn small" data-act="claim" data-id="${q.id}">${q.kind === 'kill' ? '領取' : '交付'}</button>` : '';
+    const where = a && !q.done && (s.location !== 'battle' || s.areaIdx !== q.area) ? `<br>在戰鬥地圖選「${a.n}」掛機才會算${W.areaOpen(s, q.area) ? '' : `（${needsText(q.area)}）`}` : '';
+    const how = q.kind === 'deliver' && !q.done ? '<br>材料夠了就能交付，交付後會扣掉；市集會先留著這些材料' : '';
+    return `<div class="card"><div class="row spread"><b>${esc(W.questText(q))} ${q.need} ${unit}</b>${btn}</div>
+      <div class="bar good"><span style="width:${(q.done ? 1 : p / q.need) * 100}%"></span></div>
+      <span class="hint"><span class="num">${q.done ? q.need : p} / ${q.need}</span>・獎勵：<span class="num">${fmt(q.reward.gold)}</span> 金幣、聲望 +${q.reward.rep}${where}${how}</span></div>`;
+  }
+  function guildPanel() {
+    const now = Date.now();
+    return `<div class="row spread"><h2>公會</h2><span class="hint">冒險者階級 <b style="color:var(--gold)">${D.RANKS[W.rank(s)].n}</b></span></div>
+      <p class="hint">${rankProgress()}</p>
+      <div class="sub"><div class="sub-h"><h3>今天的委託</h3><span class="hint">${dur(W.dayResetAt(now) - now)}後刷新（每天 00:00）</span></div>
+        <p class="hint">擊敗指定的魔物（接到委託之後才開始算），或交付指定的材料。完成後回到這裡領取金幣與冒險者聲望，每個委託一天只能完成一次。</p>
+        <div class="slots">${s.guild.quests.map(questCard).join('')}</div></div>
+      <p class="hint">要去下一張戰鬥地圖（和狩獵它的頭目），冒險者階級要夠，也要打倒前一張地圖的頭目（${D.AREAS.filter((a) => a.rank > 0).map((a) => `${a.n}要${D.RANKS[a.rank].n}`).join('、')}）。越高級的地圖掉越高階的材料。</p>`;
   }
 
   // ---------- 裝備與背包 ----------
@@ -425,7 +434,6 @@ export function startUI(bus) {
     for (const k in sum.train) rows.push([D.STAT_NAME[k] + '鍛鍊', '+' + fmtV(k, sum.train[k])]);
     if (sum.sold) rows.push(['市集賣出', `${fmt(sum.sold)} 個材料`]);
     if (sum.marketRep) rows.push(['市集聲望', '+' + fmt(sum.marketRep)]);
-    if (sum.guildRep) rows.push(['冒險者聲望', '+' + fmt(sum.guildRep)]);
     const mats = Object.entries(sum.mats).map(([k, n]) => `${matName(k)} ×${n}`).join('、');
     if (mats) rows.push(['材料', mats]);
     const items = sum.items.slice().sort((a, b) => b.rarity - a.rarity);
@@ -499,8 +507,9 @@ export function startUI(bus) {
     if (sum.levels) toast(`升到 ${s.hero.level} 級！`);
     const good = sum.items.filter((it) => it.rarity >= 3);
     if (good.length) toast(`得到${D.RARITY[good[0].rarity].n}裝備「${good[0].name}」`);
-    // 掛機地點與角色的畫面會即時更新；其他功能不打斷玩家操作
-    if ((isLoc(tab) || tab === 'hero') && !document.activeElement?.matches('select')) renderPanel();
+    // 掛機地點、角色、公會的畫面會即時更新；其他功能不打斷玩家操作
+    if ((isLoc(tab) || tab === 'hero' || tab === 'guild') && !document.activeElement?.matches('select')) renderPanel();
+    else renderTiles();   // 公會方塊上的「可領取」
   }
   function loop() {
     const now = Date.now();
@@ -510,6 +519,8 @@ export function startUI(bus) {
       onTick(sum);
       persist();
     }
+    // 過了午夜：換一批公會委託
+    if (W.refreshQuests(s, now)) { persist(); toast('公會的委託刷新了'); renderPanel(); }
     renderHud(now);
   }
 
@@ -524,7 +535,7 @@ export function startUI(bus) {
       case 'train': s.trainDevice = k; break;
       case 'area': if (!W.setArea(s, +i)) toast(needsText(+i)); break;
       case 'forge-up': if (W.upgradeForge(s)) toast(`鍛造室升級為${D.FORGE[s.forge.level].n}`); break;
-      case 'claim': { const q = W.claimQuest(s, id, now); if (q) toast(`領到 ${fmt(q.reward.gold)} 金幣`); break; }
+      case 'claim': { const q = W.claimQuest(s, id, now); if (q) toast(`完成委託：金幣 +${fmt(q.reward.gold)}、聲望 +${q.reward.rep}`); break; }
       case 'equip': W.equip(s, id, slotFor(s.bag.find((x) => x.id === id))); break;
       case 'unequip': if (!W.unequip(s, k)) toast('背包滿了，先賣掉一些裝備'); break;
       case 'sell': toast(`賣出，得到 ${fmt(W.sell(s, id))} 金幣`); break;
