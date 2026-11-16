@@ -148,6 +148,8 @@ export function startUI(bus) {
       <div class="table-wrap"><table class="t"><thead><tr><th>設備</th><th>等級</th><th>進度</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
 
+  // 這張地圖還差哪些條件，例如「還需要：中級冒險者、擊敗古樹守衛」
+  function needsText(i) { return '還需要：' + W.areaNeeds(s, i).join('、'); }
   function battleView() {
     const rows = D.AREAS.map((a, i) => {
       const locked = !W.areaOpen(s, i);
@@ -155,7 +157,7 @@ export function startUI(bus) {
       return `<tr class="${sel ? 'sel' : ''}"><td><b>${a.n}</b><br><span class="hint">${a.monsters.map((m) => m.n).join('、')}</span></td>
         <td class="num">Lv ${a.lv}–${a.lv + 2}</td>
         <td><span class="chip">${D.MATS[a.tier]}</span></td>
-        <td class="r">${locked ? `<span class="hint">需要${D.RANKS[a.rank].n}</span>` : sel ? '<b style="color:var(--gold)">目前地圖</b>' : `<button class="btn small" data-act="area" data-i="${i}">選擇</button>`}</td></tr>`;
+        <td class="r">${locked ? `<span class="hint">${needsText(i)}</span>` : sel ? '<b style="color:var(--gold)">目前地圖</b>' : `<button class="btn small" data-act="area" data-i="${i}">選擇</button>`}</td></tr>`;
     }).join('');
     const last = lastTickSum && s.location === 'battle' ? `<p class="hint">最近一次結算：擊敗 ${lastTickSum.kills}、落敗 ${lastTickSum.losses}</p>` : '';
     return `<div class="sub-h"><h3>戰鬥地圖</h3><span class="hint">每 5 秒遇到一隻魔物。勝利得到經驗、金幣，有機會掉材料或裝備。</span></div>
@@ -220,7 +222,7 @@ export function startUI(bus) {
     }).join('');
     return `<div class="sub-h"><h3>公會・<span style="color:var(--gold)">${g.n}</span></h3>
         <span class="hint">${rankProgress()}</span></div>
-      <p class="hint">冒險者階級越高，能去的戰鬥地圖和能狩獵的頭目越多（${D.AREAS.filter((a) => a.rank > 0).map((a) => `${a.n}要${D.RANKS[a.rank].n}`).join('、')}），掉落的材料越高階，接委託的收入也越多。</p>
+      <p class="hint">要去下一張戰鬥地圖（和狩獵它的頭目），冒險者階級要夠，也要打倒前一張地圖的頭目（${D.AREAS.filter((a) => a.rank > 0).map((a) => `${a.n}要${D.RANKS[a.rank].n}`).join('、')}）。越高級的地圖掉越高階的材料。階級越高，接委託的收入也越多。</p>
       <p class="hint">在公會掛機會接雜事委託，每 5 秒約 <b class="num">${fmt(g.gold * (1 + s.hero.level * 0.05))}</b> 金幣、聲望 +1。任務在任何地點都會累計，完成後回來領取。</p>
       <div class="slots">${quests}</div>`;
   }
@@ -312,7 +314,7 @@ export function startUI(bus) {
       return `<div class="card boss"><div class="row"><canvas data-boss="${i}" width="64" height="64"></canvas>
           <div><b>${a.boss.n}</b><br><span class="hint">${a.n}・Lv ${a.lv + 4}</span><br><span class="hint num">生命 ${fmt(boss.stats.hp)}</span></div></div>
         <span class="hint">${kills ? `已擊敗 ${kills} 次` : '尚未擊敗（首次擊敗金幣 ×3）'}</span>
-        ${locked ? `<span class="hint">需要${D.RANKS[a.rank].n}</span>` : `<button class="btn" data-act="hunt" data-i="${i}" ${h.tickets <= 0 ? 'disabled' : ''}>挑戰</button>`}</div>`;
+        ${locked ? `<span class="hint">${needsText(i)}</span>` : `<button class="btn" data-act="hunt" data-i="${i}" ${h.tickets <= 0 ? 'disabled' : ''}>挑戰</button>`}</div>`;
     }).join('');
     return `<div class="row spread"><h2>魔物狩獵</h2><span class="hint">狩獵券 <b class="num" style="color:var(--gold)">${h.tickets} / ${W.HUNT_MAX}</b>${next}</span></div>
       <p class="hint">頭目血量每次挑戰都會重置，要在 30 回合內打倒才算勝利。裝備的特殊效果、職業機制會直接改變戰鬥過程。</p>
@@ -520,7 +522,7 @@ export function startUI(bus) {
       case 'unlock': if (W.unlockDevice(s, k)) toast('設備已解鎖'); break;
       case 'dev-up': if (W.upgradeDevice(s, k)) toast('設備升級了，訓練上限提高'); break;
       case 'train': s.trainDevice = k; break;
-      case 'area': if (!W.setArea(s, +i)) toast(`需要${D.RANKS[D.AREAS[+i].rank].n}才能去`); break;
+      case 'area': if (!W.setArea(s, +i)) toast(needsText(+i)); break;
       case 'forge-up': if (W.upgradeForge(s)) toast(`鍛造室升級為${D.FORGE[s.forge.level].n}`); break;
       case 'claim': { const q = W.claimQuest(s, id, now); if (q) toast(`領到 ${fmt(q.reward.gold)} 金幣`); break; }
       case 'equip': W.equip(s, id, slotFor(s.bag.find((x) => x.id === id))); break;
@@ -531,11 +533,11 @@ export function startUI(bus) {
       case 'hunt': {
         if (battle) { toast('先看完或關閉目前的戰鬥'); return; }
         const out = W.hunt(s, +i, now);
-        if (!out) { toast(W.areaOpen(s, +i) ? '狩獵券用完了' : `需要${D.RANKS[D.AREAS[+i].rank].n}才能狩獵`); break; }
+        if (!out) { toast(W.areaOpen(s, +i) ? '狩獵券用完了' : needsText(+i)); break; }
         persist();
         const rw = out.rewards;
         const res = out.r.win
-          ? `<p class="result win">勝利！</p><p class="hint">金幣 +${fmt(rw.gold)}・${Object.entries(rw.mats).map(([kk, n]) => `${matName(kk)} ×${n}`).join('、')}${rw.item ? `・<span style="color:${D.RARITY[rw.item.rarity].color}">${esc(rw.item.name)}</span>` : ''}</p>`
+          ? `<p class="result win">勝利！</p><p class="hint">金幣 +${fmt(rw.gold)}・${Object.entries(rw.mats).map(([kk, n]) => `${matName(kk)} ×${n}`).join('、')}${rw.item ? `・<span style="color:${D.RARITY[rw.item.rarity].color}">${esc(rw.item.name)}</span>` : ''}${rw.unlocked ? `<br>可以前往新地圖「${esc(rw.unlocked)}」` : ''}${rw.next ? `<br>達到${esc(rw.next.needs.join('、'))}就能前往「${esc(rw.next.area)}」` : ''}</p>`
           : `<p class="result lose">${out.r.timeout ? '時間到，沒能打倒' : '落敗'}</p><p class="hint">造成 ${fmt(out.r.dealt)} 傷害（頭目生命的 ${Math.round((out.r.dealt / out.r.maxHpE) * 100)}%）。</p>`;
         playBattle({ title: `魔物狩獵：${out.boss.n}`, foe: { shape: out.boss.shape, c: out.boss.c, name: out.boss.n, boss: true }, r: out.r, resultHtml: res, scene: +i });
         return;

@@ -239,27 +239,48 @@ test('武器有形態（決定攻擊動作），其他部位沒有', () => {
   assert.equal(I.createItem(rng, { def: 'huntbow', tier: 1, rarity: 0, seq: 100 }).form, 'bow');
 });
 
-test('冒險者階級：看聲望，階級夠了才能去戰鬥地圖、狩獵頭目，晉升會記下來', () => {
+test('地圖和狩獵要兩個條件：冒險者階級夠、打倒前一張地圖的頭目', () => {
   const s = W.newGame(NOW, 1);
   s.hero.level = 40;
   assert.equal(D.RANKS[W.rank(s)].n, '新手');
   assert.ok(W.areaOpen(s, 0));
-  assert.equal(W.areaOpen(s, 1), false);
+  assert.deepEqual(W.areaNeeds(s, 1), ['初級冒險者', '擊敗史萊姆王']);
   assert.equal(W.setArea(s, 1), false);
-  assert.equal(s.areaIdx, 0);
   assert.equal(W.hunt(s, 1, NOW), null);
-  assert.equal(s.hunt.tickets, W.HUNT_MAX, '階級不夠不會扣狩獵券');
-  W.addRep(s, D.RANKS[D.AREAS[1].rank].rep, NOW);
+  assert.equal(s.hunt.tickets, W.HUNT_MAX, '還不能去就不會扣狩獵券');
+
+  // 先打倒頭目：階級還不夠，告訴玩家還差什麼
+  const out = W.hunt(s, 0, NOW);
+  assert.ok(out.r.win);
+  assert.equal(out.rewards.unlocked, null);
+  assert.deepEqual(out.rewards.next, { area: '幽暗森林', needs: ['初級冒險者'] });
+  assert.match(s.log[0].msg, /達到初級冒險者就能前往「幽暗森林」/);
+  assert.equal(W.areaOpen(s, 1), false);
+
+  // 再晉升：兩個條件都達成
+  W.addRep(s, D.RANKS[1].rep, NOW);
   assert.match(s.log[0].msg, /晉升為初級冒險者，可以前往「幽暗森林」/);
   assert.ok(W.setArea(s, 1));
   assert.equal(W.topArea(s), 1);
   assert.ok(W.hunt(s, 1, NOW));
 });
 
+test('階級先到、後打倒頭目：打倒時解鎖下一張地圖', () => {
+  const s = W.newGame(NOW, 1);
+  s.hero.level = 40;
+  W.addRep(s, D.RANKS[1].rep, NOW);
+  assert.equal(s.log[0].msg, '晉升為初級冒險者');
+  assert.deepEqual(W.areaNeeds(s, 1), ['擊敗史萊姆王']);
+  const out = W.hunt(s, 0, NOW);
+  assert.equal(out.rewards.unlocked, '幽暗森林');
+  assert.match(s.log[0].msg, /首次擊敗史萊姆王，可以前往「幽暗森林」/);
+});
+
 test('高級地圖掉高階材料，裝備不限階級都能穿', () => {
   const s = W.newGame(NOW, 1);
   s.hero.level = 60;
   s.guild.rep = D.RANKS[D.AREAS[4].rank].rep;
+  s.bossKills = { 0: 1, 1: 1, 2: 1, 3: 1 };
   assert.ok(W.setArea(s, 4));
   W.settle(s, 200, NOW);
   assert.ok(s.mats[W.matKey(5)] > 0);
@@ -272,9 +293,10 @@ test('高級地圖掉高階材料，裝備不限階級都能穿', () => {
 test('舊存檔：打頭目解鎖過的地圖，聲望補到去得了的階級', async () => {
   const { save } = await import('../src/core/save.js');
   const old = JSON.parse(JSON.stringify(W.newGame(NOW, 1)));
-  old.unlockedArea = 2; old.guild.rep = 5;
+  old.unlockedArea = 2; old.guild.rep = 5; old.bossKills = { 0: 2 };
   const m = save.migrate(old, NOW);
   assert.equal(m.unlockedArea, undefined);
+  assert.deepEqual(m.bossKills, { 0: 2, 1: 1 });
   assert.ok(W.areaOpen(m, 2));
   assert.equal(W.areaOpen(m, 3), false);
 });

@@ -29,11 +29,14 @@ function migrate(s, now) {
   return s;
 }
 
-// 以前打倒頭目才解鎖下一張地圖，現在看冒險者階級：已經解鎖的地圖，把聲望補到去得了的階級，不讓舊玩家被擋在外面
+// 以前只要打倒頭目就解鎖下一張地圖，現在還要冒險者階級夠：已經解鎖的地圖，
+// 把聲望補到去得了的階級、前面的頭目算打倒過，不讓舊玩家被擋在外面
 function fromBossUnlock(s) {
   if (s.unlockedArea === undefined) return;
-  const area = D.AREAS[Math.min(s.unlockedArea, D.AREAS.length - 1)];
-  if (area) s.guild.rep = Math.max(s.guild.rep || 0, D.RANKS[area.rank].rep);
+  const top = Math.min(s.unlockedArea, D.AREAS.length - 1);
+  s.guild.rep = Math.max(s.guild.rep || 0, D.RANKS[D.AREAS[top].rank].rep);
+  s.bossKills = s.bossKills || {};
+  for (let i = 0; i < top; i++) s.bossKills[i] = s.bossKills[i] || 1;
   delete s.unlockedArea;
 }
 

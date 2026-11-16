@@ -180,8 +180,23 @@ function rankOf(rep) {
   return r;
 }
 const rank = (s) => rankOf(s.guild.rep);
-// 冒險者階級夠高才能去這張地圖、狩獵這張地圖的頭目
-const areaOpen = (s, i) => !!D.AREAS[i] && rank(s) >= D.AREAS[i].rank;
+// 這張地圖（和它的頭目）還差哪些條件：冒險者階級要夠，而且要打倒前一張地圖的頭目。回傳空陣列就是可以去
+function areaNeeds(s, i) {
+  const a = D.AREAS[i];
+  if (!a) return ['沒有這張地圖'];
+  const needs = [];
+  if (rank(s) < a.rank) needs.push(D.RANKS[a.rank].n);
+  if (i > 0 && !s.bossKills[i - 1]) needs.push('擊敗' + D.AREAS[i - 1].boss.n);
+  return needs;
+}
+const areaOpen = (s, i) => areaNeeds(s, i).length === 0;
+const openAreas = (s) => D.AREAS.map((a, i) => areaOpen(s, i));
+// 新開放的地圖寫進紀錄：before 是先前的 openAreas
+function logOpened(s, before, prefix, now) {
+  const opened = D.AREAS.filter((a, i) => !before[i] && areaOpen(s, i)).map((a) => `「${a.n}」`);
+  if (opened.length) addLog(s, `${prefix}，可以前往${opened.join('、')}`, now);
+  return opened.length > 0;
+}
 // 目前能去的最高一張地圖
 function topArea(s) {
   let top = 0;
@@ -190,12 +205,12 @@ function topArea(s) {
 }
 // 增加冒險者聲望；晉升時記下來，並列出新開放的地圖
 function addRep(s, n, now) {
-  const before = rank(s);
+  const before = rank(s), was = openAreas(s);
   s.guild.rep += n;
   const after = rank(s);
   if (after === before) return;
-  const opened = D.AREAS.filter((a) => a.rank > before && a.rank <= after).map((a) => `「${a.n}」`);
-  addLog(s, `晉升為${D.RANKS[after].n}${opened.length ? `，可以前往${opened.join('、')}` : ''}`, now);
+  const msg = '晉升為' + D.RANKS[after].n;
+  if (!logOpened(s, was, msg, now)) addLog(s, msg, now);
 }
 
 function tickGuild(s, rng, sum, now) {
@@ -356,9 +371,10 @@ function hunt(s, areaIdx, now) {
   const rng = R().make(s.seed);
   const enemy = bossEnemy(areaIdx);
   const r = combat.fight(rng, hero(s), enemy, { maxActions: 30, log: true });
-  const rewards = { gold: 0, mats: {}, item: null };
+  const rewards = { gold: 0, mats: {}, item: null, unlocked: null, next: null };
   const a = D.AREAS[areaIdx];
   if (r.win) {
+    const was = openAreas(s);
     s.counters.bossKills++;
     const first = !s.bossKills[areaIdx];
     s.bossKills[areaIdx] = (s.bossKills[areaIdx] || 0) + 1;
@@ -371,7 +387,13 @@ function hunt(s, areaIdx, now) {
         tier: a.tier, rarity: Math.max(2, I().rollRarity(rng, D.FORGE[3].odds)), seq: s.itemSeq++ });
       s.bag.push(it); rewards.item = it;
     }
-    addLog(s, `${first ? '首次' : ''}擊敗${a.boss.n}`, now);
+    const msg = `${first ? '首次' : ''}擊敗${a.boss.n}`;
+    const nextIdx = areaIdx + 1;
+    if (first && D.AREAS[nextIdx]) {
+      if (!was[nextIdx] && areaOpen(s, nextIdx)) rewards.unlocked = D.AREAS[nextIdx].n;
+      else if (!areaOpen(s, nextIdx)) rewards.next = { area: D.AREAS[nextIdx].n, needs: areaNeeds(s, nextIdx) };   // 還差冒險者階級
+    }
+    if (!logOpened(s, was, msg, now)) addLog(s, msg + (rewards.next ? `；達到${rewards.next.needs.join('、')}就能前往「${rewards.next.area}」` : ''), now);
   }
   s.seed = rng.state;
   return { r, rewards, boss: a.boss, enemy };
@@ -379,6 +401,6 @@ function hunt(s, areaIdx, now) {
 
 export const world = {
   expNeed, matKey, matTier, marketBonus, marketSpeed, newGame, hero, settle, catchUp, setLocation, setArea, unlockDevice, upgradeDevice, upgradeForge,
-  equip, unequip, sell, sellBelow, rankOf, rank, areaOpen, topArea, addRep, questProgress, claimQuest, refreshTickets, hunt, bossEnemy,
+  equip, unequip, sell, sellBelow, rankOf, rank, areaNeeds, areaOpen, topArea, addRep, questProgress, claimQuest, refreshTickets, hunt, bossEnemy,
   addLog, gainExp, HUNT_MAX, HUNT_REFILL_MS,
 };
