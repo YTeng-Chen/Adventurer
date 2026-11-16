@@ -5,7 +5,7 @@ import { data } from './data.js';
 import { stats } from './stats.js';
 const D = data;
 
-const TIER_PREFIX = ['', '新手', '森林', '礦鐵', '冥骨', '炎龍'];
+const TIER_PREFIX = ['', '新手', '森林', '礦鐵', '冥骨', '熔岩'];   // T5 不叫「炎龍」，免得和炎龍套裝搞混
 
 function round(k, v) { return D.STAT_PCT[k] ? Math.round(v * 10) / 10 : Math.round(v); }
 

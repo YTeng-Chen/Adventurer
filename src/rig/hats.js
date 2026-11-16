@@ -1,9 +1,12 @@
 // 頭飾：每種帽子外觀（gear.js 的 look）一種畫法，畫成一張獨立的小圖，戴在頭上跟著頭轉。
+//   炎龍角盔（dragon.js）：全罩式，整顆頭（連臉）都蓋住
 //   劍士：皮革冒險帽（帽帶、扣環，稀有度越高羽毛越多）
 //   守衛：騎士頭盔（中央稜線、鉚釘、護頰、護鼻，稀有以上有盔纓，傳說有角）
 //   術士：尖頂巫師帽（寬帽簷、往後垂的尖頂，稀有以上有星星，史詩以上帽尖有寶珠）
 // 材料階級決定材質顏色，稀有度決定裝飾。座標用「大格」（一大格 = 2×2 像素，和角色原圖的方塊一樣大）。
 // 戴帽子時，帽簷以上的頭髮會藏起來（被帽子壓住），帽簷以下的瀏海和兩側的頭髮照常露出來。
+
+import { dragonHelm } from './dragon.js';
 
 // 各性別、各視角的帽子位置（大格）：L、R 是帽子左右兩端，B 是帽簷那一列；側面朝右，R 是臉的那一側
 export const HAT_AT = {
@@ -125,7 +128,8 @@ function arcaneHat(g, A, m, r) {
 }
 
 // 外觀（gear.js 的 look）→ 畫法。新的帽子外觀就在這裡加一種
-const STYLES = { cap: bladeCap, helm: guardHelm, wizard: arcaneHat };
+const STYLES = { cap: bladeCap, helm: guardHelm, wizard: arcaneHat, dragonhelm: dragonHelm };
+const FULL = new Set(['dragonhelm']);   // 全罩式：底下的頭髮全部藏起來，臉被頭盔蓋住
 
 // 畫出帽子。回傳 { canvas, x, y }（x、y 是帽子左上角在角色圖裡的像素位置）與 cut（這一列大格以上的頭髮要藏起來）
 export function hatCanvas(gender, view, it, m, ink, unit) {
@@ -139,5 +143,5 @@ export function hatCanvas(gender, view, it, m, ink, unit) {
   canvas.width = (x1 - x0 + 1) * unit; canvas.height = (y1 - y0 + 1) * unit;
   const ctx = canvas.getContext('2d');
   for (const [k, col] of cells) { const [x, y] = k.split(',').map(Number); ctx.fillStyle = col; ctx.fillRect((x - x0) * unit, (y - y0) * unit, unit, unit); }
-  return { canvas, x: x0 * unit, y: y0 * unit, cut: A.B };
+  return { canvas, x: x0 * unit, y: y0 * unit, cut: FULL.has(it.look) ? Infinity : A.B };
 }

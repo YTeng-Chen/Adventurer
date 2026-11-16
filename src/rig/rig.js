@@ -10,6 +10,7 @@ import { RIG_PARTS } from './parts-data.js';
 import { gearMats } from '../art/palette.js';
 import { CHIBI } from '../art/chibi-data.js';
 import { hatCanvas } from './hats.js';
+import { DRAGON_BODY, DRAGON_FEET, dragonBodyExtras, dragonFeetExtras, drawDragonBlade, BLADE_SIZE, BLADE_PIVOT, BLADE_POINTS, fireFx, dragonAura } from './dragon.js';
 
 const RAD = Math.PI / 180;
 const INK = RIG_PARTS.m.front.ink;
@@ -114,12 +115,17 @@ const BODY_LOOKS = {
     torso: (L, x, y, m) => (L.center(x) ? (m.trim || m.cloth.l) : shadeX(L, x, m.cloth)),
     arm: (L, y, m) => (y >= L.glove + 1 ? null : y === L.glove ? (m.trim || m.cloth.d) : y <= L.pad ? m.cloth.l : m.cloth.b),
   },
+  // 炎龍鱗甲（dragon.js）：own 為 true 表示衣領、腰帶、裙甲都自己畫，pants 是底下的褲子顏色
+  dragonmail: DRAGON_BODY,
 };
+// 裝備的額外零件（超出身體輪廓的部分，例如護肩尖刺、披風、龍爪）：外觀 → 產生零件的函式
+const EXTRAS = { dragonmail: dragonBodyExtras, dragonclaw: dragonFeetExtras };
 // 鞋子的外觀 → 鞋筒從哪裡開始（相對 L.boot）、用哪種材質
 const FEET_LOOKS = {
   boots: { start: 0, mat: 'leather' },
   greaves: { start: -2, mat: 'metal' },
   shoes: { start: 2, mat: 'cloth' },
+  dragonclaw: DRAGON_FEET,   // 炎龍爪靴：及膝的鱗甲脛甲，自己上色（paint）
 };
 
 // 每個零件一個上色函式。equip = { head, body, feet }（遊戲裡的裝備物件）；沒穿裝備的部位維持參考圖原本的樣子。
@@ -132,6 +138,7 @@ function painters(L, view, BASIC, skin, equip, bare) {
   const torso = (x, y, hex, k) => {
     if (k === 'ink' || y < L.top) return null;
     if (!body) return null;                                                                                  // 沒穿上衣：就是參考圖的樣子
+    if (body.look.own) return body.look.torso(L, x, y, body.it);
     if (y >= L.shorts) return robe ? shadeX(L, x, body.m.cloth) : L.dark(x) ? BASIC.pantsD : BASIC.pants;   // 短褲 → 長褲（法袍會蓋住）
     const { it, m } = body;
     if (y >= L.belt) return L.buckle(x) ? (m.gem || m.gold) : m.belt;
@@ -141,7 +148,7 @@ function painters(L, view, BASIC, skin, equip, bare) {
   const arm = (x, y, hex, k) => {
     if (k === 'ink') return null;
     if (!body) return null;
-    return body.look.arm(L, y, body.m, body.it);
+    return body.look.own ? body.look.arm(L, y, body.it) : body.look.arm(L, y, body.m, body.it);
   };
   const leg = (x, y, hex, k) => {
     if (k === 'ink') return null;
@@ -149,12 +156,14 @@ function painters(L, view, BASIC, skin, equip, bare) {
     const start = feet ? L.boot + feet.look.start : L.boot + 3;
     if (y >= start) {
       if (!feet) return y >= L.sole ? BASIC.sole : BASIC.shoe;                       // 有上衣沒鞋子：配一雙便鞋
+      if (feet.look.paint) return feet.look.paint(L, x, y, feet.it, start);
       const c = feet.m[feet.look.mat];
       if (y === start && feet.m.trim) return feet.m.trim;
       return y >= L.sole ? c.d : shadeX(L, x, c);
     }
     if (robe && y <= L.robe) return y === L.robe ? (body.m.trim || body.m.cloth.d) : shadeX(L, x, body.m.cloth);   // 法袍下襬蓋到膝蓋
-    return body ? (L.dark(x) ? BASIC.pantsD : BASIC.pants) : null;                  // 長褲跟著上衣；只穿鞋子時腿還是原樣
+    const pants = body && body.look.pants;
+    return body ? (L.dark(x) ? (pants ? pants[1] : BASIC.pantsD) : pants ? pants[0] : BASIC.pants) : null;   // 長褲跟著上衣；只穿鞋子時腿還是原樣
   };
   return { torso, arm, leg };
 }
@@ -195,6 +204,11 @@ const WEAPON_LOOKS = {
   },
 };
 function weaponCanvas(it) {
+  if (it && it.look === 'dragonblade') {   // 炎龍大劍比較大，畫法在 dragon.js；points 是劍身兩端，劍上的火沿著這一段燒
+    const c = makeCanvas(BLADE_SIZE[0], BLADE_SIZE[1]);
+    drawDragonBlade(c.getContext('2d'), it, INK);
+    return { canvas: c, pivot: BLADE_PIVOT, points: BLADE_POINTS };
+  }
   const m = it ? mats(it) : null;
   const metal = m ? m.metal : { l: '#eef3f8', b: '#b9c7d8', d: '#8fa0b6' }, grip = m ? m.leather : { b: '#84502c', d: '#5e3a1e' };
   const gold = m && it.rarity >= 4 ? m.gold : m && m.trim ? m.trim : m ? metal.b : '#f2c14e';
@@ -241,7 +255,7 @@ function hitFx(fx, t, hits, T, colors) {
     if (h.power >= 2 && t >= h.t && t < h.t + 0.07) fx.push({ type: 'shake', amount: 2 + h.power });
   });
 }
-const C = { ice: ['#ffffff', '#8fd3ff'], gold: ['#fff3c4', '#f2b84b'], fire: ['#fff3c4', '#ff8a3c'], arcane: ['#ffffff', '#c58bff'], wind: ['#f4ffd8', '#9be36a'] };
+const C = { ice: ['#ffffff', '#8fd3ff'], gold: ['#fff3c4', '#f2b84b'], fire: ['#fff3c4', '#ff8a3c'], arcane: ['#ffffff', '#c58bff'], wind: ['#f4ffd8', '#9be36a'], dragon: ['#fff6d6', '#ff5a1a'] };
 
 // 三段連招。每種武器一套：前兩段快、第三段是終結技（跳起或蓄力，命中時停頓一下、畫面震動）。
 // hits：命中的時間（0–1）、這一段佔整次攻擊傷害的比例 w、力道 power（決定爆光大小與震動）。
@@ -364,6 +378,54 @@ const COMBOS = {
       hitFx(fx, t, this.hits, T, [C.wind, C.wind, C.gold]);
       return p;
     } },
+  // 大劍：龍炎三式。高舉蓄火斜劈 → 往後拉再橫掃、地面炸出火焰波 → 蹲低蓄力（火焰漩渦、腳下熔岩圈），
+  // 高高躍起斬落：劍上射出火龍撲向敵人，命中處火柱沖天、地面裂出熔岩。雙手握劍（後面的手跟著前面的手）
+  greatsword: { name: '大劍・龍炎三式', dur: 1.55, hits: [{ t: 0.2, w: 0.25, power: 2 }, { t: 0.47, w: 0.3, power: 2 }, { t: 0.87, w: 0.45, power: 4 }],
+    pose(t, T = REACH) {
+      const slam = { armR: -40, elbowR: 0, weapon: 208, armL: -32, elbowL: -4, torso: 19, x: 34, bodyY: 6, legL: -28, legR: -28, kneeL: 56, kneeR: 56 };
+      const p = kf(t, [
+        [0, {}],
+        [0.12, { armR: -168, elbowR: -48, weapon: 150, armL: -158, elbowL: -48, torso: -10, head: -5, x: -4, legL: -8, legR: 12 }],
+        [0.2, { armR: -55, elbowR: -6, weapon: 200, armL: -46, elbowL: -10, torso: 15, x: 12, bodyY: 3, legL: -16, legR: 16, kneeL: 24, kneeR: 10 }],
+        [0.3, { armR: -12, elbowR: -10, weapon: 226, armL: -6, elbowL: -12, torso: 17, x: 14, bodyY: 4, legL: -16, legR: 16, kneeL: 28, kneeR: 12 }],
+        [0.39, { armR: 46, elbowR: -22, weapon: 252, armL: 38, elbowL: -22, torso: -12, head: -6, x: 10, legL: 10, legR: -10 }],
+        [0.47, { armR: -94, elbowR: -4, weapon: 168, armL: -86, elbowL: -8, torso: 14, x: 22, legL: -18, legR: 18, kneeL: 16 }],
+        [0.55, { armR: -150, elbowR: -32, weapon: 140, armL: -142, elbowL: -32, torso: 4, x: 22 }],
+        [0.62, { armR: -104, elbowR: -62, weapon: 58, armL: -98, elbowL: -62, torso: -4, x: 20, bodyY: 6, legL: -30, legR: -30, kneeL: 60, kneeR: 60 }],
+        [0.73, { armR: -108, elbowR: -62, weapon: 62, armL: -102, elbowL: -62, torso: -6, x: 20, bodyY: 7, legL: -32, legR: -32, kneeL: 64, kneeR: 64 }],
+        [0.8, { armR: -176, elbowR: -30, weapon: 178, armL: -170, elbowL: -30, torso: -12, head: -8, x: 28, y: -62, legL: -40, kneeL: 72, legR: -6, kneeR: 58 }],
+        [0.87, slam],
+        [0.96, slam],
+        [1, {}],
+      ]);
+      const fx = p.fx;
+      // 劍上的火：起手就點燃，蓄力時最旺，收招時變小
+      const fire = t < 0.6 ? lerp(0.35, 0.8, seg(t, 0, 0.12)) : t < 0.9 ? lerp(0.8, 1.3, seg(t, 0.6, 0.76)) : lerp(1.3, 0.35, seg(t, 0.9, 1));
+      fx.push({ type: 'bladefire', p: fire });
+      // 一：斜劈
+      if (t > 0.12 && t < 0.36) fx.push({ type: 'flamearc', from: -190, to: lerp(-190, -35, seg(t, 0.12, 0.21)), r: 84, width: 18, alpha: 1 - seg(t, 0.24, 0.36) });
+      if (t > 0.2 && t < 0.4) fx.push({ type: 'embers', x: T - 10, y: TY - 20, w: 40, h: 50, n: 14, speed: 2, alpha: 1 - seg(t, 0.3, 0.4) });
+      // 二：橫掃，地面炸出往兩邊衝的火焰波
+      if (t > 0.38 && t < 0.62) fx.push({ type: 'flamearc', from: 60, to: lerp(60, -125, seg(t, 0.38, 0.48)), r: 80, width: 17, alpha: 1 - seg(t, 0.5, 0.62) });
+      if (t > 0.47 && t < 0.66) { const k = seg(t, 0.47, 0.66); fx.push({ type: 'groundfire', x0: 10 - 50 * k, x1: 30 + (T + 40) * k, h: 26 * (1 - k * 0.5), alpha: 1 - seg(t, 0.58, 0.66) }); }
+      // 三：蹲低蓄力（火焰漩渦、腳下熔岩圈、火星往上竄）
+      if (t > 0.56 && t < 0.76) fx.push({ type: 'vortex', x: 18, y: 60, r: 80, p: seg(t, 0.56, 0.76), n: 34 });
+      if (t > 0.56 && t < 0.92) fx.push({ type: 'heat', x: 18, rx: lerp(10, 34, seg(t, 0.56, 0.7)), alpha: Math.min(seg(t, 0.56, 0.62), 1 - seg(t, 0.84, 0.92)) });
+      if (t > 0.6 && t < 0.86) fx.push({ type: 'embers', x: 18, y: 0, w: 60, h: 110, n: 18, speed: 1.6 });
+      // 躍起斬落：巨大的火焰劍光，劍上射出火龍
+      if (t > 0.79 && t < 0.97) fx.push({ type: 'flamearc', from: -205, to: lerp(-205, -20, seg(t, 0.79, 0.87)), r: 88, width: 24, alpha: 1 - seg(t, 0.88, 0.97) });
+      if (t > 0.74 && t < 0.9) fx.push({ type: 'firedragon', from: [26, 215], to: [T + 6, TY], k: seg(t, 0.74, 0.87), amp: 20, size: 1.9, alpha: 1 - seg(t, 0.86, 0.9) });
+      // 命中：火柱沖天、熔岩裂縫、衝擊波、碎石、滿天火星
+      if (t >= 0.87) {
+        const k = seg(t, 0.87, 1);
+        fx.push({ type: 'pillar', x: T, w: 46, h: 175, p: k, alpha: 1 - seg(t, 0.93, 1) },
+          { type: 'lavacrack', x0: 30, x1: T + 46, p: k, alpha: 1 - seg(t, 0.95, 1) },
+          { type: 'shock', x: T, p: k, power: 2 }, { type: 'debris', x: T, p: k }, { type: 'sparks', x: T, p: k },
+          { type: 'embers', x: T, y: 0, w: 70, h: 140, n: 26, speed: 1.8, alpha: 1 - seg(t, 0.94, 1) });
+      }
+      hitFx(fx, t, this.hits, T, [C.fire, C.fire, C.dragon]);
+      return p;
+    } },
 };
 // 追擊、連鎖、反擊用的單發快攻：只播連招的第一段，然後收招
 function quick(combo, cut) {
@@ -387,8 +449,9 @@ export const ANIMS = {
     return { ...REST, bodyY: Math.abs(s) > 0.7 ? 1 : 0, legL: s * 26, legR: -s * 26, kneeL: Math.max(0, c) * 34, kneeR: Math.max(0, -c) * 34,
       armL: -s * 22, armR: s * 16 - 6, elbowL: -14, elbowR: -22, torso: 3, weapon: 20 };
   } },
-  combo_sword: COMBOS.sword, combo_hammer: COMBOS.hammer, combo_staff: COMBOS.staff, combo_bow: COMBOS.bow,
+  combo_sword: COMBOS.sword, combo_hammer: COMBOS.hammer, combo_staff: COMBOS.staff, combo_bow: COMBOS.bow, combo_greatsword: COMBOS.greatsword,
   quick_sword: quick(COMBOS.sword, 0.27), quick_hammer: quick(COMBOS.hammer, 0.31), quick_staff: quick(COMBOS.staff, 0.27), quick_bow: quick(COMBOS.bow, 0.24),
+  quick_greatsword: quick(COMBOS.greatsword, 0.26),
   // 受擊：往後仰一下
   hurt: { name: '受擊', dur: 0.32, pose(t) {
     const k = Math.sin(seg(t, 0, 1) * Math.PI);
@@ -446,6 +509,10 @@ export class Rig {
       this.gear[n] = partCanvas(P, src(n), n.startsWith('arm') ? paint.arm : paint.leg, far(n));
     }
     this.held = weaponCanvas(this.equip.weapon);
+    // 額外零件（護肩尖刺、披風、龍爪），以及身上炎龍套裝的件數（決定光環）
+    this.extra = {};
+    if (!this.bare) for (const k of ['body', 'feet']) { const it = this.equip[k]; if (it && EXTRAS[it.look]) Object.assign(this.extra, EXTRAS[it.look](P, this.view, it, INK)); }
+    this.dragonSet = this.bare ? 0 : ['weapon', 'head', 'body', 'feet', 'acc1', 'acc2'].filter((k) => this.equip[k] && this.equip[k].set === 'dragon').length;
     const best = Math.max(-1, ...['weapon', 'head', 'body', 'feet'].map((k) => (this.equip[k] ? this.equip[k].rarity : -1)));
     this.glow = best >= 3 ? gearMats({ tier: 1, rarity: best }).trim.ramp[3] : null;   // 史詩以上會冒光點
   }
@@ -455,6 +522,8 @@ export class Rig {
     const [px, py] = part.pivot;
     ctx.drawImage(name === 'head' && blink ? this.body.headBlink : this.body[name], -Math.round(px), -Math.round(py));
     if (this.gear[name]) ctx.drawImage(this.gear[name], -Math.round(px), -Math.round(py));
+    const e = this.extra && this.extra[name];
+    if (e) ctx.drawImage(e.canvas, e.x - Math.round(px), e.y - Math.round(py));
     if (name === 'head' && this.hat) ctx.drawImage(this.hat.canvas, this.hat.x - this.G.head.x - Math.round(px), this.hat.y - this.G.head.y - Math.round(py));   // 帽子跟著頭轉
   }
   // 單一零件（頭、身體）：繞自己的支點轉
@@ -482,8 +551,8 @@ export class Rig {
     ctx.restore();
   }
 
-  // 在 (ox, oy)（腳底中心）畫出角色。pose 來自 ANIMS；blink 為 true 時閉眼
-  draw(ctx, ox, oy, pose, blink = false) {
+  // 在 (ox, oy)（腳底中心）畫出角色。pose 來自 ANIMS；blink 為 true 時閉眼；time（秒）讓披風飄動
+  draw(ctx, ox, oy, pose, blink = false, time = 0) {
     const side = this.view === 'side';
     // 側面時持武器的手自然往前伸、武器朝前上方；正面是預覽用，手肘膝蓋不彎
     const armed = this.weapon && this.equip.weapon;
@@ -491,11 +560,13 @@ export class Rig {
     else pose = { ...pose, elbowL: 0, elbowR: 0, kneeL: 0, kneeR: 0 };
     ctx.save();
     ctx.imageSmoothingEnabled = false;
+    this.baseM = ctx.getTransform(); this.bladeM = null;   // 記下劍的位置，drawFx 讓火沿著劍身燒
     ctx.translate(Math.round(ox - this.foot[0] + pose.x), Math.round(oy - this.foot[1] + pose.y));
+    const t = this.G.torso, tx = Math.round(t.x + t.pivot[0]), ty = Math.round(t.y + t.pivot[1]);
+    if (this.extra.cape) this.cape(ctx, pose, tx, ty, side, time);   // 披風在最後面
     this.limb(ctx, 'legL', pose.legL, pose.kneeL);   // 側面：後面的腿站著時剛好被前面的腿擋住
     this.limb(ctx, 'legR', pose.legR, pose.kneeR);
     // 上半身：整體上下起伏，並繞腰部前後傾
-    const t = this.G.torso, tx = Math.round(t.x + t.pivot[0]), ty = Math.round(t.y + t.pivot[1]);
     ctx.translate(tx, ty + pose.bodyY);
     ctx.rotate(Math.round(pose.torso) * RAD);
     ctx.translate(-tx, -ty);
@@ -505,6 +576,7 @@ export class Rig {
       ctx.translate(Math.round(hand[0] - lx), Math.round(hand[1] - ly));
       ctx.rotate(Math.round(pose.weapon) * RAD);
       ctx.drawImage(this.held.canvas, -Math.round(this.held.pivot[0]), -Math.round(this.held.pivot[1]));
+      if (this.held.points) this.bladeM = ctx.getTransform();
       ctx.restore();
     } : null;
     if (side) this.limb(ctx, 'armL', pose.armL, pose.elbowL);   // 後面的手：垂著時被身體擋住，擺動時才露出來
@@ -515,11 +587,37 @@ export class Rig {
     ctx.restore();
   }
 
+  // 披風：掛在背上跟著上半身轉，但盡量保持下垂；跳起來時往後飄，平常微微擺動
+  cape(ctx, pose, tx, ty, side, time) {
+    const c = this.extra.cape, t = this.G.torso;
+    ctx.save();
+    ctx.translate(tx, ty + pose.bodyY); ctx.rotate(Math.round(pose.torso) * RAD); ctx.translate(-tx, -ty);
+    const sway = side ? Math.sin(time * 2.2) * 3 + Math.min(40, Math.max(0, -pose.y) * 0.7) - pose.torso * 0.6 : Math.sin(time * 2) * 1.5;
+    ctx.translate(Math.round(t.x + c.x + c.pivot[0]), Math.round(t.y + c.y + c.pivot[1]));
+    ctx.rotate(Math.round(sway) * RAD);
+    ctx.drawImage(c.canvas, -c.pivot[0], -c.pivot[1]);
+    ctx.restore();
+  }
+
+  // 劍身兩端在畫面上的位置（只有炎龍大劍有；要先 draw 過）
+  bladeAt() {
+    if (!this.bladeM || !this.held.points) return null;
+    const M = this.baseM.inverse().multiply(this.bladeM), pv = this.held.pivot;
+    const at = ([x, y]) => { const q = M.transformPoint({ x: x - Math.round(pv[0]), y: y - Math.round(pv[1]) }); return [q.x, q.y]; };
+    return { base: at(this.held.points.base), tip: at(this.held.points.tip) };
+  }
+
   // 特效：刀光、衝擊波、火花、裝備光點（都用一格一格的像素畫）。time 是秒，用來讓光點飄動
   drawFx(ctx, ox, oy, pose, time = 0) {
     const sh = this.G.armR;
     const cx = ox - this.foot[0] + pose.x + sh.x + sh.pivot[0], cy = oy - this.foot[1] + pose.y + pose.bodyY + sh.y + sh.pivot[1];
     const dot = (x, y, col, w = 1, h = w) => { ctx.fillStyle = col; ctx.fillRect(Math.round(x), Math.round(y), w, h); };
+    // 炎龍：套裝光環、劍上一直燒著的火（連招自己有 bladefire 時用連招的）
+    const env = { ox: ox + pose.x, oy, cx, cy, dot, time, blade: this.bladeAt() };
+    dragonAura(ctx, env, this.dragonSet);
+    if (env.blade && !pose.fx.some((f) => f.type === 'bladefire')) fireFx(ctx, { type: 'bladefire', p: 0.3 + 0.08 * (this.equip.weapon.rarity || 0) }, env);
+    env.ox = ox;
+    ctx.globalAlpha = 1;
     if (this.glow) {
       for (let i = 0; i < 5; i++) {
         const ph = (time * 0.7 + i / 5) % 1;
@@ -529,6 +627,7 @@ export class Rig {
       ctx.globalAlpha = 1;
     }
     for (const f of pose.fx) {
+      if (fireFx(ctx, f, env)) { ctx.globalAlpha = 1; continue; }   // 火焰特效（dragon.js）
       const [core, edge] = f.c || ['#ffffff', '#8fd3ff'];
       if (f.type === 'arc') {
         // 刀光：沿著揮砍的弧線（可以順時針也可以逆時針），越靠近武器這一端越亮、越寬；尾端變細變淡
@@ -623,4 +722,35 @@ export class Rig {
       ctx.globalAlpha = 1;
     }
   }
+}
+
+// ---------- 背包圖示：用角色身上真正的畫法 ----------
+// 舊的圖示（src/art/chibi.js）畫不出來的外觀才用這裡：武器斜放、頭盔單獨畫、上衣和鞋子只畫裝備那一層
+export const RIG_ICON_LOOKS = new Set(['bow', 'dragonblade', 'dragonhelm', 'dragonmail', 'dragonclaw']);
+function cropAlpha(c) {
+  const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+  let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1;
+  for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) if (d[(y * c.width + x) * 4 + 3]) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  if (x1 < 0) return c;
+  const out = makeCanvas(x1 - x0 + 1, y1 - y0 + 1);
+  out.getContext('2d').drawImage(c, -x0, -y0);
+  return out;
+}
+export function gearIcon(it) {
+  if (it.type === 'weapon') {                                  // 武器：斜 45 度
+    const w = weaponCanvas(it), n = Math.ceil(Math.hypot(w.canvas.width, w.canvas.height)) + 2, c = makeCanvas(n, n), ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.translate(n / 2, n / 2); ctx.rotate(45 * RAD); ctx.drawImage(w.canvas, -w.canvas.width / 2, -w.canvas.height / 2);
+    return cropAlpha(c);
+  }
+  if (it.type === 'head') return hatCanvas('m', 'side', it, mats(it), INK, RIG_PARTS.m.side.unit).canvas;
+  // 上衣、鞋子：正面的角色只畫裝備那一層（身體換成空白）
+  const rig = new Rig('front', 'm');
+  rig.weapon = false;
+  rig.setEquip({ [it.type]: it });
+  for (const k in rig.body) rig.body[k] = makeCanvas(rig.body[k].width, rig.body[k].height);
+  if (it.type === 'body') for (const n of ['legL', 'legLf', 'legR', 'legRf']) rig.gear[n] = makeCanvas(rig.gear[n].width, rig.gear[n].height);
+  const c = makeCanvas(120, 140);
+  rig.draw(c.getContext('2d'), 60, 130, ANIMS.idle.pose(0));
+  return cropAlpha(c);
 }

@@ -49,7 +49,7 @@ export class RigHero {
     this.scene = scene;
     this.x = x; this.groundY = groundY;
     this.rig = new Rig('side');
-    this.cw = 260; this.ch = 232; this.footX = 96; this.footY = 220;   // 角色畫在自己的小畫布上，腳底在 (footX, footY)
+    this.cw = 340; this.ch = 300; this.footX = 110; this.footY = 284;   // 角色畫在自己的小畫布上，腳底在 (footX, footY)；留空間給跳躍和大劍的火柱
     this.tex = scene.textures.createCanvas(`rig-hero-${rigSeq++}`, this.cw, this.ch);
     // 以腳底為基準縮放，HERO_SCALE 改變時角色仍然站在地面上
     this.image = scene.add.image(x, groundY, this.tex.key).setOrigin(this.footX / this.cw, this.footY / this.ch).setScale(HERO_SCALE);
@@ -85,7 +85,7 @@ export class RigHero {
     const pose = anim.pose(t, this.reach), ctx = this.tex.context;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.cw, this.ch);
-    this.rig.draw(ctx, this.footX, this.footY, pose, blink);
+    this.rig.draw(ctx, this.footX, this.footY, pose, blink, time / 1000);
     if (time < this.flashUntil) {          // 受擊閃白：只把角色的像素塗白
       ctx.globalCompositeOperation = 'source-atop';
       ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.fillRect(0, 0, this.cw, this.ch);

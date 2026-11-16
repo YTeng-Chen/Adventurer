@@ -113,6 +113,7 @@ export class BattleScene extends Phaser.Scene {
       this.time.delayedCall(90, () => this.foe.clearTint());
       this.tweens.add({ targets: this.foe, x: this.foeX + 3 + h.power * 2, duration: 60, yoyo: true, ease: 'Quad.out' });   // 被打退一點
       if (h.power >= 3 || (last && line.crit)) this.cameras.main.shake(110 + h.power * 20, 0.003 + h.power * 0.0015);
+      if (h.power >= 4) this.cameras.main.flash(120, 255, 140, 60);   // 大劍的終結技：畫面閃一下火光
       this.pop('e', part, { ...line, crit: line.crit && last }, last && hits.length > 1 ? 2 : 1, n);
     }));
     return hits[hits.length - 1].ms + (full ? 260 : 150) / this.pace;

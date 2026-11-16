@@ -3,7 +3,7 @@ import { Rig, ANIMS, HAIR_COLORS, GENDERS } from '../src/rig/rig.js';
 import { sprites as SP } from '../src/ui/sprites.js';
 import { data as D } from '../src/core/data.js';
 
-const W = 240, H = 160, GROUND = 144, HERO_X = 84, FOE_X = 178;
+const W = 320, H = 220, GROUND = 200, HERO_X = 90, FOE_X = 196;   // 畫面要夠高，大劍躍起和火柱才放得下
 const cv = document.getElementById('stage'), ctx = cv.getContext('2d');
 cv.width = W; cv.height = H;
 const params = new URLSearchParams(location.search);
@@ -19,7 +19,7 @@ function apply() {
   rig.setLook({ gender: state.gender, color: state.hair });
   const set = OUTFITS[state.gear];
   if (!set) { rig.setEquip({}, true); return; }
-  const it = (type, look) => ({ type, look, form: type === 'weapon' ? look : undefined, tier: state.tier, rarity: state.rarity });
+  const it = (type, look) => ({ type, look, form: type === 'weapon' ? (look === 'dragonblade' ? 'greatsword' : look) : undefined, tier: state.tier, rarity: state.rarity, set: set.set });
   rig.setEquip(Object.fromEntries(Object.entries(set.looks).map(([type, look]) => [type, it(type, look)])), false);
 }
 // 預覽用的整套外觀（gear.js 的 look）；武器的 look 剛好等於它的形態
@@ -28,6 +28,7 @@ const OUTFITS = {
   bow: { n: '弓＋皮甲', looks: { weapon: 'bow', head: 'cap', body: 'leather', feet: 'boots' } },
   hammer: { n: '鎚＋板甲', looks: { weapon: 'hammer', head: 'helm', body: 'plate', feet: 'greaves' } },
   staff: { n: '法杖＋法袍', looks: { weapon: 'staff', head: 'wizard', body: 'robe', feet: 'shoes' } },
+  dragon: { n: '炎龍套裝', set: 'dragon', looks: { weapon: 'dragonblade', head: 'dragonhelm', body: 'dragonmail', feet: 'dragonclaw' } },
 };
 function play(name) {
   if (ANIMS[name].loop) base = name;
@@ -75,7 +76,7 @@ function frame(now) {
   // 史萊姆：被打到時閃白、往後退
   const fx = FOE_X - 24 + (hit ? 4 * hit.power : 0), fy = GROUND - 46 + Math.round(Math.sin(now / 350) * 1.5);
   SP.draw(ctx, slime, fx, fy, 1.5, { flash: hit ? 0.8 : 0 });
-  rig.draw(ctx, HERO_X, GROUND, pose, blink);
+  rig.draw(ctx, HERO_X, GROUND, pose, blink, sec);
   rig.drawFx(ctx, HERO_X, GROUND, pose, sec);
   requestAnimationFrame(frame);
 }

@@ -19,7 +19,8 @@ const KIND = {
   golem: { size: 1.75, hp: 6, speed: 120, run: 'stomp' },
 };
 // 武器的攻擊範圍（從主角腳底往前算，畫面像素）：近戰打得到範圍內所有魔物，遠程會挑最近的一隻
-const RANGE = { sword: 62, hammer: 66, staff: 330, bow: 360 };
+const RANGE = { sword: 62, hammer: 66, staff: 330, bow: 360, greatsword: 74 };
+const FINISH_REACH = { sword: 26, hammer: 26, greatsword: 90 };   // 近戰終結技多打多遠（衝擊波、大劍的火龍與火柱）
 
 export class IdleScene extends Phaser.Scene {
   constructor() { super('Idle'); }
@@ -122,8 +123,8 @@ export class IdleScene extends Phaser.Scene {
     if (!alive.length) return;
     const tgt = !target.dead ? target : this.nearest();
     let hit;
-    if (style === 'sword' || style === 'hammer') {
-      const reach = RANGE[style] + (last ? 26 : 0);                 // 終結技的衝擊波打得比較遠
+    if (style === 'sword' || style === 'hammer' || style === 'greatsword') {
+      const reach = RANGE[style] + (last ? FINISH_REACH[style] : 0);   // 終結技打得比較遠
       hit = alive.filter((f) => f.x - f.half <= HERO_X + reach);
     } else if (style === 'staff') {
       hit = alive.filter((f) => Math.abs(f.x - tgt.x) <= (last ? 90 : 26));   // 魔法球會炸到旁邊的；光束打一整排

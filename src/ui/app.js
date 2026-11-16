@@ -6,7 +6,7 @@ import { items as I } from '../core/items.js';
 import { stats as S } from '../core/stats.js';
 import { save as store } from '../core/save.js';
 import { sprites as SP } from './sprites.js';
-import { Rig, ANIMS, HAIR_COLORS, DEFAULT_HAIR, GENDERS } from '../rig/rig.js';
+import { Rig, ANIMS, HAIR_COLORS, DEFAULT_HAIR, GENDERS, RIG_ICON_LOOKS, gearIcon } from '../rig/rig.js';
 import { navIcon } from './nav-icons.js';
 
 export function startUI(bus) {
@@ -258,6 +258,7 @@ export function startUI(bus) {
   const iconCache = new Map();
   function iconURL(it) {
     const key = `${it.type}-${it.look}-${it.tier}-${it.rarity}`;
+    if (!iconCache.has(key) && RIG_ICON_LOOKS.has(it.look)) iconCache.set(key, gearIcon(it).toDataURL());   // 用角色身上的畫法
     if (!iconCache.has(key)) {
       const g = SP.itemIconGrid(it);
       const sc = Math.max(1, Math.floor(48 / Math.max(g.length, g[0].length)));
