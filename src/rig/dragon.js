@@ -83,85 +83,96 @@ export function drawDragonBlade(ctx, it, ink) {
   for (const [k, col] of all) { const [x, y] = k.split(',').map(Number); if (x < 0 || x >= BLADE_SIZE[0]) continue; ctx.fillStyle = col; ctx.fillRect(x, y, 1, 1); }
 }
 
-// ---------- 炎龍角盔：整顆頭罩住，做成龍頭（大格；A 是 hats.js 的帽子位置：L、R 左右、B 帽簷那一列，側面朝右） ----------
-// 粗的彎角：沿著 path(i)（i 從 0 到 1）畫，粗細從 w0 收到 1，越往尖端越亮
-function hornStroke(g, path, w0, dim) {
-  const D = DRAGON, n = 28;
+// ---------- 炎龍角盔（大格；A 是 hats.js 的帽子位置：L、R 左右、B 帽簷那一列，側面朝右） ----------
+// 龍騎士頭盔：戴的人的臉在龍張開的嘴裡。龍的上顎像帽簷蓋在額頭上、往前伸成龍吻，獠牙往下垂；
+// 下顎護住下巴、獠牙朝上；中間的臉是一片陰影，只露出發光的眼睛。頭頂一排背鰭、兩支往後掃的龍角、臉頰的鰭、後頸的護甲片。
+// 粗的彎角：沿著折線 pts 畫，粗細從 w0 收到 w1，尖端比較亮；dim 是後面那一支（暗一點），rings 是金環（傳說）
+function hornLine(g, pts, w0, w1, dim, rings) {
+  const D = DRAGON, segs = [];
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) { const l = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); segs.push(l); total += l; }
+  const n = Math.ceil(total * 3);
   for (let s = 0; s <= n; s++) {
-    const i = s / n, [x, y] = path(i), w = Math.max(0.6, w0 * (1 - i * 0.85));
+    let d = (s / n) * total, k = 0;
+    while (k < segs.length - 1 && d > segs[k]) { d -= segs[k]; k++; }
+    const f = Math.min(1, d / segs[k]), x = pts[k][0] + (pts[k + 1][0] - pts[k][0]) * f, y = pts[k][1] + (pts[k + 1][1] - pts[k][1]) * f;
+    const i = s / n, w = w0 + (w1 - w0) * i;
     for (let dy = -w; dy <= w; dy += 0.5) for (let dx = -w; dx <= w; dx += 0.5) {
       if (dx * dx + dy * dy > w * w) continue;
-      const c = dim ? D.horn3 : i > 0.75 ? D.horn : dy > w * 0.3 ? D.horn3 : s % 7 === 0 ? D.horn3 : D.horn2;   // 角上的環紋
-      g.set(x + dx, y + dy, c);
+      let c = i > 0.8 ? D.horn : dy < -w * 0.3 ? D.horn : dy > w * 0.35 ? D.horn3 : D.horn2;
+      if (rings && s % 9 === 0 && i < 0.75) c = D.gold;
+      g.set(x + dx, y + dy, dim ? D.horn3 : c);
     }
   }
 }
 export function dragonHelm(g, A, m, r) {
-  const D = DRAGON, { L, R, B } = A, mid = (L + R) / 2;
-  // 甲片：一列一列的橫紋，靠光的一側亮
-  const plate = (x, y, x0, x1) => {
-    if ((y + 30) % 3 === 0) return D.s1;
-    const t = (x - x0) / Math.max(1, x1 - x0), w = A.side ? t : 1 - Math.abs(t - 0.5) * 2;
-    return w > 0.7 ? D.s4 : w < 0.25 ? D.s2 : D.s3;
-  };
-  const ellipse = (cx, cy, rx, ry, fill) => {
-    for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
-      if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1) g.set(x, y, fill(x, y));
-    }
-  };
+  const D = DRAGON, { L, R, B } = A;
+  const eye = r >= 2 ? D.lava3 : D.lava2, trim = r >= 1 ? D.gold : D.s4, spineTip = r >= 3 ? D.lava2 : D.s4;
+  const span = (x0, x1, y, c) => { for (let x = Math.round(x0); x <= Math.round(x1); x++) g.set(x, y, typeof c === 'function' ? c(x, y) : c); };
+  // 金屬的光影：光從右上（側面）或正上方（正面）來，整片漸層，不畫條紋
+  const metal = (t) => (t > 0.55 ? D.s4 : t > 0.15 ? D.s3 : t > -0.35 ? D.s2 : D.s1);
   if (A.side) {
-    // 龍角在最後面（被頭蓋住根部）：主角從頭頂往後掃再微微上翹，後面還有一支暗的
-    hornStroke(g, (i) => [L + 9 - 17 * i, B - 10 - 3 * Math.sin(i * Math.PI * 0.9) + 2 * i], r >= 4 ? 2.4 : 2, true);
-    hornStroke(g, (i) => [L + 13 - (r >= 4 ? 20 : 18) * i, B - 12 - 5 * Math.sin(i * Math.PI * 0.8) + 1 * i], r >= 4 ? 2.8 : 2.4, false);
-    // 頭顱
-    ellipse(L + 12, B - 3, 14, 11, (x, y) => plate(x, y, L - 2, R));
-    // 後頸的護甲（蓋住後腦和脖子）
-    for (let y = B; y <= B + 12; y++) for (let x = L - 1; x <= L + 9; x++) g.set(x, y, y % 2 ? D.s1 : D.s2);
-    // 臉頰到上顎：往前伸成長長的龍吻，越前面越低
-    for (let x = L + 6; x <= R + 7; x++) {
-      const top = x > R - 6 ? Math.round(B + 1 + (x - (R - 6)) * 0.3) : B - 1, bot = x > R + 4 ? B + 5 : B + 6;
-      for (let y = top; y <= bot; y++) g.set(x, y, y === top && x > R - 6 ? D.s4 : plate(x, y, L, R + 7));
+    const cx = L + 12, cy = B - 2, rx = 12.5, ry = 10;
+    hornLine(g, [[L + 9, B - 9], [L + 2, B - 9], [L - 4, B - 11], [L - 7, B - 16]], 2, 0.7, true);           // 後面那支角
+    // 頭盔本體：貼合的圓殼，後半有一道甲片接縫
+    for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
+      const e = ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2;
+      if (e > 1) continue;
+      g.set(x, y, e > 0.5 && e < 0.6 && x < cx - 2 ? D.s0 : metal(((x - cx) / rx) * 0.6 - ((y - cy) / ry) * 0.9));
     }
-    g.set(R + 6, B + 3, D.s0); g.set(R + 5, B + 3, D.s0);                                          // 鼻孔
-    g.row(R - 3, R + 6, B + 7, D.s0);                                                              // 嘴縫
-    for (let y = B + 8; y <= B + 12; y++) for (let x = L + 7; x <= R + 4 - (y - B - 8); x++) g.set(x, y, y === B + 8 ? D.s2 : (x + y) % 4 === 0 ? D.s0 : D.s1);   // 下顎：蓋住下巴到頭的底部
-    for (const x of [R - 1, R + 2, R + 5]) { g.set(x, B + 7, D.horn); if (x < R + 5) g.set(x, B + 8, D.horn2); }   // 上排獠牙
-    g.set(R + 3, B + 7, D.horn);                                                                   // 下排獠牙往上
-    // 眉骨與眼睛：粗的眉骨壓著斜斜的發光眼縫
-    g.row(R - 10, R + 1, B - 1, r >= 1 ? D.gold : D.s4); g.row(R - 8, R, B, D.s4);
-    g.set(R - 1, B - 2, D.s4); g.set(R - 2, B - 2, D.s4); g.set(R - 3, B - 3, D.horn2);             // 眉骨上的小角
-    g.row(R - 6, R - 2, B + 1, r >= 2 ? D.lava3 : D.lava2); g.row(R - 8, R - 5, B + 2, D.lava1);
-    if (r >= 3) g.set(R - 3, B + 1, '#ffffff');
-    // 臉頰的鰭：往後的三片
-    for (let k = 0; k < 3; k++) for (let i = 0; i < 4 - k; i++) g.set(R - 11 - i - k * 2, B + 3 + k * 2 - Math.round(i * 0.5), i === 3 - k ? D.horn2 : D.s4);
-    // 後腦往脖子的一排脊刺
-    for (let k = 0; k < 6; k++) {
-      const a = (-120 - k * 22) * Math.PI / 180, x = L + 12 + Math.cos(a) * 14.5, y = B - 3 + Math.sin(a) * 11.5;
-      g.set(x, y, D.s4); g.set(x + Math.cos(a) * 1.2, y + Math.sin(a) * 1.2, k % 2 ? D.horn3 : D.s4);
+    for (let y = B + 3; y <= B + 12; y++) span(L + 7, R - 9, y, (x) => metal(0.1 - (y - B) * 0.06 + (x - L) * 0.02));   // 臉頰護板
+    // 後頸：三層往後錯開的護甲片，每片上緣鑲邊
+    for (let k = 0; k < 3; k++) for (let y = B + 5 + k * 3; y <= B + 7 + k * 3; y++) span(L - 1 - k, L + 9 - k, y, y === B + 5 + k * 3 ? trim : y % 2 ? D.s2 : D.s1);
+    // 嘴裡的陰影（戴的人的臉），只露出發光的眼睛
+    for (let y = B + 3; y <= B + 10; y++) span(R - 9, R + 1, y, D.s0);
+    span(R - 3, R - 1, B + 5, eye); g.set(R - 2, B + 6, D.lava1); if (r >= 3) g.set(R - 2, B + 5, '#ffffff');
+    g.set(R - 6, B + 7, D.lava0); g.set(R + 1, B + 6, D.lava0);
+    // 下顎：護住下巴，往前收；下排獠牙朝上
+    for (let y = B + 11; y <= B + 13; y++) span(R - 11, R + 3 - (y - B - 11) * 2, y, y === B + 11 ? D.s3 : y === B + 12 ? D.s2 : D.s1);
+    for (const x of [R - 5, R - 1, R + 2]) { g.set(x, B + 10, D.horn); g.set(x, B + 9, D.horn2); }
+    // 上顎：像帽簷蓋在額頭，往前伸成龍吻；下緣鑲邊
+    for (let x = R - 12; x <= R + 6; x++) {
+      const top = Math.round(B - 4 + Math.max(0, x - (R - 4)) * 0.45), bot = x > R + 4 ? B + 1 : B + 2;
+      for (let y = top; y <= bot; y++) g.set(x, y, y === bot ? trim : y === top ? D.s4 : y <= top + 1 ? D.s3 : D.s2);
     }
-    if (r >= 4) for (let y = B - 1; y <= B + 6; y++) g.set(L + 8, y, D.gold2);                      // 傳說：臉側的金紋
+    span(R - 11, R - 3, B - 5, D.s4); span(R - 9, R - 5, B - 6, D.s3);                                       // 眉骨隆起
+    g.set(R + 5, B - 1, D.s0);                                                                               // 鼻孔
+    if (r >= 2) { g.set(R - 7, B - 4, D.lava2); g.set(R - 6, B - 4, D.lava3); }                              // 眉心的龍晶
+    for (const [x, len] of [[R - 7, 1], [R - 4, 3], [R - 1, 2], [R + 2, 3], [R + 4, 1]]) for (let k = 1; k <= len; k++) g.set(x, B + 2 + k, k === len ? D.horn : D.horn2);   // 上排獠牙往下垂
+    for (let k = 0; k < 3; k++) for (let i = 0; i <= 3 + k; i++) g.set(R - 10 - i, B + 3 + k * 2 - Math.round(i * 0.35), i >= 2 + k ? trim : D.s4);   // 臉頰的鰭
+    // 頭頂的背鰭：從額頭往後一根比一根矮
+    for (let k = 0; k < 5; k++) {
+      const x = R - 9 - k * 3.4, top = cy - ry * Math.sqrt(Math.max(0, 1 - ((x - cx) / rx) ** 2)), h = 4 - k * 0.6;
+      for (let i = 1; i <= h; i++) { g.set(x - i * 0.5, top - i, i >= h - 1 ? spineTip : D.s4); if (i < h - 1) g.set(x - i * 0.5 + 1, top - i + 1, D.s3); }
+    }
+    // 前面那支角：從眉骨後方往後掃，尖端往上翹
+    const big = r >= 4 ? 1.15 : 1;
+    hornLine(g, [[L + 13, B - 11], [L + 5, B - 12], [L - 3, B - 13], [L - 8 * big, B - 15 - 3 * big], [L - 9 * big, B - 21 * big]], 2.8, 0.7, false, r >= 4);
   } else {
-    // 正面：龍角往兩側伸出再往上彎（先畫，根部被頭蓋住）
-    const hl = r >= 4 ? 1.15 : 1;
-    for (const s of [-1, 1]) hornStroke(g, (i) => [mid + s * (11 + 9 * i * hl), B - 7 - 3 * i - 9 * i * i * hl], 2.6, false);
-    // 頭顱
-    ellipse(mid, B - 3, 15, 11, (x, y) => plate(x, y, L - 1, R + 1));
-    // 臉：往下收成龍的口鼻
-    for (let y = B; y <= B + 11; y++) {
-      const half = 14 - Math.max(0, y - B - 3) * 1.2;
-      for (let x = Math.round(mid - half); x <= Math.round(mid + half); x++) g.set(x, y, y >= B + 6 && Math.abs(x - mid) < half - 1 ? D.s3 : plate(x, y, mid - half, mid + half));
+    const mid = (L + R) / 2, cy = B - 2, rx = 14.5, ry = 10.5, big = r >= 4 ? 1.15 : 1;
+    // 兩支角：從頭的兩側往外伸，再往上彎（先畫，根部被頭盔蓋住）
+    for (const s of [-1, 1]) hornLine(g, [[mid + s * 9, B - 6], [mid + s * 16, B - 8], [mid + s * 19 * big, B - 12], [mid + s * 20 * big, B - 18 * big]], 2.6, 0.7, false, r >= 4);
+    for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) for (let x = Math.floor(mid - rx); x <= Math.ceil(mid + rx); x++) {   // 頭盔本體
+      const e = ((x - mid) / rx) ** 2 + ((y - cy) / ry) ** 2;
+      if (e <= 1) g.set(x, y, Math.abs(x - mid) < 0.6 ? D.s4 : Math.abs(x - mid) < 1.6 ? D.s3 : metal(0.5 - (Math.abs(x - mid) / rx) * 1.1 - ((y - cy) / ry) * 0.6));   // 中央稜線
     }
-    for (const s of [-1, 1]) {
-      g.set(mid + s * 2.5, B + 8, D.s0);                                                           // 鼻孔
-      const ex = mid + s * 6;                                                                      // 斜斜往中間下壓的眼睛（V 字）
-      g.row(ex - 2, ex + 2, B + 2, r >= 2 ? D.lava3 : D.lava2); g.set(ex - s * 2, B + 1, D.lava1); g.set(ex + s * 2, B + 3, D.lava1);
-      g.row(ex - 3, ex + 3, B, r >= 1 ? D.gold : D.s4); g.set(ex - s * 3, B - 1, D.s4);             // 眉骨
-      for (let k = 0; k < 3; k++) g.set(mid + s * (13 - k), B + 4 + k * 2, D.horn2);                // 臉頰的鰭
-    }
-    g.row(Math.round(mid - 4), Math.round(mid + 4), B + 10, D.s0);                                  // 嘴縫
-    for (const dx of [-3, -1, 1, 3]) g.set(mid + dx, B + 11, D.horn);                              // 獠牙
-    for (let y = B - 14; y <= B - 1; y++) g.set(mid, y, r >= 1 ? D.gold : D.s4);                   // 中央的冠脊
-    for (let k = 0; k < 3; k++) { g.set(mid, B - 15 - k, D.s4); g.set(mid - 1, B - 14 - k, D.s3); }
+    for (let y = B + 3; y <= B + 12; y++) for (const s of [-1, 1]) span(Math.min(mid + s * 8, mid + s * 13), Math.max(mid + s * 8, mid + s * 13), y, () => metal(0.2 - (y - B) * 0.07));   // 臉頰護板
+    // 嘴裡的陰影與兩顆發光的眼睛
+    for (let y = B + 3; y <= B + 10; y++) { const half = 8 - Math.max(0, y - B - 8) * 1.5; span(mid - half, mid + half, y, D.s0); }
+    for (const s of [-1, 1]) for (let i = 0; i <= 4; i++) g.set(mid + s * (8 - i), B + 3, D.s3);              // 嘴的上緣做成拱形
+    for (const s of [-1, 1]) { span(Math.min(mid + s * 3, mid + s * 5), Math.max(mid + s * 3, mid + s * 5), B + 5, eye); g.set(mid + s * 4, B + 6, D.lava1); }
+    // 下顎
+    for (let y = B + 11; y <= B + 13; y++) { const half = 10 - (y - B - 11) * 1.5; span(mid - half, mid + half, y, y === B + 11 ? D.s3 : y === B + 12 ? D.s2 : D.s1); }
+    for (const dx of [-4, 0, 4]) g.set(mid + dx, B + 10, D.horn);
+    // 上顎：寬的帽簷，中間隆起成龍鼻
+    for (let y = B - 2; y <= B + 2; y++) span(mid - 11, mid + 11, y, y === B + 2 ? trim : y === B - 2 ? D.s4 : D.s3);
+    for (let y = B - 5; y <= B - 2; y++) { const half = 2 + (y - B + 5); span(mid - half, mid + half, y, y === B - 5 ? D.s4 : D.s3); }
+    g.set(mid - 2, B - 2, D.s0); g.set(mid + 2, B - 2, D.s0);                                                // 鼻孔
+    if (r >= 2) { g.set(mid, B - 4, D.lava3); g.set(mid, B - 3, D.lava2); }
+    for (const [dx, len] of [[-7, 2], [-5, 3], [-2, 1], [2, 1], [5, 3], [7, 2]]) for (let k = 1; k <= len; k++) g.set(mid + dx, B + 2 + k, k === len ? D.horn : D.horn2);   // 上排獠牙
+    for (const s of [-1, 1]) for (let i = 0; i < 6; i++) { g.set(mid + s * (2 + i), B - 3 + Math.round(i * 0.5), D.s4); g.set(mid + s * (2 + i), B - 2 + Math.round(i * 0.5), D.s1); }   // 兩道斜斜壓下來的眉骨
+    for (const s of [-1, 1]) for (let k = 0; k < 3; k++) for (let i = 0; i <= 3 + k; i++) { g.set(mid + s * (13 + i), B + 2 + k * 3 + Math.round(i * 0.5), i >= 2 + k ? trim : D.s4); g.set(mid + s * (13 + i), B + 3 + k * 3 + Math.round(i * 0.5), D.s2); }   // 臉頰的鰭，往外往下展開
+    for (let i = 1; i <= 6; i++) { const w = i < 4 ? 1 : 0; span(mid - w, mid + w, cy - ry - i + 1, i >= 5 ? spineTip : D.s4); }       // 頭頂中央的背鰭
   }
 }
 
