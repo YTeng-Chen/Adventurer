@@ -19,6 +19,7 @@ export function startUI(bus) {
   let tab = null;           // 目前打開的功能：掛機地點的代號，或 guild、hero、gear、hunt、trial、settings（開機時設為掛機中的地點）
   let stageShown = false;
   let bagFilter = 'all';
+  let eqSel = null;         // 背包頁上方點開的裝備格（D.SLOTS 的 k），null 是都收起來
   let battle = null;        // 播放中的戰鬥
   let lastTickSum = null;
 
@@ -65,6 +66,8 @@ export function startUI(bus) {
 
   // ---------- 戰鬥畫面：只有在戰鬥地圖掛機、或播放戰鬥時才顯示 ----------
   function updateStage() {
+    // 背包頁：戰鬥畫面縮成螢幕高度 1/8 的一條，固定在上方（播放戰鬥時維持原本大小）
+    $('#stageWrap').classList.toggle('mini', tab === 'gear' && !battle);
     const show = !!battle || s.location === 'battle';
     if (show === stageShown) return;
     stageShown = show;
@@ -111,6 +114,7 @@ export function startUI(bus) {
   }
   function renderPanel() {
     renderTiles();
+    updateStage();
     const p = $('#panel');
     if (isLoc(tab)) p.innerHTML = locPanel(tab);
     else if (tab === 'guild') p.innerHTML = guildPanel();
@@ -284,12 +288,17 @@ export function startUI(bus) {
   }
   function gearPanel() {
     const curPow = S.power(W.hero(s).stats);
+    // 裝備：六格排成一列小圖示，點一格才展開那件的詳細數值
     const slots = D.SLOTS.map((sl) => {
       const it = s.equip[sl.k];
-      if (!it) return `<div class="card empty"><span class="slot-name">${sl.n}</span><span>空</span></div>`;
-      return `<div class="card">${itemHead(it, sl.n)}
-        ${itemChips(it)}${itemLines(it)}<div><button class="btn ghost small" data-act="unequip" data-k="${sl.k}">卸下</button></div></div>`;
+      return `<button class="eq-slot" data-act="eq-sel" data-k="${sl.k}" aria-pressed="${eqSel === sl.k}" aria-label="${sl.n}：${it ? esc(it.name) : '空'}">
+        <span class="icon" style="--rc:${it ? D.RARITY[it.rarity].color : 'var(--line)'}">${it ? `<img src="${iconURL(it)}" alt="">` : ''}</span>
+        <span class="eq-n">${sl.n}</span></button>`;
     }).join('');
+    const selSlot = D.SLOTS.find((sl) => sl.k === eqSel), cur = selSlot && s.equip[selSlot.k];
+    const detail = !selSlot ? ''
+      : cur ? `<div class="card">${itemHead(cur, selSlot.n)}${itemChips(cur)}${itemLines(cur)}<div><button class="btn ghost small" data-act="unequip" data-k="${selSlot.k}">卸下</button></div></div>`
+        : `<p class="hint">${selSlot.n}沒有裝備，從下面的背包挑一件。</p>`;
     const filters = [['all', '全部'], ['weapon', '武器'], ['head', '頭飾'], ['body', '上衣'], ['feet', '鞋子'], ['acc', '飾品']];
     const list = s.bag.filter((it) => bagFilter === 'all' || it.type === bagFilter)
       .map((it) => ({ it, slot: slotFor(it) }))
@@ -301,8 +310,9 @@ export function startUI(bus) {
         <div class="row"><button class="btn small" data-act="equip" data-id="${it.id}">穿上</button>
         <button class="btn ghost small" data-act="sell" data-id="${it.id}">賣出 <span class="num">${fmt(I.sellPrice(it))}</span></button></div></div>`).join('');
     const cheap = s.bag.filter((it) => it.rarity < 2).length;
-    return `<div class="row spread"><h2>裝備</h2><span class="hint">武器決定職業；飾品只提供詞條。外觀會隨裝備改變。</span></div>
-      <div class="slots">${slots}</div>
+    return `<div class="row spread"><h2>裝備</h2><span class="hint">${esc(W.hero(s).cls.name)}・戰力 <b class="num">${fmt(curPow)}</b></span></div>
+      <div class="eq-row">${slots}</div>
+      ${detail || '<p class="hint">點一格看詳細數值。武器決定職業，飾品只提供詞條。</p>'}
       <div class="row spread"><h2>背包 <span class="num hint">${s.bag.length} / ${D.BAG_CAP}</span></h2>
         <div class="row"><div class="filter">${filters.map(([k, n]) => `<button data-act="bag-filter" data-k="${k}" aria-pressed="${bagFilter === k}">${n}</button>`).join('')}</div>
         <button class="btn ghost small" data-act="sell-cheap" ${cheap ? '' : 'disabled'}>賣出普通與精良（${cheap}）</button></div></div>
@@ -541,6 +551,8 @@ export function startUI(bus) {
       case 'sell': toast(`賣出，得到 ${fmt(W.sell(s, id))} 金幣`); break;
       case 'sell-cheap': { const r = W.sellBelow(s, 2); toast(`賣出 ${r.n} 件，得到 ${fmt(r.total)} 金幣`); break; }
       case 'bag-filter': bagFilter = k; break;
+      // 點裝備格：展開或收起，背包也篩成同一個部位，方便比較
+      case 'eq-sel': eqSel = eqSel === k ? null : k; bagFilter = eqSel ? D.SLOTS.find((sl) => sl.k === eqSel).type : 'all'; break;
       case 'hunt': {
         if (battle) { toast('先看完或關閉目前的戰鬥'); return; }
         const out = W.hunt(s, +i, now);
