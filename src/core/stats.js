@@ -64,7 +64,16 @@ function computeHero(state, blessingIds = []) {
   const cls = resolveClass(state.equip);
   for (const mech of cls.mechs) applyMech(mech, stats, eff);
 
+  // 套裝：穿越多件，效果越多
   const pct = {};
+  const sets = setStatus(state.equip);
+  for (const st of sets) for (const b of st.bonus) {
+    if (!b.on) continue;
+    if (b.flat) addStats(stats, b.flat);
+    if (b.pct) addStats(pct, b.pct);
+    if (b.eff) for (const k in b.eff) eff[k] = (eff[k] || 0) + b.eff[k];
+  }
+
   for (const id of blessingIds) {
     const b = D.BLESSINGS.find((x) => x.id === id);
     if (!b) continue;
@@ -81,7 +90,17 @@ function computeHero(state, blessingIds = []) {
   eff.dmgReduce = Math.min(eff.dmgReduce, 0.6);
   eff.counterChance = Math.min(eff.counterChance, 0.8);
   eff.doubleChance = Math.min(eff.doubleChance, 0.8);
-  return { stats, eff, cls };
+  return { stats, eff, cls, sets };
+}
+
+// 身上各套裝穿了幾件、哪些效果生效：[{ k, n, color, count, pieces, bonus: [{ need, d, on }] }]（沒穿的套裝不列出）
+function setStatus(equip) {
+  const count = {};
+  for (const sl of D.SLOTS) { const it = equip[sl.k]; if (it && it.set) count[it.set] = (count[it.set] || 0) + 1; }
+  return Object.entries(count).filter(([k]) => D.SETS[k]).map(([k, n]) => {
+    const S = D.SETS[k];
+    return { k, n: S.n, color: S.color, count: n, pieces: S.pieces, bonus: S.bonus.map((b) => ({ ...b, on: n >= b.need })) };
+  });
 }
 
 // 戰力：給玩家一個直覺的比較數字
@@ -91,4 +110,4 @@ function power(stats) {
   return Math.round(off * 6 + tank * 0.5);
 }
 
-export const stats = { emptyStats, addStats, emptyEffects, levelStats, resolveClass, applyMech, mechText, itemStats, computeHero, power };
+export const stats = { emptyStats, addStats, emptyEffects, levelStats, resolveClass, applyMech, mechText, itemStats, setStatus, computeHero, power };

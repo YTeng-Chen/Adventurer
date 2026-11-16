@@ -28,6 +28,15 @@ const FORMS = {
   bow: { n: '弓', cls: '弓手', mech: 'chain' },
   hammer: { n: '鎚', cls: '守衛', mech: 'counter' },
   staff: { n: '法杖', cls: '術士', mech: 'burn' },
+  greatsword: { n: '大劍', cls: '劍士', mech: 'chain' },
+};
+
+// 套裝：同一套穿越多件，效果越多（need 是要穿幾件）。pct 是百分比加成、flat 是固定加成、eff 是戰鬥效果，寫法和祝福一樣
+const SETS = {
+  dragon: { n: '炎龍套裝', pieces: 4, color: '#ff7a2c', bonus: [
+    { need: 2, d: '物理攻擊、生命 +12%', pct: { atk: 12, hp: 12 } },
+    { need: 4, d: '炎龍之怒：攻擊附加 1 層燃燒、燃燒傷害 +10%、暴擊傷害 +30%', flat: { critDmg: 30 }, eff: { burnStacks: 1, burnPct: 0.1 } },
+  ] },
 };
 const MECHS = {
   chain: { n: '連鎖', color: '#e0564a' },
@@ -213,7 +222,7 @@ const BLESS_EVERY = 3; // 每過 3 關選一次祝福
 
 export const data = {
   TICK_MS, OFFLINE_CAP_MS, AFFIX_CAP, BAG_CAP,
-  STATS, STAT_NAME, STAT_PCT, FORMS, MECHS, SLOTS, TYPE_NAME, ITEM_TYPES, GEAR, GEAR_BY_ID,
+  STATS, STAT_NAME, STAT_PCT, FORMS, MECHS, SETS, SLOTS, TYPE_NAME, ITEM_TYPES, GEAR, GEAR_BY_ID,
   RARITY, FORGE, CRAFT_COST, AFFIXES, EFFECTS, MATS, MAT_PRICE, AREAS, LOCATIONS,
   DEVICES, DEVICE_MAX_LV, deviceUpgradeCost, RANKS, GUILD, BLESS_TIERS, BLESSINGS, BLESS_EVERY,
 };

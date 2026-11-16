@@ -7,6 +7,8 @@
 //   form  武器才有：攻擊方式，也決定職業（data.js 的 FORMS）
 //   base  基本數值，T 是材料階級。可以是陣列：鍛造時隨機挑一種（飾品用）
 //   w     出現的權重，預設 1；稀有的款式可以設小一點
+//   tier  只在這個材料階級出現（鍛造、掉落都一樣）；名稱前面不再加材料階級，例如「炎龍大劍」
+//   set   屬於哪一套（data.js 的 SETS）：同一套穿越多件，套裝效果越多
 
 // 飾品的基本數值：隨機一種，飾品主要靠詞條
 const ACC_BASES = [
@@ -32,6 +34,9 @@ export const GEAR = [
   { id: 'grimoire', type: 'weapon', n: '魔典', form: 'staff', look: 'staff', base: (T) => ({ matk: 9 * T + 3, mpen: 2 }) },
   { id: 'crystalstaff', type: 'weapon', n: '水晶杖', form: 'staff', look: 'staff', base: (T) => ({ matk: 9 * T + 3, mpen: 2 }) },
 
+  // 炎龍套裝的武器：雙手大劍，自己一套連招（rig.js 的 COMBOS.greatsword）
+  { id: 'dragonblade', type: 'weapon', n: '炎龍大劍', form: 'greatsword', look: 'dragonblade', set: 'dragon', tier: 5, base: (T) => ({ atk: 11 * T + 6, crit: 4, critDmg: 10 }) },
+
   // ---------- 頭飾 ----------
   { id: 'bandana', type: 'head', n: '頭巾', look: 'cap', base: (T) => ({ hp: 22 * T, mdef: 3 * T, crit: 1 }) },
   { id: 'lighthelm', type: 'head', n: '輕盔', look: 'cap', base: (T) => ({ hp: 22 * T, mdef: 3 * T, crit: 1 }) },
@@ -39,6 +44,8 @@ export const GEAR = [
   { id: 'visorhelm', type: 'head', n: '護面盔', look: 'helm', base: (T) => ({ hp: 22 * T, mdef: 3 * T, def: 2 * T }) },
   { id: 'pointyhat', type: 'head', n: '尖帽', look: 'wizard', base: (T) => ({ hp: 22 * T, mdef: 3 * T, matk: 2 * T }) },
   { id: 'hood', type: 'head', n: '兜帽', look: 'wizard', base: (T) => ({ hp: 22 * T, mdef: 3 * T, matk: 2 * T }) },
+
+  { id: 'dragonhelm', type: 'head', n: '炎龍角盔', look: 'dragonhelm', set: 'dragon', tier: 5, base: (T) => ({ hp: 28 * T, mdef: 3 * T, def: 2 * T, crit: 2 }) },
 
   // ---------- 上衣 ----------
   { id: 'leatherarmor', type: 'body', n: '皮甲', look: 'leather', base: (T) => ({ hp: 35 * T, def: 4 * T, atk: 2 * T }) },
@@ -48,6 +55,8 @@ export const GEAR = [
   { id: 'magerobe', type: 'body', n: '法袍', look: 'robe', base: (T) => ({ hp: 35 * T, def: 4 * T, mdef: 3 * T }) },
   { id: 'longrobe', type: 'body', n: '長袍', look: 'robe', base: (T) => ({ hp: 35 * T, def: 4 * T, mdef: 3 * T }) },
 
+  { id: 'dragonmail', type: 'body', n: '炎龍鱗甲', look: 'dragonmail', set: 'dragon', tier: 5, base: (T) => ({ hp: 50 * T, def: 5 * T, atk: 2 * T }) },
+
   // ---------- 鞋子 ----------
   { id: 'swiftboots', type: 'feet', n: '疾行靴', look: 'boots', base: (T) => ({ spd: 6 + T, def: 2 * T }) },
   { id: 'shortboots', type: 'feet', n: '短靴', look: 'boots', base: (T) => ({ spd: 6 + T, def: 2 * T }) },
@@ -55,6 +64,8 @@ export const GEAR = [
   { id: 'heavyboots', type: 'feet', n: '重靴', look: 'greaves', base: (T) => ({ spd: 3 + T, def: 2 * T, mdef: 2 * T }) },
   { id: 'clothshoes', type: 'feet', n: '布鞋', look: 'shoes', base: (T) => ({ spd: 3 + T, def: 2 * T, matk: T }) },
   { id: 'starshoes', type: 'feet', n: '星紋鞋', look: 'shoes', base: (T) => ({ spd: 3 + T, def: 2 * T, matk: T }) },
+
+  { id: 'dragonclaw', type: 'feet', n: '炎龍爪靴', look: 'dragonclaw', set: 'dragon', tier: 5, base: (T) => ({ spd: 7 + T, def: 2 * T, mdef: 2 * T }) },
 
   // ---------- 飾品 ----------
   { id: 'ring', type: 'acc', n: '戒指', look: 'ring', base: ACC_BASES },

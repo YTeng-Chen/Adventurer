@@ -10,14 +10,15 @@ const TIER_PREFIX = ['', '新手', '森林', '礦鐵', '冥骨', '炎龍'];
 function round(k, v) { return D.STAT_PCT[k] ? Math.round(v * 10) / 10 : Math.round(v); }
 
 function defsOf(type) { return D.GEAR.filter((g) => g.type === type); }
-function pickDef(rng, type) {
-  const pool = defsOf(type);
+// 只在某個材料階級出現的款式（tier），其他階級不會抽到
+function pickDef(rng, type, tier) {
+  const pool = defsOf(type).filter((g) => !g.tier || g.tier === tier);
   return pool[rng.weighted(pool.map((g) => g.w ?? 1))];
 }
 
 // def：指定樣式 id；沒指定就從 type 部位的樣式裡隨機挑
 function createItem(rng, { def, type, tier, rarity, seq }) {
-  const g = (def && D.GEAR_BY_ID[def]) || pickDef(rng, type);
+  const g = (def && D.GEAR_BY_ID[def]) || pickDef(rng, type, tier);
   const R = D.RARITY[rarity];
   const make = Array.isArray(g.base) ? rng.pick(g.base) : g.base;
   const base = make(tier);
@@ -47,11 +48,12 @@ function hydrate(it) {
   it.type = g.type;
   it.look = g.look;
   if (g.form) it.form = g.form; else delete it.form;
+  if (g.set) it.set = g.set; else delete it.set;
   if (it.effect) {
     const e = D.EFFECTS.find((x) => x.k === it.effect.k);
     if (e) Object.assign(it.effect, { n: e.n, stat: !!e.stat, d: e.d(it.effect.v) });
   }
-  it.name = (it.effect && it.effect.n ? it.effect.n + '之' : '') + (TIER_PREFIX[it.tier] || '') + g.n;
+  it.name = (it.effect && it.effect.n ? it.effect.n + '之' : '') + (g.tier ? '' : TIER_PREFIX[it.tier] || '') + g.n;
   return it;
 }
 

@@ -347,3 +347,54 @@ test('舊存檔：打頭目解鎖過的地圖，聲望補到去得了的階級',
   assert.ok(W.areaOpen(m, 2));
   assert.equal(W.areaOpen(m, 3), false);
 });
+
+test('炎龍套裝：只在 T5 出現，名稱不加階級前綴，大劍是劍士', () => {
+  const rng = R.make(21);
+  const seen = { 1: new Set(), 5: new Set() };
+  for (let i = 0; i < 400; i++) for (const tier of [1, 5]) seen[tier].add(I.createItem(rng, { type: D.ITEM_TYPES[i % 5], tier, rarity: 0, seq: i }).def);
+  for (const id of ['dragonblade', 'dragonhelm', 'dragonmail', 'dragonclaw']) {
+    assert.ok(seen[5].has(id), id + ' 在 T5 會出現');
+    assert.ok(!seen[1].has(id), id + ' 不會在 T1 出現');
+  }
+  const blade = I.createItem(rng, { def: 'dragonblade', tier: 5, rarity: 0, seq: 999 });
+  assert.equal(blade.name, '炎龍大劍');
+  assert.equal(blade.form, 'greatsword');
+  assert.equal(blade.set, 'dragon');
+  assert.equal(S.resolveClass({ weapon: blade }).name, '劍士');
+});
+
+test('套裝效果：2 件、4 件各有加成', () => {
+  const s = W.newGame(NOW, 1);
+  const rng = R.make(3);
+  const base = W.hero(s);
+  const piece = (def) => I.createItem(rng, { def, tier: 5, rarity: 0, seq: 1 });
+  s.equip.head = piece('dragonhelm');
+  const one = W.hero(s);
+  assert.equal(one.sets[0].count, 1);
+  assert.ok(one.sets[0].bonus.every((b) => !b.on));
+  s.equip.body = piece('dragonmail');
+  const two = W.hero(s);
+  assert.deepEqual(two.sets[0].bonus.map((b) => b.on), [true, false]);
+  const noSet = S.computeHero({ ...s, equip: { ...s.equip, head: { ...s.equip.head, set: undefined }, body: { ...s.equip.body, set: undefined } } });
+  assert.ok(Math.abs(two.stats.hp - noSet.stats.hp * 1.12) < 0.01, '生命 +12%');
+  s.equip.weapon = piece('dragonblade'); s.equip.feet = piece('dragonclaw');
+  const four = W.hero(s);
+  assert.deepEqual(four.sets[0].bonus.map((b) => b.on), [true, true]);
+  assert.equal(four.eff.burnStacks, 1);
+  assert.ok(Math.abs(four.eff.burnPct - 0.25) < 1e-9);
+  assert.equal(base.sets.length, 0);
+});
+
+test('鍛造指定只在 T5 的款式：只用 T5 材料', () => {
+  const s = W.newGame(NOW, 1);
+  s.location = 'forge'; s.forge.type = 'weapon'; s.forge.def = 'dragonblade';
+  s.mats[W.matKey(3)] = 20;
+  W.settle(s, D.FORGE[1].ticks * 2, NOW);
+  assert.equal(s.bag.length, 0);
+  assert.match(s.forge.status, /T5/);
+  s.mats[W.matKey(5)] = 4;
+  W.settle(s, D.FORGE[1].ticks, NOW);
+  assert.equal(s.bag.length, 1);
+  assert.equal(s.bag[0].name.endsWith('炎龍大劍'), true);
+  assert.equal(s.mats[W.matKey(3)], 20);
+});

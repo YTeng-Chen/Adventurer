@@ -131,9 +131,12 @@ function tickForge(s, rng, sum, now) {
   const f = s.forge;
   if (s.bag.length >= D.BAG_CAP) { f.status = '背包已滿，鍛造暫停'; sum.notes.add(f.status); return 0; }
   const type = f.type === 'auto' ? AUTO_TYPES[(f.autoIdx || 0) % AUTO_TYPES.length] : f.type;
-  const tier = pickTier(s);
+  // 指定了只在某一階出現的款式（例如炎龍套裝只在 T5），就只能用那一階的材料
+  const only = f.type !== 'auto' && D.GEAR_BY_ID[f.def] && D.GEAR_BY_ID[f.def].tier;
+  const tier = only ? ((s.mats[matKey(only)] || 0) >= D.CRAFT_COST ? only : 0) : pickTier(s);
   if (!tier) {
-    f.status = `材料不足：鍛造需要 ${D.CRAFT_COST} 個同階材料`;
+    f.status = only ? `材料不足：${D.GEAR_BY_ID[f.def].n}要用 ${D.CRAFT_COST} 個 T${only} 材料（${D.MATS[only]}）`
+      : `材料不足：鍛造需要 ${D.CRAFT_COST} 個同階材料`;
     sum.notes.add(f.status);
     return 0;
   }

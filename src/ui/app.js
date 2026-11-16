@@ -84,7 +84,7 @@ export function startUI(bus) {
     return `<div class="row spread"><h2>角色</h2><button class="btn ghost small" data-act="look">更換外觀</button></div>
       <div><p class="cls-name">${esc(h.cls.name)}<span class="cls-kind">${esc(h.cls.kind)}</span></p>
         <p class="hint">冒險者階級 <b style="color:var(--gold)">${D.RANKS[W.rank(s)].n}</b>・${rankProgress()}</p>
-        <ul class="mechs">${mechs || '<li>拿起武器就會有職業：劍或弓是劍士、弓手（連鎖），鎚是守衛（反擊），法杖是術士（燃燒）</li>'}</ul>
+        <ul class="mechs">${mechs || '<li>拿起武器就會有職業：劍或弓是劍士、弓手（連鎖），鎚是守衛（反擊），法杖是術士（燃燒）</li>'}${h.sets.map(setLines).join('')}</ul>
         <div class="power"><span class="hud-label">戰力</span><span class="num">${fmt(S.power(st))}</span></div>
         <dl class="stats">${D.STATS.map((x) => `<div><dt>${x.n}</dt><dd class="num">${fmtV(x.k, st[x.k])}</dd></div>`).join('')}</dl></div>
       <div class="log-box"><h3 class="mini-h">最近發生的事</h3>
@@ -189,7 +189,7 @@ export function startUI(bus) {
   function forgeView() {
     const f = s.forge, cur = D.FORGE[f.level], next = D.FORGE[f.level + 1];
     const typeOpts = [['auto', '自動輪流'], ['weapon', '武器'], ['head', '頭飾'], ['body', '上衣'], ['feet', '鞋子'], ['acc', '飾品']];
-    const defOpts = [['auto', '隨機'], ...(f.type === 'auto' ? [] : I.defsOf(f.type).map((g) => [g.id, g.n]))];
+    const defOpts = [['auto', '隨機'], ...(f.type === 'auto' ? [] : I.defsOf(f.type).map((g) => [g.id, g.n + (g.tier ? `（只用 T${g.tier} 材料）` : '')]))];
     const pct = s.location === 'forge' ? (f.progress / cur.ticks) * 100 : 0;
     return `<div class="sub-h"><h3>鍛造室・${cur.n} <span class="num" style="color:var(--gold)">Lv ${f.level}</span></h3>
         ${next ? `<button class="btn small" data-act="forge-up" ${s.gold < next.cost ? 'disabled' : ''}>升級為${next.n} <span class="num">${fmt(next.cost)}</span></button>` : '<span class="hint">已是最高級設備</span>'}</div>
@@ -245,7 +245,14 @@ export function startUI(bus) {
     const base = Object.entries(it.base).map(([k, v]) => `<li>${I.fmtStat(k, v)}</li>`).join('');
     const aff = it.affixes.map((a) => `<li class="aff">◆ ${I.fmtStat(a.k, a.v)}</li>`).join('');
     const eff = it.effect ? `<li class="eff">★ ${esc(it.effect.n)}：${esc(it.effect.d)}</li>` : '';
-    return `<ul class="lines">${base}${aff}${eff}</ul>`;
+    // 套裝：列出每段效果，已經生效的亮起來（件數算身上穿的）
+    const st = it.set && (S.setStatus(s.equip).find((x) => x.k === it.set) || { ...D.SETS[it.set], k: it.set, count: 0, bonus: D.SETS[it.set].bonus });
+    return `<ul class="lines">${base}${aff}${eff}${st ? setLines(st) : ''}</ul>`;
+  }
+  // 套裝效果的幾行：「炎龍套裝（身上 2/4）」，生效的那幾段用套裝的顏色
+  function setLines(st) {
+    return `<li class="set set-h" style="--sc:${st.color}">${esc(st.n)}（身上 ${st.count}/${st.pieces}）</li>`
+      + st.bonus.map((b) => `<li class="set${b.on ? ' on' : ''}" style="--sc:${st.color}">${b.need} 件：${esc(b.d)}</li>`).join('');
   }
   // 裝備圖示：畫一次就快取成圖片網址
   const iconCache = new Map();
@@ -268,6 +275,7 @@ export function startUI(bus) {
   function itemChips(it) {
     return `<div class="chips"><span class="chip" style="color:${D.RARITY[it.rarity].color}">${D.RARITY[it.rarity].n}</span>
       ${itemKindChip(it)}
+      ${it.set ? `<span class="chip" style="color:${D.SETS[it.set].color}">${D.SETS[it.set].n}</span>` : ''}
       <span class="chip" style="color:var(--muted)">T${it.tier}</span></div>`;
   }
   // 武器標出職業（顏色是職業機制），其他部位標出部位
