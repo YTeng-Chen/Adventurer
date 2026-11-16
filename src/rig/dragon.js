@@ -112,8 +112,8 @@ export function dragonHelm(g, A, m, r) {
   // 金屬的光影：光從右上（側面）或正上方（正面）來，整片漸層，不畫條紋
   const metal = (t) => (t > 0.55 ? D.s4 : t > 0.15 ? D.s3 : t > -0.35 ? D.s2 : D.s1);
   if (A.side) {
-    const cx = L + 12, cy = B - 2, rx = 12.5, ry = 10;
-    hornLine(g, [[L + 9, B - 9], [L + 2, B - 9], [L - 4, B - 11], [L - 7, B - 16]], 2, 0.7, true);           // 後面那支角
+    const cx = L + 13, cy = B - 2, rx = 11.5, ry = 10;   // 側面要窄：頭盔貼著頭，龍吻、龍角都不要伸太遠
+    hornLine(g, [[L + 9, B - 9], [L + 4, B - 11], [L + 1, B - 14], [L, B - 18]], 2, 0.7, true);           // 後面那支角
     // 頭盔本體：貼合的圓殼，後半有一道甲片接縫
     for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
       const e = ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2;
@@ -122,23 +122,23 @@ export function dragonHelm(g, A, m, r) {
     }
     for (let y = B + 3; y <= B + 12; y++) span(L + 7, R - 9, y, (x) => metal(0.1 - (y - B) * 0.06 + (x - L) * 0.02));   // 臉頰護板
     // 後頸：三層往後錯開的護甲片，每片上緣鑲邊
-    for (let k = 0; k < 3; k++) for (let y = B + 5 + k * 3; y <= B + 7 + k * 3; y++) span(L - 1 - k, L + 9 - k, y, y === B + 5 + k * 3 ? trim : y % 2 ? D.s2 : D.s1);
+    for (let k = 0; k < 3; k++) for (let y = B + 5 + k * 3; y <= B + 7 + k * 3; y++) span(L + 1 - Math.ceil(k / 2), L + 10 - k, y, y === B + 5 + k * 3 ? trim : y % 2 ? D.s2 : D.s1);
     // 嘴裡的陰影（戴的人的臉），只露出發光的眼睛
-    for (let y = B + 3; y <= B + 10; y++) span(R - 9, R + 1, y, D.s0);
+    for (let y = B + 3; y <= B + 10; y++) span(R - 9, R, y, D.s0);
     span(R - 3, R - 1, B + 5, eye); g.set(R - 2, B + 6, D.lava1); if (r >= 3) g.set(R - 2, B + 5, '#ffffff');
-    g.set(R - 6, B + 7, D.lava0); g.set(R + 1, B + 6, D.lava0);
+    g.set(R - 6, B + 7, D.lava0); g.set(R, B + 6, D.lava0);
     // 下顎：護住下巴，往前收；下排獠牙朝上
-    for (let y = B + 11; y <= B + 13; y++) span(R - 11, R + 3 - (y - B - 11) * 2, y, y === B + 11 ? D.s3 : y === B + 12 ? D.s2 : D.s1);
-    for (const x of [R - 5, R - 1, R + 2]) { g.set(x, B + 10, D.horn); g.set(x, B + 9, D.horn2); }
+    for (let y = B + 11; y <= B + 13; y++) span(R - 11, R + 1 - (y - B - 11) * 2, y, y === B + 11 ? D.s3 : y === B + 12 ? D.s2 : D.s1);
+    for (const x of [R - 6, R - 3, R]) { g.set(x, B + 10, D.horn); g.set(x, B + 9, D.horn2); }
     // 上顎：像帽簷蓋在額頭，往前伸成龍吻；下緣鑲邊
-    for (let x = R - 12; x <= R + 6; x++) {
-      const top = Math.round(B - 4 + Math.max(0, x - (R - 4)) * 0.45), bot = x > R + 4 ? B + 1 : B + 2;
+    for (let x = R - 12; x <= R + 3; x++) {
+      const top = Math.round(B - 4 + Math.max(0, x - (R - 5)) * 0.5), bot = x > R + 1 ? B + 1 : B + 2;
       for (let y = top; y <= bot; y++) g.set(x, y, y === bot ? trim : y === top ? D.s4 : y <= top + 1 ? D.s3 : D.s2);
     }
     span(R - 11, R - 3, B - 5, D.s4); span(R - 9, R - 5, B - 6, D.s3);                                       // 眉骨隆起
-    g.set(R + 5, B - 1, D.s0);                                                                               // 鼻孔
+    g.set(R + 2, B - 1, D.s0);                                                                               // 鼻孔
     if (r >= 2) { g.set(R - 7, B - 4, D.lava2); g.set(R - 6, B - 4, D.lava3); }                              // 眉心的龍晶
-    for (const [x, len] of [[R - 7, 1], [R - 4, 3], [R - 1, 2], [R + 2, 3], [R + 4, 1]]) for (let k = 1; k <= len; k++) g.set(x, B + 2 + k, k === len ? D.horn : D.horn2);   // 上排獠牙往下垂
+    for (const [x, len] of [[R - 8, 1], [R - 5, 3], [R - 2, 2], [R + 1, 3]]) for (let k = 1; k <= len; k++) g.set(x, B + 2 + k, k === len ? D.horn : D.horn2);   // 上排獠牙往下垂
     for (let k = 0; k < 3; k++) for (let i = 0; i <= 3 + k; i++) g.set(R - 10 - i, B + 3 + k * 2 - Math.round(i * 0.35), i >= 2 + k ? trim : D.s4);   // 臉頰的鰭
     // 頭頂的背鰭：從額頭往後一根比一根矮
     for (let k = 0; k < 5; k++) {
@@ -147,7 +147,7 @@ export function dragonHelm(g, A, m, r) {
     }
     // 前面那支角：從眉骨後方往後掃，尖端往上翹
     const big = r >= 4 ? 1.15 : 1;
-    hornLine(g, [[L + 13, B - 11], [L + 5, B - 12], [L - 3, B - 13], [L - 8 * big, B - 15 - 3 * big], [L - 9 * big, B - 21 * big]], 2.8, 0.7, false, r >= 4);
+    hornLine(g, [[L + 13, B - 11], [L + 7, B - 13], [L + 2, B - 15], [L - 1, B - 19 * big], [L - 1, B - 23 * big]], 2.8, 0.7, false, r >= 4);
   } else {
     const mid = (L + R) / 2, cy = B - 2, rx = 14.5, ry = 10.5, big = r >= 4 ? 1.15 : 1;
     // 兩支角：從頭的兩側往外伸，再往上彎（先畫，根部被頭盔蓋住）
