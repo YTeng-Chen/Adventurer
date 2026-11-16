@@ -96,6 +96,7 @@ export function startUI(bus) {
       <div class="card-list">
         <div class="row spread"><span>外觀（性別與髮色）</span><button class="btn ghost small" data-act="look">更換外觀</button></div>
         <div class="row spread"><span>快轉 1 小時<small class="hint">　測試用，馬上看到離線收穫</small></span><button class="btn ghost small" data-act="ff" id="ffBtn">快轉</button></div>
+        <div class="row spread"><span>炎龍套裝<small class="hint">　測試用，馬上拿到一整套傳說品質並穿上</small></span><button class="btn ghost small" data-act="give-dragon">拿到</button></div>
         <div class="row spread"><span>重新開始<small class="hint">　刪除角色、裝備和進度</small></span><button class="btn ghost small" data-act="reset-ask" id="resetBtn">重新開始</button></div>
       </div>
       <p class="hint">Phaser 版原型・進度存在這個瀏覽器。</p>`;
@@ -554,6 +555,7 @@ export function startUI(bus) {
       case 'train': s.trainDevice = k; break;
       case 'area': if (!W.setArea(s, +i)) toast(needsText(+i)); break;
       case 'forge-up': if (W.upgradeForge(s)) toast(`鍛造室升級為${D.FORGE[s.forge.level].n}`); break;
+      case 'give-dragon': { const got = W.giveSet(s, 'dragon'); toast(`穿上${got.map((it) => it.name).join('、')}`); break; }
       case 'claim': { const q = W.claimQuest(s, id, now); if (q) toast(`完成委託：金幣 +${fmt(q.reward.gold)}、聲望 +${q.reward.rep}`); break; }
       case 'equip': W.equip(s, id, slotFor(s.bag.find((x) => x.id === id))); break;
       case 'unequip': if (!W.unequip(s, k)) toast('背包滿了，先賣掉一些裝備'); break;

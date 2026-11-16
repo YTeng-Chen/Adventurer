@@ -398,3 +398,14 @@ test('鍛造指定只在 T5 的款式：只用 T5 材料', () => {
   assert.equal(s.bag[0].name.endsWith('炎龍大劍'), true);
   assert.equal(s.mats[W.matKey(3)], 20);
 });
+
+test('測試用：直接拿到整套炎龍套裝並穿上，換下來的放回背包', () => {
+  const s = W.newGame(NOW, 1);
+  const old = s.equip.weapon;
+  const got = W.giveSet(s, 'dragon');
+  assert.equal(got.length, 4);
+  assert.deepEqual(['weapon', 'head', 'body', 'feet'].map((k) => s.equip[k].set), ['dragon', 'dragon', 'dragon', 'dragon']);
+  assert.ok(got.every((it) => it.rarity === 4 && it.tier === 5));
+  assert.ok(s.bag.includes(old));
+  assert.deepEqual(W.hero(s).sets[0].bonus.map((b) => b.on), [true, true]);
+});

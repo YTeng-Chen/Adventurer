@@ -296,6 +296,19 @@ function equip(s, id, slotK) {
   s.equip[slot] = it;
   return true;
 }
+// 測試用：直接拿到一整套（每一件都穿上），換下來的裝備放回背包（背包滿了就不放）。回傳拿到的裝備
+function giveSet(s, setKey, rarity = 4) {
+  const rng = R().make(s.seed), got = [];
+  for (const g of D.GEAR.filter((x) => x.set === setKey)) {
+    const it = I().createItem(rng, { def: g.id, tier: g.tier || 5, rarity, seq: s.itemSeq++ });
+    const slot = D.SLOTS.find((sl) => sl.type === it.type && !s.equip[sl.k])?.k || D.SLOTS.find((sl) => sl.type === it.type).k;
+    if (s.equip[slot] && s.bag.length < D.BAG_CAP) s.bag.push(s.equip[slot]);
+    s.equip[slot] = it;
+    got.push(it);
+  }
+  s.seed = rng.state;
+  return got;
+}
 function unequip(s, slot) {
   if (!s.equip[slot] || s.bag.length >= D.BAG_CAP) return false;
   s.bag.push(s.equip[slot]); s.equip[slot] = null; return true;
@@ -428,7 +441,7 @@ function hunt(s, areaIdx, now) {
 
 export const world = {
   expNeed, matKey, matTier, marketBonus, marketSpeed, newGame, hero, settle, catchUp, setLocation, setArea, unlockDevice, upgradeDevice, upgradeForge,
-  equip, unequip, sell, sellBelow, rankOf, rank, areaNeeds, areaOpen, topArea, addRep,
+  equip, unequip, giveSet, sell, sellBelow, rankOf, rank, areaNeeds, areaOpen, topArea, addRep,
   dayId, dayResetAt, refreshQuests, questText, questProgress, questReady, claimQuest, refreshTickets, hunt, bossEnemy,
   addLog, gainExp, HUNT_MAX, HUNT_REFILL_MS,
 };
