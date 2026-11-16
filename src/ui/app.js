@@ -80,6 +80,7 @@ export function startUI(bus) {
     const log = s.log.slice(0, 12);
     return `<div class="row spread"><h2>角色</h2><button class="btn ghost small" data-act="look">更換外觀</button></div>
       <div><p class="cls-name">${esc(h.cls.name)}<span class="cls-kind">${esc(h.cls.kind)}</span></p>
+        <p class="hint">冒險者階級 <b style="color:var(--gold)">${D.RANKS[W.rank(s)].n}</b>・${rankProgress()}</p>
         <ul class="mechs">${mechs || '<li>拿起武器就會有職業：劍或弓是劍士、弓手（連鎖），鎚是守衛（反擊），法杖是術士（燃燒）</li>'}</ul>
         <div class="power"><span class="hud-label">戰力</span><span class="num">${fmt(S.power(st))}</span></div>
         <dl class="stats">${D.STATS.map((x) => `<div><dt>${x.n}</dt><dd class="num">${fmtV(x.k, st[x.k])}</dd></div>`).join('')}</dl></div>
@@ -182,7 +183,7 @@ export function startUI(bus) {
     const pct = s.location === 'forge' ? (f.progress / cur.ticks) * 100 : 0;
     return `<div class="sub-h"><h3>鍛造室・${cur.n} <span class="num" style="color:var(--gold)">Lv ${f.level}</span></h3>
         ${next ? `<button class="btn small" data-act="forge-up" ${s.gold < next.cost ? 'disabled' : ''}>升級為${next.n} <span class="num">${fmt(next.cost)}</span></button>` : '<span class="hint">已是最高級設備</span>'}</div>
-      <p class="hint">每件裝備用 ${D.CRAFT_COST} 個同階材料，${cur.ticks * 5} 秒完成一件。會先用最高階的材料，材料是哪一階，做出來的裝備就是哪一階。</p>
+      <p class="hint">每件裝備用 ${D.CRAFT_COST} 個同階材料，${cur.ticks * 5} 秒完成一件。會先用最高階的材料，材料是哪一階，做出來的裝備就是哪一階；高階裝備要冒險者階級夠高才能穿。</p>
       ${oddsBar(cur.odds)}
       <div class="row">
         <label class="field" for="forgeType">要鍛造的部位<select id="forgeType" data-set="forge-type">${typeOpts.map(([k, n]) => `<option value="${k}" ${f.type === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
@@ -202,8 +203,13 @@ export function startUI(bus) {
       <p class="hint">付費的市集隨從還沒做，之後再看怎麼設計。</p>`;
   }
 
+  // 冒險者聲望與升到下一階要多少
+  function rankProgress() {
+    const nx = D.RANKS[W.rank(s) + 1];
+    return `冒險者聲望 <b class="num">${fmt(s.guild.rep)}</b>${nx ? ` / ${fmt(nx.rep)} 升為${nx.n}` : '（最高階）'}`;
+  }
   function guildView() {
-    const r = W.guildRank(s.guild.rep), g = D.GUILD_RANKS[r], nx = D.GUILD_RANKS[r + 1];
+    const r = W.rank(s), g = D.RANKS[r], nx = D.RANKS[r + 1];
     const quests = s.guild.quests.map((q) => {
       const p = W.questProgress(s, q);
       const done = p >= q.need;
@@ -212,9 +218,10 @@ export function startUI(bus) {
         <div class="bar good"><span style="width:${(p / q.need) * 100}%"></span></div>
         <span class="hint"><span class="num">${p} / ${q.need}</span>・獎勵：${reward}</span></div>`;
     }).join('');
-    return `<div class="sub-h"><h3>公會・委託等級 <span class="num" style="color:var(--gold)">${g.n}</span></h3>
-        <span class="hint">冒險者聲望 <b class="num">${fmt(s.guild.rep)}</b>${nx ? ` / ${fmt(nx.rep)} 升到 ${nx.n} 級` : '（最高級）'}</span></div>
-      <p class="hint">在公會掛機會接雜事委託，每 5 秒約 <b class="num">${fmt(g.gold * (1 + s.hero.level * 0.05))}</b> 金幣。任務在任何地點都會累計，完成後回來領取。</p>
+    return `<div class="sub-h"><h3>公會・<span style="color:var(--gold)">${g.n}</span></h3>
+        <span class="hint">${rankProgress()}</span></div>
+      <p class="hint">冒險者階級越高，能穿的裝備越好（T2 裝備要${D.RANKS[D.TIER_RANK[2]].n}、T3 要${D.RANKS[D.TIER_RANK[3]].n}……），接委託的收入也越多。</p>
+      <p class="hint">在公會掛機會接雜事委託，每 5 秒約 <b class="num">${fmt(g.gold * (1 + s.hero.level * 0.05))}</b> 金幣、聲望 +1。任務在任何地點都會累計，完成後回來領取。</p>
       <div class="slots">${quests}</div>`;
   }
 
@@ -245,8 +252,14 @@ export function startUI(bus) {
   }
   function itemChips(it) {
     return `<div class="chips"><span class="chip" style="color:${D.RARITY[it.rarity].color}">${D.RARITY[it.rarity].n}</span>
-      ${itemKindChip(it)}
+      ${itemKindChip(it)}${rankChip(it)}
       <span class="chip" style="color:var(--muted)">T${it.tier}</span></div>`;
+  }
+  // 需要的冒險者階級：新手就能穿的不標；階級不夠時標成紅色
+  function rankChip(it) {
+    const r = I.reqRank(it);
+    if (!r) return '';
+    return `<span class="chip" style="color:${W.canEquip(s, it) ? 'var(--muted)' : 'var(--bad)'}">需要${D.RANKS[r].n}</span>`;
   }
   // 武器標出職業（顏色是職業機制），其他部位標出部位
   function itemKindChip(it) {
@@ -275,15 +288,16 @@ export function startUI(bus) {
     const filters = [['all', '全部'], ['weapon', '武器'], ['head', '頭飾'], ['body', '上衣'], ['feet', '鞋子'], ['acc', '飾品']];
     const list = s.bag.filter((it) => bagFilter === 'all' || it.type === bagFilter)
       .map((it) => ({ it, slot: slotFor(it) }))
-      .map((o) => ({ ...o, d: powerWith(o.slot, o.it) - curPow }))
-      .sort((a, b) => b.d - a.d || b.it.rarity - a.it.rarity);
+      .map((o) => ({ ...o, d: powerWith(o.slot, o.it) - curPow, ok: W.canEquip(s, o.it) }))
+      .sort((a, b) => b.ok - a.ok || b.d - a.d || b.it.rarity - a.it.rarity);   // 能穿的排前面
     const bag = list.map(({ it, d }) => `<div class="card"><div class="row spread"><span class="slot-name">${D.TYPE_NAME[it.type]}</span>
         <span class="delta ${d > 0 ? 'up' : d < 0 ? 'down' : ''}">戰力 ${d > 0 ? '+' : ''}${fmt(d)}</span></div>
         ${itemHead(it)}${itemChips(it)}${itemLines(it)}
-        <div class="row"><button class="btn small" data-act="equip" data-id="${it.id}">穿上</button>
+        <div class="row">${W.canEquip(s, it) ? `<button class="btn small" data-act="equip" data-id="${it.id}">穿上</button>`
+          : `<button class="btn small" disabled title="需要${D.RANKS[I.reqRank(it)].n}">階級不足</button>`}
         <button class="btn ghost small" data-act="sell" data-id="${it.id}">賣出 <span class="num">${fmt(I.sellPrice(it))}</span></button></div></div>`).join('');
     const cheap = s.bag.filter((it) => it.rarity < 2).length;
-    return `<div class="row spread"><h2>裝備</h2><span class="hint">武器決定職業；飾品只提供詞條。外觀會隨裝備改變。</span></div>
+    return `<div class="row spread"><h2>裝備</h2><span class="hint">武器決定職業；飾品只提供詞條。高階裝備要冒險者階級夠高才能穿（在公會累積聲望）。外觀會隨裝備改變。</span></div>
       <div class="slots">${slots}</div>
       <div class="row spread"><h2>背包 <span class="num hint">${s.bag.length} / ${D.BAG_CAP}</span></h2>
         <div class="row"><div class="filter">${filters.map(([k, n]) => `<button data-act="bag-filter" data-k="${k}" aria-pressed="${bagFilter === k}">${n}</button>`).join('')}</div>
@@ -516,7 +530,7 @@ export function startUI(bus) {
       case 'area': s.areaIdx = +i; break;
       case 'forge-up': if (W.upgradeForge(s)) toast(`鍛造室升級為${D.FORGE[s.forge.level].n}`); break;
       case 'claim': { const q = W.claimQuest(s, id, now); if (q) toast(`領到 ${fmt(q.reward.gold)} 金幣`); break; }
-      case 'equip': W.equip(s, id, slotFor(s.bag.find((x) => x.id === id))); break;
+      case 'equip': if (!W.equip(s, id, slotFor(s.bag.find((x) => x.id === id)))) toast('冒險者階級不夠，還不能穿'); break;
       case 'unequip': if (!W.unequip(s, k)) toast('背包滿了，先賣掉一些裝備'); break;
       case 'sell': toast(`賣出，得到 ${fmt(W.sell(s, id))} 金幣`); break;
       case 'sell-cheap': { const r = W.sellBelow(s, 2); toast(`賣出 ${r.n} 件，得到 ${fmt(r.total)} 金幣`); break; }

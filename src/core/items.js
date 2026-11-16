@@ -73,6 +73,12 @@ function fromLegacy(it) {
   return it;
 }
 
+// 要幾階冒險者才能穿（RANKS 的位置）：材料階級的門檻，樣式表另外寫了更高的就用那個
+function reqRank(it) {
+  const g = D.GEAR_BY_ID[it.def];
+  return Math.max(D.TIER_RANK[it.tier] || 0, (g && g.rank) || 0);
+}
+
 function rollRarity(rng, odds) { return rng.weighted(odds); }
 
 function sellPrice(it) {
@@ -95,4 +101,4 @@ function fmtStat(k, v) {
   return `${D.STAT_NAME[k]} +${num}${p ? '%' : ''}`;
 }
 
-export const items = { createItem, hydrate, fromLegacy, defsOf, rollRarity, sellPrice, score, fmtStat };
+export const items = { createItem, hydrate, fromLegacy, defsOf, reqRank, rollRarity, sellPrice, score, fmtStat };

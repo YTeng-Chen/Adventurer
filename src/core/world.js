@@ -172,13 +172,18 @@ function tickMarket(s, rng, sum) {
   return 0;
 }
 
-function guildRank(rep) {
+// 冒險者階級（RANKS 的位置），看冒險者聲望
+function rankOf(rep) {
   let r = 0;
-  D.GUILD_RANKS.forEach((g, i) => { if (rep >= g.rep) r = i; });
+  D.RANKS.forEach((g, i) => { if (rep >= g.rep) r = i; });
   return r;
 }
+const rank = (s) => rankOf(s.guild.rep);
+// 冒險者階級夠高才能穿
+function canEquip(s, it) { return rank(s) >= I().reqRank(it); }
+
 function tickGuild(s, rng, sum) {
-  const g = D.GUILD_RANKS[guildRank(s.guild.rep)];
+  const g = D.RANKS[rank(s)];
   const gold = Math.round(g.gold * (1 + s.hero.level * 0.05));
   s.gold += gold; sum.gold += gold;
   s.guild.rep += 1; sum.guildRep += 1;
@@ -252,7 +257,7 @@ function equip(s, id, slotK) {
     else slot = it.type;
   }
   const def = D.SLOTS.find((x) => x.k === slot);
-  if (!def || def.type !== it.type) return false;
+  if (!def || def.type !== it.type || !canEquip(s, it)) return false;
   s.bag.splice(i, 1);
   if (s.equip[slot]) s.bag.push(s.equip[slot]);
   s.equip[slot] = it;
@@ -276,7 +281,7 @@ function sellBelow(s, rarity) {
 
 // ---------- 公會任務 ----------
 function makeQuest(s, rng) {
-  const r = guildRank(s.guild.rep);
+  const r = rank(s);
   const k = 1 + r * 0.6;
   const opts = [
     { kind: 'kills', n: '擊敗魔物', need: Math.round(30 * k) },
@@ -356,6 +361,6 @@ function hunt(s, areaIdx, now) {
 
 export const world = {
   expNeed, matKey, matTier, marketBonus, marketSpeed, newGame, hero, settle, catchUp, setLocation, unlockDevice, upgradeDevice, upgradeForge,
-  equip, unequip, sell, sellBelow, guildRank, questProgress, claimQuest, refreshTickets, hunt, bossEnemy,
+  equip, unequip, canEquip, sell, sellBelow, rankOf, rank, questProgress, claimQuest, refreshTickets, hunt, bossEnemy,
   addLog, gainExp, HUNT_MAX, HUNT_REFILL_MS,
 };

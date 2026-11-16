@@ -236,3 +236,31 @@ test('武器有形態（決定攻擊動作），其他部位沒有', () => {
   assert.equal(I.createItem(rng, { type: 'body', tier: 1, rarity: 0, seq: 99 }).form, undefined);
   assert.equal(I.createItem(rng, { def: 'huntbow', tier: 1, rarity: 0, seq: 100 }).form, 'bow');
 });
+
+test('冒險者階級：看聲望；裝備照材料階級需要對應的階級才能穿', () => {
+  const s = W.newGame(NOW, 1);
+  const rng = R.make(11);
+  assert.equal(D.RANKS[W.rank(s)].n, '新手');
+  const t1 = I.createItem(rng, { def: 'warhammer', tier: 1, rarity: 0, seq: 90 });
+  const t3 = I.createItem(rng, { def: 'staff', tier: 3, rarity: 0, seq: 91 });
+  assert.equal(I.reqRank(t1), 0);
+  assert.equal(D.RANKS[I.reqRank(t3)].n, '中級冒險者');
+  s.bag.push(t1, t3);
+  assert.equal(W.equip(s, t3.id), false, '新手穿不了 T3');
+  assert.ok(s.bag.includes(t3));
+  assert.ok(W.equip(s, t1.id));
+  s.guild.rep = D.RANKS[2].rep;
+  assert.equal(W.rank(s), 2);
+  assert.ok(W.equip(s, t3.id));
+  assert.equal(s.equip.weapon.id, t3.id);
+});
+
+test('樣式表可以把個別款式的門檻提高', () => {
+  D.GEAR_BY_ID.testblade = { id: 'testblade', type: 'weapon', n: '試煉劍', form: 'sword', look: 'sword', rank: 4, base: () => ({ atk: 1 }) };
+  try {
+    const it = I.createItem(R.make(1), { def: 'testblade', tier: 1, rarity: 0, seq: 1 });
+    assert.equal(I.reqRank(it), 4, '比 T1 的門檻高時用樣式表的');
+    assert.equal(I.reqRank({ ...it, tier: 5 }), 4);
+    assert.equal(I.reqRank({ ...it, def: 'longsword', tier: 5 }), D.TIER_RANK[5]);
+  } finally { delete D.GEAR_BY_ID.testblade; }
+});
