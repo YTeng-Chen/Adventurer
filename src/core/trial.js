@@ -68,7 +68,7 @@ function fightFloor(s, now) {
       out.rewards = { gold };
       if (foe.boss) {
         const tier = Math.min(5, 1 + Math.floor(run.floor / 8));
-        const key = world.matKey(D.TAG_KEYS[run.floor % 3], tier);
+        const key = world.matKey(tier);
         s.mats[key] = (s.mats[key] || 0) + 5;
         out.rewards.mat = { key, n: 5 };
       }

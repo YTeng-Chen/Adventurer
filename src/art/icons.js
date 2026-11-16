@@ -5,18 +5,9 @@ import { gearGrid } from './chibi.js';
 
 const S = 20;
 
-function accKind(it) {
-  const n = it.name || '';
-  if (n.endsWith('戒指')) return 'ring';
-  if (n.endsWith('項鍊')) return 'necklace';
-  if (n.endsWith('手鍊')) return 'bracelet';
-  if (n.endsWith('耳飾')) return 'earring';
-  return 'amulet';
-}
-
 function accLayer(it) {
   const L = new Layer(S, S), r = it.rarity;
-  const kind = accKind(it);
+  const kind = it.look;   // ring、necklace、bracelet、earring，其他都畫成護符
   const gemBig = r >= 3;
   if (kind === 'ring') {
     L.ellipse(9.5, 12, 5, 4.5, 'metal');

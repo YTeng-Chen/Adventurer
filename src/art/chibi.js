@@ -74,9 +74,12 @@ function fingers(L, hand) {
   L.hline(24, 28, 37, hand).hline(24, 28, 38, hand);
   L.dots([[25, 37], [27, 37]], hand, 1);
 }
+// 外觀（gear.js 的 look）：不認得的外觀用清單裡第一種（弓還沒有自己的圖示，先用劍）
+const lookOf = (it, looks) => (looks.includes(it.look) ? it.look : looks[0]);
+
 function weapon(it, hand) {
-  const L = mk(), r = it.rarity;
-  if (it.tag === 'blade') {
+  const L = mk(), r = it.rarity, look = lookOf(it, ['sword', 'hammer', 'staff']);
+  if (look === 'sword') {
     const right = r >= 3 ? 29 : 28;
     for (let y = 14; y <= 33; y++) L.hline(26, right, y, 'metal');
     L.dots([[27, 12], [26, 13], [27, 13], [28, 13]], 'metal');
@@ -85,7 +88,7 @@ function weapon(it, hand) {
     if (r >= 4) L.dots([[22, 33], [21, 32], [32, 33], [33, 32]], 'gold');
     L.rect(26, 36, 2, 4, 'leather');
     L.rect(26, 40, 2, 1, r >= 2 ? 'gem' : 'metal');
-  } else if (it.tag === 'guard') {
+  } else if (look === 'hammer') {
     L.rect(26, 16, 2, 27, 'wood');
     for (let y = 18; y <= 40; y += 4) L.mark(27, y, 1);
     L.rows([[8, 22, 31], [9, 21, 32], [10, 21, 32], [11, 21, 32], [12, 21, 32], [13, 21, 32], [14, 21, 32], [15, 22, 31]], 'metal');
@@ -115,8 +118,8 @@ function weapon(it, hand) {
 
 // ---------- 頭飾（要比蓬鬆的頭髮大一圈） ----------
 function head(it) {
-  const L = mk(), r = it.rarity;
-  if (it.tag === 'blade') {
+  const L = mk(), r = it.rarity, look = lookOf(it, ['cap', 'helm', 'wizard']);
+  if (look === 'cap') {
     // 寬沿冒險帽
     L.rows([[-2, 11, 20], [-1, 10, 21], [0, 10, 21], [1, 10, 21], [2, 10, 21], [3, 10, 21], [4, 10, 21], [5, 10, 21]], 'leather');
     L.rows([[6, 3, 28], [7, 2, 29]], 'leather');
@@ -127,7 +130,7 @@ function head(it) {
     if (r >= 2) L.rect(15, 3, 2, 1, 'gem');
     if (r >= 3) L.dots([[22, 2], [23, 1], [24, 0], [25, -1], [26, -2], [23, 2], [24, 1], [25, 0], [26, -1], [27, -2]], 'trim');
     if (r >= 4) L.hline(10, 21, 3, 'gold');
-  } else if (it.tag === 'guard') {
+  } else if (look === 'helm') {
     // 騎士頭盔：圓頂、眉帶、護頰，露出臉
     L.ellipse(16, 10, 11.6, 10.4, 'metal');
     symRows(L, [[15, 5, 8], [16, 5, 8], [17, 5, 8], [18, 5, 8], [19, 5, 8], [20, 5, 8], [21, 5, 8], [22, 6, 8], [23, 6, 8], [24, 7, 8]], 'metal');
@@ -155,8 +158,8 @@ function head(it) {
 
 // ---------- 上衣 ----------
 function bodyArmor(it) {
-  const L = mk(), r = it.rarity;
-  if (it.tag === 'guard') {
+  const L = mk(), r = it.rarity, look = lookOf(it, ['leather', 'plate', 'robe']);
+  if (look === 'plate') {
     // 板甲：胸甲、大護肩、護臂、護手、腰甲
     symRows(L, [[27, 9, 15], [28, 8, 15], [29, 8, 15], [30, 8, 15], [31, 8, 15], [32, 8, 15], [33, 8, 15], [34, 8, 15], [35, 8, 15], [36, 8, 15]], 'metal');
     symRows(L, [[37, 9, 14], [38, 9, 14], [39, 10, 13]], 'metal');
@@ -170,7 +173,7 @@ function bodyArmor(it) {
     if (r >= 2) L.rect(15, 29, 2, 2, 'gem');
     if (r >= 3) { sym(L, [[4, 24], [5, 23], [3, 25], [6, 24]], 'metal'); L.hline(9, 22, 31, 'glow'); }
     if (r >= 4) { L.hline(9, 22, 27, 'gold'); symRows(L, [[30, 4, 9]], 'gold'); }
-  } else if (it.tag === 'blade') {
+  } else if (look === 'leather') {
     // 皮甲背心：V 領、斜背帶、腰帶、皮護臂
     symRows(L, [[27, 10, 15], [28, 9, 15], [29, 9, 15], [30, 9, 15], [31, 9, 15], [32, 9, 15], [33, 9, 15], [34, 9, 15], [35, 9, 15], [36, 9, 15]], 'leather');
     symRows(L, [[32, 5, 7], [33, 5, 7], [34, 5, 7], [35, 5, 7]], 'leather');
@@ -223,8 +226,8 @@ function cape(it, f = 0) {
 
 // ---------- 鞋子 ----------
 function feet(it) {
-  const L = mk(), r = it.rarity;
-  if (it.tag === 'guard') {
+  const L = mk(), r = it.rarity, look = lookOf(it, ['boots', 'greaves', 'shoes']);
+  if (look === 'greaves') {
     symRows(L, [[39, 10, 14], [40, 10, 14], [41, 10, 14], [42, 10, 14], [43, 10, 14], [44, 10, 14], [45, 9, 14], [46, 8, 14]], 'metal');
     symRows(L, [[47, 8, 14]], 'joint');
     symRows(L, [[39, 11, 13], [40, 11, 13]], 'metal', 3);
@@ -233,7 +236,7 @@ function feet(it) {
     if (r >= 2) sym(L, [[12, 40]], 'gem');
     if (r >= 3) sym(L, [[8, 43], [7, 42], [8, 42], [7, 41]], 'metal');
     if (r >= 4) symRows(L, [[47, 8, 14]], 'gold');
-  } else if (it.tag === 'blade') {
+  } else if (look === 'boots') {
     symRows(L, [[41, 9, 14], [42, 10, 14], [43, 10, 14], [44, 10, 14], [45, 9, 14], [46, 8, 14]], 'leather');
     symRows(L, [[47, 7, 14]], 'belt');
     symRows(L, [[41, 9, 14]], r >= 1 ? 'trim' : 'leather', r >= 1 ? null : 3);
@@ -267,10 +270,10 @@ function breathe(grid) {
 }
 
 const BUILD = { head, body: bodyArmor, feet };
-const HAND = { guard: 'metal', blade: 'leather' };
+const HAND = { plate: 'metal', leather: 'leather' };   // 上衣外觀 → 握武器的手套材質（法袍露出手）
 const cache = new Map();
 function cached(key, fn) { if (!cache.has(key)) cache.set(key, fn()); return cache.get(key); }
-const gearKey = (slot, it) => `${slot}-${it.tag || 'none'}-${it.tier}-${it.rarity}`;
+const gearKey = (slot, it) => `${slot}-${it.look || ''}-${it.tier}-${it.rarity}`;
 
 // 角色的各個部位（由下往上疊）。frames({ breath, blink, cape }) 回傳該影格的色塊陣列。
 export function heroParts(equip, look) {
@@ -298,7 +301,7 @@ export function heroParts(equip, look) {
   if (hd) add('head', gearKey('head', hd), () => cel(head(hd), gearMats(hd)));
   const wp = equip && equip.weapon;
   if (wp) {
-    const hand = body ? HAND[body.tag] || 'skin' : 'skin';
+    const hand = body ? HAND[body.look] || 'skin' : 'skin';
     add('weapon', gearKey('weapon', wp) + '-' + hand, () => cel(weapon(wp, hand), gearMats(wp)));
   }
   return parts;

@@ -11,7 +11,7 @@ import { rng as R } from '../src/core/rng.js';
 const NOW = Date.UTC(2026, 10, 16, 2, 0, 0); // 2026-11-16（週一）
 
 function item(over) {
-  return { id: 'x', name: 't', type: 'weapon', tag: 'blade', tier: 1, rarity: 0, base: {}, affixes: [], effect: null, ...over };
+  return { id: 'x', name: 't', def: 'longsword', type: 'weapon', form: 'sword', tier: 1, rarity: 0, base: {}, affixes: [], effect: null, ...over };
 }
 
 test('隨機數有種子就能重現', () => {
@@ -19,26 +19,26 @@ test('隨機數有種子就能重現', () => {
   for (let i = 0; i < 5; i++) assert.equal(a.next(), b.next());
 });
 
-test('職業判定：3 件同流派為專精、2+2 為混合職業、飾品不影響', () => {
-  const eq = (tags) => Object.fromEntries(D.CLASS_SLOTS.map((k, i) => [k, tags[i] ? item({ type: k, tag: tags[i] }) : null]));
-  assert.equal(S.resolveClass(eq(['blade', 'blade', 'blade', null])).name, '劍士');
-  assert.equal(S.resolveClass(eq(['blade', 'blade', 'blade', 'blade'])).kind, '全套專精');
-  assert.equal(S.resolveClass(eq(['blade', 'guard', 'blade', 'guard'])).name, '劍盾騎士');
-  assert.equal(S.resolveClass(eq(['arcane', 'arcane', 'guard', null])).name, '見習術士');
-  assert.equal(S.resolveClass(eq([null, null, null, null])).name, '冒險者');
-  const withAcc = { ...eq(['blade', 'blade', null, null]), acc1: item({ type: 'acc', tag: null }) };
-  assert.equal(S.resolveClass(withAcc).name, '見習劍士');
+test('職業由武器決定：劍或弓是連鎖、鎚是反擊、法杖是燃燒，防具不影響', () => {
+  const cls = (form, extra = {}) => S.resolveClass({ weapon: form ? item({ form }) : null, ...extra });
+  assert.equal(cls('sword').name, '劍士');
+  assert.deepEqual(cls('bow').mechs, ['chain']);
+  assert.deepEqual(cls('hammer').mechs, ['counter']);
+  assert.equal(cls('staff').name, '術士');
+  assert.equal(cls(null).name, '冒險者');
+  assert.deepEqual(cls(null).mechs, []);
+  assert.equal(cls('staff', { body: item({ def: 'platearmor', type: 'body', form: undefined }) }).name, '術士');
 });
 
 test('裝備詞條不超過上限、史詩以上才有特殊效果', () => {
   const rng = R.make(7);
   for (let r = 0; r < D.RARITY.length; r++) {
     for (let i = 0; i < 30; i++) {
-      const it = I.createItem(rng, { type: 'acc', tag: null, tier: 3, rarity: r, seq: i });
+      const it = I.createItem(rng, { type: 'acc', tier: 3, rarity: r, seq: i });
       assert.ok(it.affixes.length <= D.AFFIX_CAP);
       assert.equal(new Set(it.affixes.map((a) => a.k)).size, it.affixes.length);
       assert.equal(!!it.effect, r >= 3);
-      assert.equal(it.tag, null);
+      assert.equal(it.type, 'acc');
     }
   }
 });
@@ -80,26 +80,68 @@ test('鍛鍊室有上限', () => {
   assert.equal(s.training.atk, D.DEVICES[0].cap * 2);
 });
 
-test('鍛造用材料決定流派，材料不足就不鍛造', () => {
+test('鍛造用材料決定階級、可以指定款式，材料不足就不鍛造', () => {
   const s = W.newGame(NOW, 1);
   s.location = 'forge';
   s.forge.type = 'weapon';
+  s.forge.def = 'staff';
   W.settle(s, 20, NOW);
   assert.equal(s.bag.length, 0);
-  s.mats['arcane-2'] = 8;
+  s.mats[W.matKey(2)] = 8;
   W.settle(s, D.FORGE[1].ticks * 2, NOW);
   assert.equal(s.bag.length, 2);
-  assert.ok(s.bag.every((it) => it.tag === 'arcane' && it.tier === 2));
-  assert.equal(s.mats['arcane-2'], 0);
+  assert.ok(s.bag.every((it) => it.def === 'staff' && it.form === 'staff' && it.tier === 2 && it.name.endsWith('森林法杖')));
+  assert.equal(s.mats[W.matKey(2)], 0);
   assert.equal(s.counters.crafts, 2);
+});
+
+test('裝備樣式表：id 不重複、部位正確、武器的形態都有職業', () => {
+  assert.equal(new Set(D.GEAR.map((g) => g.id)).size, D.GEAR.length);
+  for (const g of D.GEAR) {
+    assert.ok(D.ITEM_TYPES.includes(g.type), g.id);
+    assert.ok(g.n && g.look && g.base, g.id);
+    assert.equal(!!g.form, g.type === 'weapon', g.id);
+    if (g.form) assert.ok(D.FORMS[g.form], g.id);
+  }
+  for (const t of D.ITEM_TYPES) assert.ok(I.defsOf(t).length > 0, t);
+});
+
+test('舊存檔（有流派）：材料併成每階一種，裝備對應到樣式', async () => {
+  const { save } = await import('../src/core/save.js');
+  const s = W.newGame(NOW, 1);
+  const old = JSON.parse(JSON.stringify(s));
+  old.v = 1;
+  old.mats = { 'blade-1': 3, 'guard-1': 4, 'arcane-3': 2 };
+  old.forge = { ...old.forge, tag: 'guard' }; delete old.forge.def;
+  old.guild.quests[0].reward.mat = { key: 'guard-2', n: 3 };
+  old.equip.weapon = { id: 'a', name: '新手長劍', type: 'weapon', tag: 'blade', tier: 1, rarity: 0, base: { atk: 12 }, affixes: [], effect: null, form: 'sword' };
+  old.bag = [
+    { id: 'b', name: '連擊之森林長弓', type: 'weapon', tag: 'blade', tier: 2, rarity: 3, base: { atk: 30 }, affixes: [], effect: { k: 'doubleChance', n: '連擊', v: 0.2, stat: false, d: 'old' }, form: 'bow' },
+    { id: 'c', name: '礦鐵板甲', type: 'body', tag: 'guard', tier: 3, rarity: 1, base: { hp: 150 }, affixes: [], effect: null },
+    { id: 'd', name: '冥骨耳飾', type: 'acc', tag: null, tier: 4, rarity: 0, base: { crit: 6 }, affixes: [], effect: null },
+  ];
+  const m = save.migrate(old, NOW);
+  assert.equal(m.v, 2);
+  assert.deepEqual(m.mats, { [W.matKey(1)]: 7, [W.matKey(3)]: 2 });
+  assert.equal(m.guild.quests[0].reward.mat.key, W.matKey(2));
+  assert.equal(m.forge.def, 'auto');
+  assert.equal(m.forge.tag, undefined);
+  assert.equal(m.equip.weapon.def, 'longsword');
+  assert.deepEqual(m.bag.map((it) => it.def), ['longbow', 'platearmor', 'earring']);
+  assert.ok(m.bag.every((it) => it.tag === undefined));
+  assert.equal(m.bag[0].form, 'bow');
+  assert.equal(m.bag[0].name, '連擊之森林長弓');
+  assert.equal(m.bag[0].effect.d, '20% 機率再攻擊一次');
+  assert.equal(m.bag[0].base.atk, 30, '抽到的數值不變');
+  assert.equal(m.bag[2].look, 'earring');
 });
 
 test('市集只賣超過保留數量的材料', () => {
   const s = W.newGame(NOW, 1);
   s.location = 'market';
-  s.mats['blade-1'] = 20;
+  s.mats[W.matKey(1)] = 20;
   W.settle(s, 50, NOW);
-  assert.equal(s.mats['blade-1'], s.market.keep);
+  assert.equal(s.mats[W.matKey(1)], s.market.keep);
   assert.ok(s.gold > 0);
   assert.equal(s.market.rep, 20 - s.market.keep);
 });
@@ -118,7 +160,7 @@ test('公會任務完成後可以領獎並換新任務', () => {
 test('裝備穿脫：替換下來的回到背包', () => {
   const s = W.newGame(NOW, 1);
   const rng = R.make(5);
-  const it = I.createItem(rng, { type: 'weapon', tag: 'arcane', tier: 1, rarity: 2, seq: 99 });
+  const it = I.createItem(rng, { def: 'staff', tier: 1, rarity: 2, seq: 99 });
   s.bag.push(it);
   assert.ok(W.equip(s, it.id));
   assert.equal(s.equip.weapon.id, it.id);
@@ -153,6 +195,7 @@ test('週一重置時間落在下週一', () => {
 test('祝福會改變戰鬥行為：連鎖只在有暴擊加成時出現', () => {
   const s = W.newGame(NOW, 1);
   s.hero.level = 10;
+  s.equip.weapon = null;   // 空手：沒有劍士的連鎖
   const foe = { name: 'dummy', stats: C.enemyStats(8, { hp: 4 }) };
   const plain = C.fight(R.make(1), W.hero(s, []), foe, { log: true, maxActions: 80 });
   const storm = C.fight(R.make(1), W.hero(s, ['storm', 'hawk']), foe, { log: true, maxActions: 80 });
@@ -185,14 +228,11 @@ test('新遊戲還沒有外觀，舊存檔也會補上空的外觀欄位（第�
   assert.deepEqual(save.migrate(JSON.parse(JSON.stringify(migrated)), NOW).appearance, { gender: '女', style: '高馬尾', color: '粉紅' });
 });
 
-test('武器有形態（決定攻擊動作）：劍士是劍或弓，守衛是鎚，術士是法杖', () => {
+test('武器有形態（決定攻擊動作），其他部位沒有', () => {
   const rng = R.make(7);
-  const forms = { blade: new Set(), guard: new Set(), arcane: new Set() };
-  for (let i = 0; i < 60; i++) {
-    for (const tag of D.TAG_KEYS) forms[tag].add(I.createItem(rng, { type: 'weapon', tag, tier: 1, rarity: 0, seq: i }).form);
-  }
-  assert.deepEqual([...forms.blade].sort(), ['bow', 'sword']);
-  assert.deepEqual([...forms.guard], ['hammer']);
-  assert.deepEqual([...forms.arcane], ['staff']);
-  assert.equal(I.createItem(rng, { type: 'body', tag: 'blade', tier: 1, rarity: 0, seq: 99 }).form, undefined);
+  const forms = new Set();
+  for (let i = 0; i < 80; i++) forms.add(I.createItem(rng, { type: 'weapon', tier: 1, rarity: 0, seq: i }).form);
+  assert.deepEqual([...forms].sort(), ['bow', 'hammer', 'staff', 'sword']);
+  assert.equal(I.createItem(rng, { type: 'body', tier: 1, rarity: 0, seq: 99 }).form, undefined);
+  assert.equal(I.createItem(rng, { def: 'huntbow', tier: 1, rarity: 0, seq: 100 }).form, 'bow');
 });

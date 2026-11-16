@@ -164,7 +164,7 @@ label.field { display: flex; flex-direction: column; gap: 4px; font-size: .8rem;
 select { background: var(--bg); border: 2px solid var(--line); padding: 5px 8px; color: var(--ink); min-width: 9em; }
 
 /* ---------- 材料 ---------- */
-.mats { display: grid; grid-template-columns: auto repeat(3, minmax(0, 1fr)); gap: 0; font-size: .86rem; border: 2px solid var(--line); }
+.mats { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0; font-size: .86rem; border: 2px solid var(--line); }
 .mats > div { padding: 5px 8px; border-bottom: 1px dashed var(--line); display: flex; justify-content: space-between; gap: 6px; min-width: 0; }
 .mats .h { color: var(--muted); font-size: .78rem; background: var(--panel); }
 .mats .zero { color: #56607a; }

@@ -1,7 +1,6 @@
 // 材質色票：材料階級決定材質（青銅、苔綠金屬、鋼、冥鐵、炎龍），稀有度決定滾邊與寶石。
 // 顏色刻意飽和、明亮：像素圖縮小後才不會灰濛濛。
 import { ramp } from './pixel.js';
-import { data as D } from '../core/data.js';
 
 const cache = new Map();
 const R = (hex) => { if (!cache.has(hex)) cache.set(hex, ramp(hex)); return cache.get(hex); };
@@ -38,11 +37,11 @@ const TIER = {
 const TRIM = [null, '#4fd36a', '#3f9cff', '#b266ff', '#ffc531'];
 const GEM = [null, '#62ee7c', '#4fc3ff', '#d07cff', '#ff7a2c'];
 const CAPE = [null, null, null, '#8c4ad8', '#d43a2a'];
+const ORB = '#a565e0';   // 法杖與巫師帽的寶珠
 
 export function gearMats(item) {
   const t = TIER[item.tier] || TIER[1];
   const r = item.rarity;
-  const tagColor = item.tag ? D.TAGS[item.tag].color : GEM[Math.max(1, r)];
   return {
     ...BODY,
     metal: m(t.metal),
@@ -55,7 +54,7 @@ export function gearMats(item) {
     gem: m(GEM[r] || '#9aa3ad'),
     glow: m(r >= 3 ? TRIM[r] : '#7ff3ff', { flat: true }),
     visor: m(r >= 3 ? GEM[r] : '#6ff2dc', { flat: true }),
-    orb: m(tagColor),
+    orb: m(ORB),
     cape: m(CAPE[r] || '#b8742e'),
   };
 }

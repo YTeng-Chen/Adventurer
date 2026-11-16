@@ -1,14 +1,10 @@
 // 遊戲資料表：數值、職業、稀有度、地圖、材料、祝福、設備。
-// 平衡用的數字都集中在這裡，調整時不用改邏輯。
+// 平衡用的數字都集中在這裡，調整時不用改邏輯。每一款裝備的資料在 gear.js。
+import { GEAR } from './gear.js';
 const TICK_MS = 5000;                 // 掛機每 5 秒結算一次
 const OFFLINE_CAP_MS = 12 * 3600e3;   // 離線最多結算 12 小時
 const AFFIX_CAP = 3;                  // 每件裝備詞條上限
 const BAG_CAP = 60;
-
-// 混搭職業的機制強度。混搭要比專精更強還是只求靈活「待決定」，先用 0.6 當暫定值。
-const HYBRID_FACTOR = 0.6;
-const PARTIAL_FACTOR = 0.5;   // 只有 2 件同流派、其餘雜湊時
-const FULLSET_FACTOR = 1.25;  // 4 件同流派
 
 const STATS = [
   { k: 'hp', n: '生命' },
@@ -26,17 +22,17 @@ const STATS = [
 const STAT_NAME = Object.fromEntries(STATS.map((s) => [s.k, s.n]));
 const STAT_PCT = Object.fromEntries(STATS.map((s) => [s.k, !!s.pct]));
 
-// 流派標籤 = 職業。裝備的流派由鍛造時用的材料決定。
-const TAGS = {
-  blade: { n: '劍士', mech: '連鎖', d: '暴擊時追加一次傷害', color: '#e0564a' },
-  guard: { n: '守衛', mech: '反擊', d: '受到傷害降低，被攻擊時機率反擊', color: '#4a8fe0' },
-  arcane: { n: '術士', mech: '燃燒', d: '攻擊附加燃燒，每回合造成魔法傷害', color: '#a565e0' },
+// 職業由武器的攻擊方式決定，每種職業有一個戰鬥機制（stats.js 的 applyMech）
+const FORMS = {
+  sword: { n: '劍', cls: '劍士', mech: 'chain' },
+  bow: { n: '弓', cls: '弓手', mech: 'chain' },
+  hammer: { n: '鎚', cls: '守衛', mech: 'counter' },
+  staff: { n: '法杖', cls: '術士', mech: 'burn' },
 };
-const TAG_KEYS = Object.keys(TAGS);
-const HYBRID_NAMES = {
-  'blade+guard': '劍盾騎士',
-  'arcane+blade': '魔劍士',
-  'arcane+guard': '聖殿守護者',
+const MECHS = {
+  chain: { n: '連鎖', color: '#e0564a' },
+  counter: { n: '反擊', color: '#4a8fe0' },
+  burn: { n: '燃燒', color: '#a565e0' },
 };
 
 const SLOTS = [
@@ -47,8 +43,9 @@ const SLOTS = [
   { k: 'acc1', n: '飾品一', type: 'acc' },
   { k: 'acc2', n: '飾品二', type: 'acc' },
 ];
-const CLASS_SLOTS = ['weapon', 'head', 'body', 'feet']; // 飾品不影響職業
 const TYPE_NAME = { weapon: '武器', head: '頭飾', body: '上衣', feet: '鞋子', acc: '飾品' };
+const ITEM_TYPES = Object.keys(TYPE_NAME);
+const GEAR_BY_ID = Object.fromEntries(GEAR.map((g) => [g.id, g]));
 
 const RARITY = [
   { n: '普通', color: '#9aa3ad', mult: 1.0, affixes: 0 },
@@ -68,40 +65,6 @@ const FORGE = [
 ];
 const CRAFT_COST = 4; // 每件裝備需要的材料數
 
-// 各部位的基本數值（T = 材料階級）
-const BASE = {
-  weapon: {
-    blade: (T) => ({ atk: 9 * T + 3, crit: 2 }),
-    guard: (T) => ({ atk: 6 * T + 3, def: 3 * T + 1 }),
-    arcane: (T) => ({ matk: 9 * T + 3, mpen: 2 }),
-  },
-  head: {
-    _: (T) => ({ hp: 22 * T, mdef: 3 * T }),
-    blade: (T) => ({ crit: 1 }),
-    guard: (T) => ({ def: 2 * T }),
-    arcane: (T) => ({ matk: 2 * T }),
-  },
-  body: {
-    _: (T) => ({ hp: 35 * T, def: 4 * T }),
-    blade: (T) => ({ atk: 2 * T }),
-    guard: (T) => ({ hp: 15 * T }),
-    arcane: (T) => ({ mdef: 3 * T }),
-  },
-  feet: {
-    _: (T) => ({ spd: 3 + T, def: 2 * T }),
-    blade: () => ({ spd: 3 }),
-    guard: (T) => ({ mdef: 2 * T }),
-    arcane: (T) => ({ matk: T }),
-  },
-  acc: [ // 飾品是詞條專用，基本數值隨機一種
-    (T) => ({ crit: 2 + T }),
-    (T) => ({ critDmg: 8 + 4 * T }),
-    (T) => ({ pen: 3 + T }),
-    (T) => ({ mpen: 3 + T }),
-    (T) => ({ spd: 2 + T }),
-    (T) => ({ hp: 18 * T }),
-  ],
-};
 const AFFIXES = [
   { k: 'atk', v: (T) => 3 * T + 2 },
   { k: 'matk', v: (T) => 3 * T + 2 },
@@ -125,59 +88,53 @@ const EFFECTS = [
   { k: 'lifesteal', n: '飲血', v: [6, 12], stat: true, d: (v) => `吸血 +${v}%` },
 ];
 
-// 材料：階級 × 流派。鍛造時用哪種材料，就決定裝備的流派。
-const MATS = {
-  1: { blade: '狼牙', guard: '甲殼', arcane: '凝膠' },
-  2: { blade: '影爪', guard: '樹皮甲', arcane: '螢光孢子' },
-  3: { blade: '鏽刃碎片', guard: '鐵礦石', arcane: '魔晶礦' },
-  4: { blade: '骨刃', guard: '墓碑石', arcane: '怨靈精華' },
-  5: { blade: '火龍牙', guard: '熔岩核心', arcane: '炎之魂' },
-};
+// 材料：每個階級一種，在對應階級的地圖掉落。用哪一階的材料，就做出哪一階的裝備。
+const MATS = { 1: '獸牙', 2: '古木芯', 3: '鐵礦石', 4: '冥骨', 5: '熔岩核心' };
 const MAT_PRICE = (tier) => Math.round(3 * Math.pow(tier, 1.6));
 
 const AREAS = [
   {
     n: '綠風草原', tier: 1, lv: 1, sky: '#9fd6ef', ground: '#6fb257',
     monsters: [
-      { n: '史萊姆', shape: 'slime', c: '#62c46a', tag: 'arcane', m: { hp: 0.8, atk: 0.8 }, magic: true },
-      { n: '草原狼', shape: 'beast', c: '#b08a5a', tag: 'blade', m: { hp: 0.9, atk: 1.0 } },
-      { n: '甲殼蟲', shape: 'bug', c: '#7a9a3a', tag: 'guard', m: { hp: 1.1, atk: 0.8 } },
+      { n: '史萊姆', shape: 'slime', c: '#62c46a', m: { hp: 0.8, atk: 0.8 }, magic: true },
+      { n: '草原狼', shape: 'beast', c: '#b08a5a', m: { hp: 0.9, atk: 1.0 } },
+      { n: '甲殼蟲', shape: 'bug', c: '#7a9a3a', m: { hp: 1.1, atk: 0.8 } },
     ],
     boss: { n: '史萊姆王', shape: 'slime', c: '#3fae55', magic: true },
   },
   {
     n: '幽暗森林', tier: 2, lv: 6, sky: '#3d5a52', ground: '#2f5233',
     monsters: [
-      { n: '影狼', shape: 'beast', c: '#4a4f6a', tag: 'blade', m: { hp: 0.9, atk: 1.1 } },
-      { n: '樹精', shape: 'golem', c: '#7a5a3a', tag: 'guard', m: { hp: 1.3, atk: 0.8 } },
-      { n: '孢子菇', shape: 'slime', c: '#5ad0c0', tag: 'arcane', m: { hp: 0.8, atk: 1.0 }, magic: true },
+      { n: '影狼', shape: 'beast', c: '#4a4f6a', m: { hp: 0.9, atk: 1.1 } },
+      { n: '樹精', shape: 'golem', c: '#7a5a3a', m: { hp: 1.3, atk: 0.8 } },
+      { n: '孢子菇', shape: 'slime', c: '#5ad0c0', m: { hp: 0.8, atk: 1.0 }, magic: true },
     ],
     boss: { n: '古樹守衛', shape: 'golem', c: '#5a7a3a' },
   },
   {
     n: '鐵鏽礦坑', tier: 3, lv: 12, sky: '#4a3a30', ground: '#5a4a3a',
     monsters: [
-      { n: '礦坑哥布林', shape: 'humanoid', c: '#7aa04a', tag: 'blade', m: { hp: 0.9, atk: 1.1 } },
-      { n: '鐵甲蟲', shape: 'bug', c: '#8a8a9a', tag: 'guard', m: { hp: 1.3, atk: 0.9 } },
-      { n: '晶石魔像', shape: 'golem', c: '#7a6ad0', tag: 'arcane', m: { hp: 1.1, atk: 1.0 }, magic: true },
+      { n: '礦坑哥布林', shape: 'humanoid', c: '#7aa04a', m: { hp: 0.9, atk: 1.1 } },
+      { n: '鐵甲蟲', shape: 'bug', c: '#8a8a9a', m: { hp: 1.3, atk: 0.9 } },
+      { n: '晶石魔像', shape: 'golem', c: '#7a6ad0', m: { hp: 1.1, atk: 1.0 }, magic: true },
     ],
     boss: { n: '鏽蝕巨像', shape: 'golem', c: '#a0603a' },
   },
   {
     n: '亡者墓穴', tier: 4, lv: 19, sky: '#2a2638', ground: '#3a3648',
     monsters: [
-      { n: '骷髏劍士', shape: 'humanoid', c: '#d8d4c4', tag: 'blade', m: { hp: 0.9, atk: 1.15 } },
-      { n: '墓碑魔像', shape: 'golem', c: '#6a6a7a', tag: 'guard', m: { hp: 1.35, atk: 0.9 } },
-      { n: '怨靈', shape: 'ghost', c: '#9ab0e0', tag: 'arcane', m: { hp: 0.8, atk: 1.15 }, magic: true },
+      { n: '骷髏劍士', shape: 'humanoid', c: '#d8d4c4', m: { hp: 0.9, atk: 1.15 } },
+      { n: '墓碑魔像', shape: 'golem', c: '#6a6a7a', m: { hp: 1.35, atk: 0.9 } },
+      { n: '怨靈', shape: 'ghost', c: '#9ab0e0', m: { hp: 0.8, atk: 1.15 }, magic: true },
     ],
     boss: { n: '亡靈君主', shape: 'humanoid', c: '#8a5ab0', magic: true },
   },
   {
     n: '熔岩火山', tier: 5, lv: 27, sky: '#5a2a20', ground: '#3a2020',
     monsters: [
-      { n: '火蜥蜴', shape: 'beast', c: '#e0603a', tag: 'blade', m: { hp: 1.0, atk: 1.15 } },
-      { n: '熔岩巨人', shape: 'golem', c: '#a04a2a', tag: 'guard', m: { hp: 1.4, atk: 0.95 } },
-      { n: '炎之精靈', shape: 'ghost', c: '#f0a040', tag: 'arcane', m: { hp: 0.85, atk: 1.2 }, magic: true },
+      { n: '火蜥蜴', shape: 'beast', c: '#e0603a', m: { hp: 1.0, atk: 1.15 } },
+      { n: '熔岩巨人', shape: 'golem', c: '#a04a2a', m: { hp: 1.4, atk: 0.95 } },
+      { n: '炎之精靈', shape: 'ghost', c: '#f0a040', m: { hp: 0.85, atk: 1.2 }, magic: true },
     ],
     boss: { n: '炎龍', shape: 'beast', c: '#c03020', magic: true },
   },
@@ -244,8 +201,8 @@ const BLESSINGS = [
 const BLESS_EVERY = 3; // 每過 3 關選一次祝福
 
 export const data = {
-  TICK_MS, OFFLINE_CAP_MS, AFFIX_CAP, BAG_CAP, HYBRID_FACTOR, PARTIAL_FACTOR, FULLSET_FACTOR,
-  STATS, STAT_NAME, STAT_PCT, TAGS, TAG_KEYS, HYBRID_NAMES, SLOTS, CLASS_SLOTS, TYPE_NAME,
-  RARITY, FORGE, CRAFT_COST, BASE, AFFIXES, EFFECTS, MATS, MAT_PRICE, AREAS, LOCATIONS,
+  TICK_MS, OFFLINE_CAP_MS, AFFIX_CAP, BAG_CAP,
+  STATS, STAT_NAME, STAT_PCT, FORMS, MECHS, SLOTS, TYPE_NAME, ITEM_TYPES, GEAR, GEAR_BY_ID,
+  RARITY, FORGE, CRAFT_COST, AFFIXES, EFFECTS, MATS, MAT_PRICE, AREAS, LOCATIONS,
   DEVICES, DEVICE_MAX_LV, deviceUpgradeCost, GUILD_RANKS, BLESS_TIERS, BLESSINGS, BLESS_EVERY,
 };

@@ -1,34 +1,27 @@
-// 裝備產生：部位 × 流派 × 材料階級 × 稀有度，加上隨機詞條與特殊效果。
+// 裝備產生：樣式（gear.js）× 材料階級 × 稀有度，加上隨機詞條與特殊效果。
+// 裝備物件只靠 def（樣式 id）、tier、rarity 和抽到的數值就能重建；名稱、部位、外觀、形態、效果說明
+// 都由 hydrate 從樣式表補上，所以改了樣式表的名稱或說明，舊存檔讀進來就會跟著更新。
 import { data } from './data.js';
 import { stats } from './stats.js';
 const D = data;
 
-const NAME_PARTS = {
-  weapon: { blade: ['長劍', '彎刀', '雙刃', '獵弓', '長弓'], guard: ['戰錘', '重斧', '鎚矛'], arcane: ['法杖', '魔典', '水晶杖'] },
-  head: { blade: ['頭巾', '輕盔'], guard: ['鐵盔', '護面盔'], arcane: ['尖帽', '兜帽'] },
-  body: { blade: ['皮甲', '戰衣'], guard: ['板甲', '鎖子甲'], arcane: ['法袍', '長袍'] },
-  feet: { blade: ['疾行靴', '短靴'], guard: ['鐵靴', '重靴'], arcane: ['布鞋', '星紋鞋'] },
-  acc: ['戒指', '項鍊', '手鍊', '耳飾', '護符'],
-};
 const TIER_PREFIX = ['', '新手', '森林', '礦鐵', '冥骨', '炎龍'];
 
 function round(k, v) { return D.STAT_PCT[k] ? Math.round(v * 10) / 10 : Math.round(v); }
 
-function createItem(rng, { type, tag, tier, rarity, seq }) {
+function defsOf(type) { return D.GEAR.filter((g) => g.type === type); }
+function pickDef(rng, type) {
+  const pool = defsOf(type);
+  return pool[rng.weighted(pool.map((g) => g.w ?? 1))];
+}
+
+// def：指定樣式 id；沒指定就從 type 部位的樣式裡隨機挑
+function createItem(rng, { def, type, tier, rarity, seq }) {
+  const g = (def && D.GEAR_BY_ID[def]) || pickDef(rng, type);
   const R = D.RARITY[rarity];
-  const jitter = () => rng.range(0.9, 1.1);
-  let base = {};
-  if (type === 'acc') {
-    base = rng.pick(D.BASE.acc)(tier);
-    tag = null;
-  } else if (type === 'weapon') {
-    base = D.BASE.weapon[tag](tier);
-  } else {
-    base = { ...D.BASE[type]._(tier) };
-    const extra = D.BASE[type][tag](tier);
-    for (const k in extra) base[k] = (base[k] || 0) + extra[k];
-  }
-  for (const k in base) base[k] = round(k, base[k] * R.mult * jitter());
+  const make = Array.isArray(g.base) ? rng.pick(g.base) : g.base;
+  const base = make(tier);
+  for (const k in base) base[k] = round(k, base[k] * R.mult * rng.range(0.9, 1.1));
 
   // 詞條：不重複，最多 AFFIX_CAP 條
   const n = Math.min(R.affixes, D.AFFIX_CAP);
@@ -42,16 +35,42 @@ function createItem(rng, { type, tag, tier, rarity, seq }) {
   let effect = null;
   if (R.effect) {
     const e = rng.pick(D.EFFECTS);
-    const v = e.v[R.effect - 1];
-    effect = { k: e.k, n: e.n, v, stat: !!e.stat, d: e.d(v) };
+    effect = { k: e.k, v: e.v[R.effect - 1] };
   }
+  return hydrate({ id: 'it' + seq, def: g.id, tier, rarity, base, affixes, effect });
+}
 
-  const nameBase = type === 'acc' ? rng.pick(NAME_PARTS.acc) : rng.pick(NAME_PARTS[type][tag]);
-  const name = (effect ? effect.n + '之' : '') + TIER_PREFIX[tier] + nameBase;
-  const item = { id: 'it' + seq, name, type, tag, tier, rarity, base, affixes, effect };
-  // 武器的形態決定攻擊動作：劍士的武器有劍和弓兩種（數值相同），守衛是鎚，術士是法杖
-  if (type === 'weapon') item.form = nameBase.endsWith('弓') ? 'bow' : { blade: 'sword', guard: 'hammer', arcane: 'staff' }[tag];
-  return item;
+// 從樣式表補上衍生欄位：type、look、form（武器）、name、效果的名稱與說明
+function hydrate(it) {
+  const g = D.GEAR_BY_ID[it.def];
+  if (!g) return it;   // 樣式表裡已經沒有這一款：保留存檔裡原本的資料
+  it.type = g.type;
+  it.look = g.look;
+  if (g.form) it.form = g.form; else delete it.form;
+  if (it.effect) {
+    const e = D.EFFECTS.find((x) => x.k === it.effect.k);
+    if (e) Object.assign(it.effect, { n: e.n, stat: !!e.stat, d: e.d(it.effect.v) });
+  }
+  it.name = (it.effect && it.effect.n ? it.effect.n + '之' : '') + (TIER_PREFIX[it.tier] || '') + g.n;
+  return it;
+}
+
+// 舊存檔（還有流派、沒有樣式 id）的裝備：用名稱找回是哪一款，找不到就用流派對應的外觀
+const LEGACY_LOOK = {
+  weapon: { blade: 'sword', guard: 'hammer', arcane: 'staff' },
+  head: { blade: 'cap', guard: 'helm', arcane: 'wizard' },
+  body: { blade: 'leather', guard: 'plate', arcane: 'robe' },
+  feet: { blade: 'boots', guard: 'greaves', arcane: 'shoes' },
+};
+function fromLegacy(it) {
+  if (it.def) return it;
+  const defs = defsOf(it.type);
+  const byName = defs.filter((g) => (it.name || '').endsWith(g.n)).sort((a, b) => b.n.length - a.n.length)[0];
+  const look = LEGACY_LOOK[it.type] && LEGACY_LOOK[it.type][it.tag];
+  const g = byName || defs.find((x) => x.look === look) || defs[0];
+  it.def = g.id;
+  delete it.tag;
+  return it;
 }
 
 function rollRarity(rng, odds) { return rng.weighted(odds); }
@@ -76,4 +95,4 @@ function fmtStat(k, v) {
   return `${D.STAT_NAME[k]} +${num}${p ? '%' : ''}`;
 }
 
-export const items = { createItem, rollRarity, sellPrice, score, fmtStat };
+export const items = { createItem, hydrate, fromLegacy, defsOf, rollRarity, sellPrice, score, fmtStat };

@@ -33,25 +33,33 @@ function section(title) {
   const h = document.createElement('h2'); h.textContent = title; out.append(h);
   const r = document.createElement('div'); r.className = 'row'; out.append(r); return r;
 }
-const set = (tag, tier, rarity) => Object.fromEntries(['weapon', 'head', 'body', 'feet'].map((k) => [k, { type: k, tag, tier, rarity }]));
+// 預覽用的整套外觀（gear.js 的 look）
+const OUTFITS = {
+  劍與皮甲: { weapon: 'sword', head: 'cap', body: 'leather', feet: 'boots' },
+  鎚與板甲: { weapon: 'hammer', head: 'helm', body: 'plate', feet: 'greaves' },
+  法杖與法袍: { weapon: 'staff', head: 'wizard', body: 'robe', feet: 'shoes' },
+};
+const gear = (type, look, tier, rarity) => ({ type, look, form: type === 'weapon' ? look : undefined, tier, rarity });
+const set = (name, tier, rarity) => Object.fromEntries(Object.entries(OUTFITS[name]).map(([k, look]) => [k, gear(k, look, tier, rarity)]));
 const LOOKS = [{ gender: '男', style: '中分', color: '栗棕' }, { gender: '女', style: '高馬尾', color: '粉紅' }];
 
 const bodies = section('身體與髮型（沒穿裝備）');
 for (const [g, styles] of Object.entries(S.GENDER_STYLES)) for (const st of styles) show(S.heroGrid({}, { gender: g, style: st, color: g === '男' ? '栗棕' : '粉紅' }), 2, `${g}・${st}`, bodies);
 for (const look of LOOKS) {
-  for (const tag of D.TAG_KEYS) {
-    const r1 = section(`${look.gender}・${D.TAGS[tag].n}：稀有度（階級 3）`);
-    for (let r = 0; r < 5; r++) show(S.heroGrid(set(tag, 3, r), look), 2, D.RARITY[r].n, r1);
+  for (const name of Object.keys(OUTFITS)) {
+    const r1 = section(`${look.gender}・${name}：稀有度（階級 3）`);
+    for (let r = 0; r < 5; r++) show(S.heroGrid(set(name, 3, r), look), 2, D.RARITY[r].n, r1);
   }
 }
-const tiers = section('材料階級（劍士、精良）');
-for (let t = 1; t <= 5; t++) show(S.heroGrid(set('blade', t, 1), LOOKS[0]), 2, 'T' + t, tiers);
+const tiers = section('材料階級（劍與皮甲、精良）');
+for (let t = 1; t <= 5; t++) show(S.heroGrid(set('劍與皮甲', t, 1), LOOKS[0]), 2, 'T' + t, tiers);
 const mix = section('混搭');
-show(S.heroGrid({ weapon: { tag: 'blade', tier: 2, rarity: 3 }, head: { tag: 'arcane', tier: 2, rarity: 2 }, body: { tag: 'guard', tier: 3, rarity: 1 }, feet: { tag: 'blade', tier: 1, rarity: 0 } }, LOOKS[1]), 3, '劍＋法帽＋板甲', mix);
-show(S.heroGrid({ weapon: { tag: 'arcane', tier: 4, rarity: 4 }, body: { tag: 'blade', tier: 4, rarity: 4 }, feet: { tag: 'guard', tier: 5, rarity: 2 } }, { gender: '女', style: '長直髮', color: '藍黑' }), 3, '法杖＋皮甲', mix);
+show(S.heroGrid({ weapon: gear('weapon', 'sword', 2, 3), head: gear('head', 'wizard', 2, 2), body: gear('body', 'plate', 3, 1), feet: gear('feet', 'boots', 1, 0) }, LOOKS[1]), 3, '劍＋法帽＋板甲', mix);
+show(S.heroGrid({ weapon: gear('weapon', 'staff', 4, 4), body: gear('body', 'leather', 4, 4), feet: gear('feet', 'greaves', 5, 2) }, { gender: '女', style: '長直髮', color: '藍黑' }), 3, '法杖＋皮甲', mix);
 const icons = section('背包圖示');
-for (const type of ['weapon', 'head', 'body', 'feet']) for (const tag of D.TAG_KEYS) show(S.itemIconGrid({ type, tag, tier: 3, rarity: 3 }), 3, type + '/' + tag, icons);
-for (const n of ['戒指', '項鍊', '手鍊', '耳飾', '護符']) for (const r of [1, 4]) show(S.itemIconGrid({ type: 'acc', tag: null, tier: 3, rarity: r, name: n }), 3, n + D.RARITY[r].n, icons);
+const LOOKS_BY_TYPE = {};
+for (const g of D.GEAR) (LOOKS_BY_TYPE[g.type] ||= new Set()).add(g.look);
+for (const [type, looks] of Object.entries(LOOKS_BY_TYPE)) for (const lk of looks) for (const r of type === 'acc' ? [1, 4] : [3]) show(S.itemIconGrid(gear(type, lk, 3, r)), 3, `${type}/${lk}${type === 'acc' ? D.RARITY[r].n : ''}`, icons);
 const mons = section('魔物（放大後）');
 for (const a of D.AREAS) for (const m of [...a.monsters, a.boss]) show(S.enemyGrid(m.shape, m.c), 3, m.n, mons);
 </script>

@@ -37,7 +37,7 @@ export function startUI(bus) {
     return `${Math.ceil(ms / 1000)} 秒`;
   }
   function clock(t) { const d = new Date(t); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
-  function matName(key) { const [tag, tier] = key.split('-'); return D.MATS[tier][tag]; }
+  function matName(key) { return D.MATS[W.matTier(key)]; }
   function rarityName(r) { return `<span style="color:${D.RARITY[r].color}">${D.RARITY[r].n}</span>`; }
   function setupCanvas(cv, w, h) {
     const dpr = Math.min(3, window.devicePixelRatio || 1);
@@ -76,11 +76,11 @@ export function startUI(bus) {
   function heroPanel() {
     const h = W.hero(s);
     const st = h.stats;
-    const mechs = h.cls.mechs.map(([t, f]) => `<li>${esc(S.mechText(t, f))}</li>`).join('');
+    const mechs = h.cls.mechs.map((m) => `<li>${esc(S.mechText(m))}</li>`).join('');
     const log = s.log.slice(0, 12);
     return `<div class="row spread"><h2>角色</h2><button class="btn ghost small" data-act="look">更換外觀</button></div>
       <div><p class="cls-name">${esc(h.cls.name)}<span class="cls-kind">${esc(h.cls.kind)}</span></p>
-        <ul class="mechs">${mechs || '<li>武器、頭飾、上衣、鞋子中有 2 件同流派，就會有職業</li>'}</ul>
+        <ul class="mechs">${mechs || '<li>拿起武器就會有職業：劍或弓是劍士、弓手（連鎖），鎚是守衛（反擊），法杖是術士（燃燒）</li>'}</ul>
         <div class="power"><span class="hud-label">戰力</span><span class="num">${fmt(S.power(st))}</span></div>
         <dl class="stats">${D.STATS.map((x) => `<div><dt>${x.n}</dt><dd class="num">${fmtV(x.k, st[x.k])}</dd></div>`).join('')}</dl></div>
       <div class="log-box"><h3 class="mini-h">最近發生的事</h3>
@@ -153,7 +153,7 @@ export function startUI(bus) {
       const sel = s.areaIdx === i;
       return `<tr class="${sel ? 'sel' : ''}"><td><b>${a.n}</b><br><span class="hint">${a.monsters.map((m) => m.n).join('、')}</span></td>
         <td class="num">Lv ${a.lv}–${a.lv + 2}</td>
-        <td>${D.TAG_KEYS.map((t) => `<span class="chip" style="color:${D.TAGS[t].color}">${D.MATS[a.tier][t]}</span>`).join(' ')}</td>
+        <td><span class="chip">${D.MATS[a.tier]}</span></td>
         <td class="r">${locked ? `<span class="hint">擊敗${D.AREAS[i - 1].boss.n}解鎖</span>` : sel ? '<b style="color:var(--gold)">目前地圖</b>' : `<button class="btn small" data-act="area" data-i="${i}">選擇</button>`}</td></tr>`;
     }).join('');
     const last = lastTickSum && s.location === 'battle' ? `<p class="hint">最近一次結算：擊敗 ${lastTickSum.kills}、落敗 ${lastTickSum.losses}</p>` : '';
@@ -168,28 +168,25 @@ export function startUI(bus) {
       <div class="legend">${odds.map((o, i) => `<span><i style="background:${D.RARITY[i].color}"></i>${D.RARITY[i].n} ${o}%</span>`).join('')}</div>`;
   }
   function matsGrid() {
-    let html = '<div class="h">階級</div>' + D.TAG_KEYS.map((t) => `<div class="h" style="color:${D.TAGS[t].color}">${D.TAGS[t].n}材料</div>`).join('');
+    let html = '<div class="h">階級</div><div class="h">材料</div>';
     for (let tier = 1; tier <= 5; tier++) {
-      html += `<div class="h num">T${tier}</div>`;
-      for (const t of D.TAG_KEYS) {
-        const n = s.mats[W.matKey(t, tier)] || 0;
-        html += `<div class="${n ? '' : 'zero'}"><span>${D.MATS[tier][t]}</span><span class="num">${n}</span></div>`;
-      }
+      const n = s.mats[W.matKey(tier)] || 0;
+      html += `<div class="h num">T${tier}</div><div class="${n ? '' : 'zero'}"><span>${D.MATS[tier]}</span><span class="num">${n}</span></div>`;
     }
     return `<div class="mats">${html}</div>`;
   }
   function forgeView() {
     const f = s.forge, cur = D.FORGE[f.level], next = D.FORGE[f.level + 1];
     const typeOpts = [['auto', '自動輪流'], ['weapon', '武器'], ['head', '頭飾'], ['body', '上衣'], ['feet', '鞋子'], ['acc', '飾品']];
-    const tagOpts = [['auto', '材料最多的流派'], ...D.TAG_KEYS.map((t) => [t, D.TAGS[t].n + '材料'])];
+    const defOpts = [['auto', '隨機'], ...(f.type === 'auto' ? [] : I.defsOf(f.type).map((g) => [g.id, g.n]))];
     const pct = s.location === 'forge' ? (f.progress / cur.ticks) * 100 : 0;
     return `<div class="sub-h"><h3>鍛造室・${cur.n} <span class="num" style="color:var(--gold)">Lv ${f.level}</span></h3>
         ${next ? `<button class="btn small" data-act="forge-up" ${s.gold < next.cost ? 'disabled' : ''}>升級為${next.n} <span class="num">${fmt(next.cost)}</span></button>` : '<span class="hint">已是最高級設備</span>'}</div>
-      <p class="hint">每件裝備用 ${D.CRAFT_COST} 個同階材料，${cur.ticks * 5} 秒完成一件。用哪個流派的材料，就做出哪個流派的裝備；飾品不分流派，專門出詞條。</p>
+      <p class="hint">每件裝備用 ${D.CRAFT_COST} 個同階材料，${cur.ticks * 5} 秒完成一件。會先用最高階的材料，材料是哪一階，做出來的裝備就是哪一階。</p>
       ${oddsBar(cur.odds)}
       <div class="row">
         <label class="field" for="forgeType">要鍛造的部位<select id="forgeType" data-set="forge-type">${typeOpts.map(([k, n]) => `<option value="${k}" ${f.type === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
-        <label class="field" for="forgeTag">使用的材料<select id="forgeTag" data-set="forge-tag">${tagOpts.map(([k, n]) => `<option value="${k}" ${f.tag === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+        <label class="field" for="forgeDef">款式<select id="forgeDef" data-set="forge-def" ${f.type === 'auto' ? 'disabled' : ''}>${defOpts.map(([k, n]) => `<option value="${k}" ${f.def === k ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
       </div>
       ${s.location === 'forge' ? `<div><div class="bar good"><span style="width:${pct}%"></span></div><p class="hint">${esc(f.status || '準備中')}</p></div>` : '<p class="hint">要在鍛造室掛機才會開始鍛造。</p>'}
       ${matsGrid()}`;
@@ -231,7 +228,7 @@ export function startUI(bus) {
   // 裝備圖示：畫一次就快取成圖片網址
   const iconCache = new Map();
   function iconURL(it) {
-    const key = it.type === 'acc' ? `acc-${(it.name || '').slice(-2)}-${it.tier}-${it.rarity}` : `${it.type}-${it.tag}-${it.tier}-${it.rarity}`;
+    const key = `${it.type}-${it.look}-${it.tier}-${it.rarity}`;
     if (!iconCache.has(key)) {
       const g = SP.itemIconGrid(it);
       const sc = Math.max(1, Math.floor(48 / Math.max(g.length, g[0].length)));
@@ -248,8 +245,14 @@ export function startUI(bus) {
   }
   function itemChips(it) {
     return `<div class="chips"><span class="chip" style="color:${D.RARITY[it.rarity].color}">${D.RARITY[it.rarity].n}</span>
-      ${it.tag ? `<span class="chip" style="color:${D.TAGS[it.tag].color}">${D.TAGS[it.tag].n}</span>` : '<span class="chip" style="color:var(--muted)">詞條專用</span>'}
+      ${itemKindChip(it)}
       <span class="chip" style="color:var(--muted)">T${it.tier}</span></div>`;
+  }
+  // 武器標出職業（顏色是職業機制），其他部位標出部位
+  function itemKindChip(it) {
+    const form = it.type === 'weapon' && D.FORMS[it.form];
+    if (form) return `<span class="chip" style="color:${D.MECHS[form.mech].color}">${form.cls}・${D.MECHS[form.mech].n}</span>`;
+    return `<span class="chip" style="color:var(--muted)">${it.type === 'acc' ? '飾品・詞條專用' : D.TYPE_NAME[it.type]}</span>`;
   }
   function slotFor(it) {
     if (it.type !== 'acc') return it.type;
@@ -280,7 +283,7 @@ export function startUI(bus) {
         <div class="row"><button class="btn small" data-act="equip" data-id="${it.id}">穿上</button>
         <button class="btn ghost small" data-act="sell" data-id="${it.id}">賣出 <span class="num">${fmt(I.sellPrice(it))}</span></button></div></div>`).join('');
     const cheap = s.bag.filter((it) => it.rarity < 2).length;
-    return `<div class="row spread"><h2>裝備</h2><span class="hint">武器、頭飾、上衣、鞋子決定職業；飾品只提供詞條。外觀會隨裝備改變。</span></div>
+    return `<div class="row spread"><h2>裝備</h2><span class="hint">武器決定職業；飾品只提供詞條。外觀會隨裝備改變。</span></div>
       <div class="slots">${slots}</div>
       <div class="row spread"><h2>背包 <span class="num hint">${s.bag.length} / ${D.BAG_CAP}</span></h2>
         <div class="row"><div class="filter">${filters.map(([k, n]) => `<button data-act="bag-filter" data-k="${k}" aria-pressed="${bagFilter === k}">${n}</button>`).join('')}</div>
@@ -582,8 +585,8 @@ export function startUI(bus) {
     document.addEventListener('change', (e) => {
       const el = e.target.closest('[data-set]');
       if (!el) return;
-      if (el.dataset.set === 'forge-type') s.forge.type = el.value;
-      if (el.dataset.set === 'forge-tag') s.forge.tag = el.value;
+      if (el.dataset.set === 'forge-type') { s.forge.type = el.value; s.forge.def = 'auto'; }
+      if (el.dataset.set === 'forge-def') s.forge.def = el.value;
       if (el.dataset.set === 'keep') s.market.keep = +el.value;
       persist(); renderPanel();
     });

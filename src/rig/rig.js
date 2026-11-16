@@ -91,42 +91,65 @@ function mats(it) {
 }
 const shadeX = (L, x, c) => (L.light(x) ? c.l : L.dark(x) ? c.d : c.b);
 
+// 上衣的外觀（gear.js 的 look）→ 身體與手臂的畫法。新的上衣外觀就在這裡加一種。
+// torso / arm 回傳顏色或 null（null = 不畫，露出底下的身體）；robe 為 true 的上衣會蓋住長褲與膝蓋以上
+const BODY_LOOKS = {
+  leather: {   // 皮甲：V 領、斜背帶，稀有以上有金屬護肩
+    torso: (L, x, y, m, it, front, skin) => {
+      if (front && y <= L.top + 2 && Math.abs(x - L.cx) <= (L.top + 3 - y) * 0.6) return skin;
+      if (front && x - (L.cx - 4) === y - L.top - 1) return m.belt;
+      return shadeX(L, x, m.leather);
+    },
+    arm: (L, y, m, it) => {
+      if (y <= L.pad) return it.rarity >= 2 ? (y < L.pad ? m.metal.l : m.metal.b) : m.leather.l;
+      return y >= L.glove ? m.leather.d : y === L.glove - 1 && m.trim ? m.trim : m.cloth.b;
+    },
+  },
+  plate: {     // 板甲：中線與甲片接縫
+    torso: (L, x, y, m) => (L.center(x) ? m.metal.l : y === L.top + 4 || y === L.top + 7 ? m.metal.d : shadeX(L, x, m.metal)),
+    arm: (L, y, m) => (y <= L.pad ? (y < L.pad ? m.metal.l : m.metal.b) : y >= L.glove ? m.metal.d : y === L.glove - 1 && m.trim ? m.trim : m.metal.b),
+  },
+  robe: {      // 法袍：中央滾邊、寬袖露出手，下襬蓋到膝蓋
+    robe: true,
+    torso: (L, x, y, m) => (L.center(x) ? (m.trim || m.cloth.l) : shadeX(L, x, m.cloth)),
+    arm: (L, y, m) => (y >= L.glove + 1 ? null : y === L.glove ? (m.trim || m.cloth.d) : y <= L.pad ? m.cloth.l : m.cloth.b),
+  },
+};
+// 鞋子的外觀 → 鞋筒從哪裡開始（相對 L.boot）、用哪種材質
+const FEET_LOOKS = {
+  boots: { start: 0, mat: 'leather' },
+  greaves: { start: -2, mat: 'metal' },
+  shoes: { start: 2, mat: 'cloth' },
+};
+
 // 每個零件一個上色函式。equip = { head, body, feet }（遊戲裡的裝備物件）；沒穿裝備的部位維持參考圖原本的樣子。
 // bare 為 true 時不穿任何東西（預覽頁用）。
 function painters(L, view, BASIC, skin, equip, bare) {
   if (bare) return { torso: () => null, arm: () => null, leg: () => null };
-  const body = equip.body && { it: equip.body, m: mats(equip.body) }, feet = equip.feet && { it: equip.feet, m: mats(equip.feet) };
-  const robe = body && body.it.tag === 'arcane', front = view === 'front';
+  const body = equip.body && { it: equip.body, m: mats(equip.body), look: BODY_LOOKS[equip.body.look] || BODY_LOOKS.leather };
+  const feet = equip.feet && { it: equip.feet, m: mats(equip.feet), look: FEET_LOOKS[equip.feet.look] || FEET_LOOKS.boots };
+  const robe = body && body.look.robe, front = view === 'front';
   const torso = (x, y, hex, k) => {
     if (k === 'ink' || y < L.top) return null;
     if (!body) return null;                                                                                  // 沒穿上衣：就是參考圖的樣子
     if (y >= L.shorts) return robe ? shadeX(L, x, body.m.cloth) : L.dark(x) ? BASIC.pantsD : BASIC.pants;   // 短褲 → 長褲（法袍會蓋住）
-    const { it, m } = body, tag = it.tag;
+    const { it, m } = body;
     if (y >= L.belt) return L.buckle(x) ? (m.gem || m.gold) : m.belt;
     if (m.trim && y === L.top) return m.trim;
-    if (tag === 'guard') return L.center(x) ? m.metal.l : y === L.top + 4 || y === L.top + 7 ? m.metal.d : shadeX(L, x, m.metal);   // 板甲：中線與甲片接縫
-    if (tag === 'arcane') return L.center(x) ? (m.trim || m.cloth.l) : shadeX(L, x, m.cloth);                                       // 法袍：中央滾邊
-    if (front && y <= L.top + 2 && Math.abs(x - L.cx) <= (L.top + 3 - y) * 0.6) return skin;                                          // 皮甲：V 領
-    if (front && x - (L.cx - 4) === y - L.top - 1) return m.belt;                                                                      // 斜背帶
-    return shadeX(L, x, m.leather);
+    return body.look.torso(L, x, y, m, it, front, skin);
   };
   const arm = (x, y, hex, k) => {
     if (k === 'ink') return null;
     if (!body) return null;
-    const { it, m } = body, tag = it.tag;
-    if (tag === 'guard') return y <= L.pad ? (y < L.pad ? m.metal.l : m.metal.b) : y >= L.glove ? m.metal.d : y === L.glove - 1 && m.trim ? m.trim : m.metal.b;
-    if (tag === 'arcane') return y >= L.glove + 1 ? null : y === L.glove ? (m.trim || m.cloth.d) : y <= L.pad ? m.cloth.l : m.cloth.b;   // 寬袖，露出手
-    if (y <= L.pad) return it.rarity >= 2 ? (y < L.pad ? m.metal.l : m.metal.b) : m.leather.l;   // 稀有以上有金屬護肩
-    return y >= L.glove ? m.leather.d : y === L.glove - 1 && m.trim ? m.trim : m.cloth.b;
+    return body.look.arm(L, y, body.m, body.it);
   };
   const leg = (x, y, hex, k) => {
     if (k === 'ink') return null;
-    const tag = feet && feet.it.tag;
     if (!feet && !body) return null;                                                 // 沒穿上衣也沒穿鞋：赤腳
-    const start = !feet ? L.boot + 3 : tag === 'guard' ? L.boot - 2 : tag === 'arcane' ? L.boot + 2 : L.boot;
+    const start = feet ? L.boot + feet.look.start : L.boot + 3;
     if (y >= start) {
       if (!feet) return y >= L.sole ? BASIC.sole : BASIC.shoe;                       // 有上衣沒鞋子：配一雙便鞋
-      const c = tag === 'guard' ? feet.m.metal : tag === 'arcane' ? feet.m.cloth : feet.m.leather;
+      const c = feet.m[feet.look.mat];
       if (y === start && feet.m.trim) return feet.m.trim;
       return y >= L.sole ? c.d : shadeX(L, x, c);
     }
@@ -137,40 +160,49 @@ function painters(L, view, BASIC, skin, equip, bare) {
 }
 
 // ---------- 武器：握柄是支點，朝上 ----------
-function weaponCanvas(it) {
-  const m = it ? mats(it) : null, tag = it ? it.tag : 'blade';
-  const metal = m ? m.metal : { l: '#eef3f8', b: '#b9c7d8', d: '#8fa0b6' }, grip = m ? m.leather : { b: '#84502c', d: '#5e3a1e' };
-  const gold = m && it.rarity >= 4 ? m.gold : m && m.trim ? m.trim : m ? metal.b : '#f2c14e';
-  const c = makeCanvas(17, 48), x = c.getContext('2d');
-  const r = (col, px, py, w, h) => { x.fillStyle = col; x.fillRect(px, py, w, h); };
-  if (tag === 'guard') {          // 戰錘
-    r(INK, 6, 12, 5, 36); r(m.wood.b, 7, 13, 2, 34); r(m.wood.d, 9, 13, 1, 34);
-    r(INK, 0, 0, 17, 13); r(metal.b, 1, 1, 15, 11); r(metal.l, 1, 1, 15, 3); r(metal.d, 1, 9, 15, 3); r(gold, 1, 5, 15, 2);
-    if (m.gem) r(m.gem, 7, 4, 3, 4);
-    return { canvas: c, pivot: [8.5, 42.5] };
-  }
-  if (tag === 'arcane') {         // 法杖
-    r(INK, 6, 9, 5, 39); r(m.wood.b, 7, 10, 2, 37); r(m.wood.d, 9, 10, 1, 37);
-    r(INK, 3, 0, 11, 11); r(m.orb, 4, 1, 9, 9); r(m.orbL, 5, 2, 3, 3); r(INK, 3, 10, 11, 3); r(gold, 4, 11, 9, 1);
-    return { canvas: c, pivot: [8.5, 40.5] };
-  }
-  if (it && it.form === 'bow') {   // 弓：握把在中間，弓臂往前彎、弦在後
-    const limb = m.trim ? { b: m.trim, l: m.trim } : m.wood;
+// 武器的外觀（gear.js 的 look）→ 畫法。r(顏色, x, y, 寬, 高) 在 17×48 的畫布上畫方塊，回傳握柄支點。
+// 新的武器外觀就在這裡加一種；攻擊動作看的是 form（COMBOS），不是 look。
+const WEAPON_LOOKS = {
+  hammer: (r, it, c) => {   // 戰錘
+    r(INK, 6, 12, 5, 36); r(c.m.wood.b, 7, 13, 2, 34); r(c.m.wood.d, 9, 13, 1, 34);
+    r(INK, 0, 0, 17, 13); r(c.metal.b, 1, 1, 15, 11); r(c.metal.l, 1, 1, 15, 3); r(c.metal.d, 1, 9, 15, 3); r(c.gold, 1, 5, 15, 2);
+    if (c.m.gem) r(c.m.gem, 7, 4, 3, 4);
+    return [8.5, 42.5];
+  },
+  staff: (r, it, c) => {    // 法杖
+    r(INK, 6, 9, 5, 39); r(c.m.wood.b, 7, 10, 2, 37); r(c.m.wood.d, 9, 10, 1, 37);
+    r(INK, 3, 0, 11, 11); r(c.m.orb, 4, 1, 9, 9); r(c.m.orbL, 5, 2, 3, 3); r(INK, 3, 10, 11, 3); r(c.gold, 4, 11, 9, 1);
+    return [8.5, 40.5];
+  },
+  bow: (r, it, c) => {      // 弓：握把在中間，弓臂往前彎、弦在後
+    const limb = c.m.trim ? { b: c.m.trim, l: c.m.trim } : c.m.wood;
     for (let y = 1; y <= 47; y++) {
       const bend = Math.round(7 * (1 - ((y - 24) / 23) ** 2));          // 弓臂的弧度
       r(INK, 3 + bend, y, 5, 1); r(limb.b, 4 + bend, y, 3, 1); r(limb.l || limb.b, 4 + bend, y, 1, 1);
       r('#f4f0e6', 3, y, 1, 1);                                        // 弦
     }
-    r(INK, 10, 20, 6, 9); r(grip.b, 11, 21, 4, 7); r(gold, 11, 21, 4, 1); r(gold, 11, 27, 4, 1);
-    return { canvas: c, pivot: [12.5, 24.5] };
-  }
-  r(INK, 5, 3, 7, 34); r(INK, 6, 1, 5, 2); r(INK, 7, 0, 3, 1);                          // 劍
-  r(metal.l, 6, 3, 2, 33); r(metal.b, 8, 2, 1, 34); r(metal.d, 9, 3, 2, 33);
-  r(metal.l, 7, 1, 1, 2); r(metal.d, 9, 2, 1, 1);
-  if (it && it.rarity >= 3) r(m.trim, 8, 5, 1, 28);                                      // 史詩以上：劍身的光紋
-  r(INK, 2, 36, 13, 5); r(gold, 3, 37, 11, 3);
-  r(INK, 6, 41, 5, 7); r(grip.b, 7, 41, 2, 5); r(grip.d, 9, 41, 1, 5); r(gold, 7, 46, 3, 1);
-  return { canvas: c, pivot: [8.5, 43.5] };
+    r(INK, 10, 20, 6, 9); r(c.grip.b, 11, 21, 4, 7); r(c.gold, 11, 21, 4, 1); r(c.gold, 11, 27, 4, 1);
+    return [12.5, 24.5];
+  },
+  sword: (r, it, c) => {    // 劍（空手預覽時也用這個）
+    r(INK, 5, 3, 7, 34); r(INK, 6, 1, 5, 2); r(INK, 7, 0, 3, 1);
+    r(c.metal.l, 6, 3, 2, 33); r(c.metal.b, 8, 2, 1, 34); r(c.metal.d, 9, 3, 2, 33);
+    r(c.metal.l, 7, 1, 1, 2); r(c.metal.d, 9, 2, 1, 1);
+    if (it && it.rarity >= 3) r(c.m.trim, 8, 5, 1, 28);                    // 史詩以上：劍身的光紋
+    r(INK, 2, 36, 13, 5); r(c.gold, 3, 37, 11, 3);
+    r(INK, 6, 41, 5, 7); r(c.grip.b, 7, 41, 2, 5); r(c.grip.d, 9, 41, 1, 5); r(c.gold, 7, 46, 3, 1);
+    return [8.5, 43.5];
+  },
+};
+function weaponCanvas(it) {
+  const m = it ? mats(it) : null;
+  const metal = m ? m.metal : { l: '#eef3f8', b: '#b9c7d8', d: '#8fa0b6' }, grip = m ? m.leather : { b: '#84502c', d: '#5e3a1e' };
+  const gold = m && it.rarity >= 4 ? m.gold : m && m.trim ? m.trim : m ? metal.b : '#f2c14e';
+  const c = makeCanvas(17, 48), x = c.getContext('2d');
+  const r = (col, px, py, w, h) => { x.fillStyle = col; x.fillRect(px, py, w, h); };
+  const draw = (it && WEAPON_LOOKS[it.look]) || WEAPON_LOOKS.sword;
+  const pivot = draw(r, it, { m, metal, grip, gold });
+  return { canvas: c, pivot };
 }
 
 // ---------- 動作：輸入 0–1 的進度，回傳姿勢與特效 ----------
@@ -363,11 +395,9 @@ export const ANIMS = {
     return { ...REST, x: -5 * k, torso: -12 * k, head: -8 * k, armL: -20 * k, armR: -24 * k, elbowR: -14, legL: -8 * k, kneeR: 12 * k, weapon: 14 + 20 * k, fx: [] };
   } },
 };
-// 武器決定攻擊方式：劍士的武器是劍或弓（form），守衛是鎚，術士是法杖；空手用劍的動作
+// 武器的形態（form）決定攻擊方式：劍、弓、鎚、法杖各有一套連招；空手或不認得的形態用劍的動作
 export function attackStyle(weapon) {
-  if (!weapon) return 'sword';
-  if (weapon.form === 'bow') return 'bow';
-  return { guard: 'hammer', arcane: 'staff' }[weapon.tag] || 'sword';
+  return weapon && COMBOS[weapon.form] ? weapon.form : 'sword';
 }
 
 // ---------- 骨架 ----------
@@ -389,10 +419,10 @@ export class Rig {
     if (color !== this.look.color || gender !== this.look.gender) { this.look = { gender, color }; this.rebuild(); }
   }
   get height() { return this.P.H * this.S; }
-  // equip：{ weapon, head, body, feet }，內容是遊戲裡的裝備物件（需要 tag、tier、rarity）
+  // equip：{ weapon, head, body, feet }，內容是遊戲裡的裝備物件（需要 look、tier、rarity）
   setEquip(equip, bare = false) {
     const e = equip || {};
-    const sig = ['weapon', 'head', 'body', 'feet'].map((k) => (e[k] ? `${e[k].tag}-${e[k].tier}-${e[k].rarity}-${e[k].form || ''}` : '')).join('|') + bare;
+    const sig = ['weapon', 'head', 'body', 'feet'].map((k) => (e[k] ? `${e[k].look}-${e[k].tier}-${e[k].rarity}` : '')).join('|') + bare;
     if (sig === this.sig) return;
     this.sig = sig; this.equip = { ...e }; this.bare = bare;
     this.rebuild();
@@ -417,7 +447,7 @@ export class Rig {
     }
     this.held = weaponCanvas(this.equip.weapon);
     const best = Math.max(-1, ...['weapon', 'head', 'body', 'feet'].map((k) => (this.equip[k] ? this.equip[k].rarity : -1)));
-    this.glow = best >= 3 ? gearMats({ tier: 1, rarity: best, tag: null }).trim.ramp[3] : null;   // 史詩以上會冒光點
+    this.glow = best >= 3 ? gearMats({ tier: 1, rarity: best }).trim.ramp[3] : null;   // 史詩以上會冒光點
   }
   geo(name) { return this.G[name] || this.G[name.replace('L', 'R')]; }
 

@@ -10,12 +10,13 @@ const R = () => RNG;
 const I = () => items;
 
 const expNeed = (lv) => Math.floor(50 * Math.pow(lv, 2.2));
-const matKey = (tag, tier) => `${tag}-${tier}`;
+const matKey = (tier) => `m${tier}`;          // 材料在 state.mats 裡的鍵：每個階級一種
+const matTier = (key) => +key.slice(1);
 const HUNT_MAX = 3, HUNT_REFILL_MS = 3600e3;
 
 function newGame(now, seed = (now ^ 0x5eed) >>> 0) {
   const s = {
-    v: 1, seed, createdAt: now, lastTick: now,
+    v: 2, seed, createdAt: now, lastTick: now,
     hero: { level: 1, exp: 0 },
     gold: 0,
     training: Object.fromEntries(D.DEVICES.map((d) => [d.stat, 0])),
@@ -23,7 +24,7 @@ function newGame(now, seed = (now ^ 0x5eed) >>> 0) {
     trainDevice: 'dummy',
     location: 'battle',
     areaIdx: 0, unlockedArea: 0, bossKills: {},
-    forge: { level: 1, type: 'auto', tag: 'auto', progress: 0, status: '' },
+    forge: { level: 1, type: 'auto', def: 'auto', progress: 0, status: '' },
     market: { rep: 0, keep: 8 },
     guild: { rep: 0, quests: [], qSeq: 0 },
     counters: { kills: 0, crafts: 0, sold: 0, trainTicks: 0, guildTicks: 0, bossKills: 0 },
@@ -34,10 +35,9 @@ function newGame(now, seed = (now ^ 0x5eed) >>> 0) {
     hunt: { tickets: HUNT_MAX, refillAt: now },
     log: [],
   };
-  // 新手武器：一把普通長劍
+  // 新手武器：一把普通長劍（T1 的名稱前綴就是「新手」）
   const rng = R().make(seed);
-  s.equip.weapon = I().createItem(rng, { type: 'weapon', tag: 'blade', tier: 1, rarity: 0, seq: s.itemSeq++ });
-  s.equip.weapon.name = '新手長劍';
+  s.equip.weapon = I().createItem(rng, { def: 'longsword', tier: 1, rarity: 0, seq: s.itemSeq++ });
   s.seed = rng.state;
   while (s.guild.quests.length < 3) s.guild.quests.push(makeQuest(s, rng));
   s.seed = rng.state;
@@ -100,7 +100,7 @@ function battleEnemy(rng, area) {
 
 function tickBattle(s, rng, sum, h) {
   const area = D.AREAS[s.areaIdx];
-  const { mon, lv, enemy } = battleEnemy(rng, area);
+  const { lv, enemy } = battleEnemy(rng, area);
   const r = combat.fight(rng, h, enemy, { maxActions: 40 });
   if (!r.win) { sum.losses++; return 0; }
   sum.kills++;
@@ -108,49 +108,20 @@ function tickBattle(s, rng, sum, h) {
   s.counters['kill' + s.areaIdx] = (s.counters['kill' + s.areaIdx] || 0) + 1;
   const gold = 1 + Math.round(lv * 0.6);
   s.gold += gold; sum.gold += gold;
-  if (rng.chance(0.6)) addMat(s, matKey(mon.tag, area.tier), rng.chance(0.15) ? 2 : 1, sum);
+  if (rng.chance(0.6)) addMat(s, matKey(area.tier), rng.chance(0.15) ? 2 : 1, sum);
   // 少量機率直接掉落裝備
   if (rng.chance(0.012) && s.bag.length < D.BAG_CAP) {
-    const types = ['weapon', 'head', 'body', 'feet', 'acc'];
-    const it = I().createItem(rng, { type: rng.pick(types), tag: mon.tag, tier: area.tier,
+    const it = I().createItem(rng, { type: rng.pick(D.ITEM_TYPES), tier: area.tier,
       rarity: I().rollRarity(rng, D.FORGE[2].odds), seq: s.itemSeq++ });
     s.bag.push(it); sum.items.push(it);
   }
   return gainExp(s, 6 + 3 * lv, sum);
 }
 
-// 鍛造：決定要用哪種材料
-function pickRecipe(s, type, tagPref) {
-  if (type === 'acc') {
-    for (let tier = 5; tier >= 1; tier--) {
-      const have = D.TAG_KEYS.reduce((a, t) => a + (s.mats[matKey(t, tier)] || 0), 0);
-      if (have >= D.CRAFT_COST) return { type, tag: null, tier };
-    }
-    return null;
-  }
-  const tags = tagPref === 'auto'
-    ? D.TAG_KEYS.slice().sort((a, b) => totalTag(s, b) - totalTag(s, a))
-    : [tagPref];
-  for (const tag of tags) {
-    for (let tier = 5; tier >= 1; tier--) {
-      if ((s.mats[matKey(tag, tier)] || 0) >= D.CRAFT_COST) return { type, tag, tier };
-    }
-  }
-  return null;
-}
-function totalTag(s, tag) {
-  let n = 0;
-  for (let t = 1; t <= 5; t++) n += s.mats[matKey(tag, t)] || 0;
-  return n;
-}
-function consume(s, recipe) {
-  if (recipe.tag) { s.mats[matKey(recipe.tag, recipe.tier)] -= D.CRAFT_COST; return; }
-  let need = D.CRAFT_COST;
-  while (need > 0) {
-    const tag = D.TAG_KEYS.slice().sort((a, b) => (s.mats[matKey(b, recipe.tier)] || 0) - (s.mats[matKey(a, recipe.tier)] || 0))[0];
-    s.mats[matKey(tag, recipe.tier)]--;
-    need--;
-  }
+// 鍛造：用身上最高階、數量夠的材料
+function pickTier(s) {
+  for (let tier = 5; tier >= 1; tier--) if ((s.mats[matKey(tier)] || 0) >= D.CRAFT_COST) return tier;
+  return 0;
 }
 const AUTO_TYPES = ['weapon', 'body', 'head', 'feet', 'acc'];
 
@@ -158,19 +129,20 @@ function tickForge(s, rng, sum, now) {
   const f = s.forge;
   if (s.bag.length >= D.BAG_CAP) { f.status = '背包已滿，鍛造暫停'; sum.notes.add(f.status); return 0; }
   const type = f.type === 'auto' ? AUTO_TYPES[(f.autoIdx || 0) % AUTO_TYPES.length] : f.type;
-  const recipe = pickRecipe(s, type, f.tag);
-  if (!recipe) {
-    f.status = `材料不足：鍛造${D.TYPE_NAME[type]}需要 ${D.CRAFT_COST} 個同階材料`;
+  const tier = pickTier(s);
+  if (!tier) {
+    f.status = `材料不足：鍛造需要 ${D.CRAFT_COST} 個同階材料`;
     sum.notes.add(f.status);
-    if (f.type === 'auto') f.autoIdx = (f.autoIdx || 0) + 1; // 換下一個部位試試
     return 0;
   }
   f.progress++;
   f.status = `正在鍛造${D.TYPE_NAME[type]}`;
   if (f.progress < D.FORGE[f.level].ticks) return 0;
   f.progress = 0;
-  consume(s, recipe);
-  const it = I().createItem(rng, { ...recipe, rarity: I().rollRarity(rng, D.FORGE[f.level].odds), seq: s.itemSeq++ });
+  s.mats[matKey(tier)] -= D.CRAFT_COST;
+  // 指定了款式就做那一款，否則在這個部位裡隨機
+  const def = f.type !== 'auto' && D.GEAR_BY_ID[f.def] && D.GEAR_BY_ID[f.def].type === type ? f.def : undefined;
+  const it = I().createItem(rng, { def, type, tier, rarity: I().rollRarity(rng, D.FORGE[f.level].odds), seq: s.itemSeq++ });
   s.bag.push(it); sum.items.push(it);
   s.counters.crafts++;
   if (f.type === 'auto') f.autoIdx = (f.autoIdx || 0) + 1;
@@ -189,7 +161,7 @@ function tickMarket(s, rng, sum) {
   let sold = 0;
   for (const k of keys) {
     while (cap > 0 && s.mats[k] > m.keep) {
-      const tier = +k.split('-')[1];
+      const tier = matTier(k);
       const price = Math.round(D.MAT_PRICE(tier) * marketBonus(m.rep));
       s.mats[k]--; s.gold += price; sum.gold += price; cap--; sold++;
     }
@@ -317,7 +289,7 @@ function makeQuest(s, rng) {
   const q = rng.pick(opts);
   const tier = D.AREAS[s.unlockedArea].tier;
   const reward = { gold: Math.round(60 * k * tier), rep: Math.round(15 * k) };
-  if (rng.chance(0.5)) reward.mat = { key: matKey(rng.pick(D.TAG_KEYS), tier), n: 3 + r };
+  if (rng.chance(0.5)) reward.mat = { key: matKey(tier), n: 3 + r };
   return { id: 'q' + (++s.guild.qSeq), kind: q.kind, n: q.n, need: q.need, base: s.counters[q.kind] || 0, reward };
 }
 function questProgress(s, q) { return Math.min(q.need, (s.counters[q.kind] || 0) - q.base); }
@@ -366,9 +338,10 @@ function hunt(s, areaIdx, now) {
     s.bossKills[areaIdx] = (s.bossKills[areaIdx] || 0) + 1;
     rewards.gold = 60 * a.tier * a.tier * (first ? 3 : 1);
     s.gold += rewards.gold;
-    for (const t of D.TAG_KEYS) { const k = matKey(t, a.tier); const n = 2 + rng.int(0, 2); addMat(s, k, n); rewards.mats[k] = n; }
+    const k = matKey(a.tier), n = 6 + rng.int(0, 6);
+    addMat(s, k, n); rewards.mats[k] = n;
     if (s.bag.length < D.BAG_CAP) {
-      const it = I().createItem(rng, { type: rng.pick(['weapon', 'head', 'body', 'feet', 'acc']), tag: rng.pick(D.TAG_KEYS),
+      const it = I().createItem(rng, { type: rng.pick(D.ITEM_TYPES),
         tier: a.tier, rarity: Math.max(2, I().rollRarity(rng, D.FORGE[3].odds)), seq: s.itemSeq++ });
       s.bag.push(it); rewards.item = it;
     }
@@ -382,7 +355,7 @@ function hunt(s, areaIdx, now) {
 }
 
 export const world = {
-  expNeed, matKey, marketBonus, marketSpeed, newGame, hero, settle, catchUp, setLocation, unlockDevice, upgradeDevice, upgradeForge,
+  expNeed, matKey, matTier, marketBonus, marketSpeed, newGame, hero, settle, catchUp, setLocation, unlockDevice, upgradeDevice, upgradeForge,
   equip, unequip, sell, sellBelow, guildRank, questProgress, claimQuest, refreshTickets, hunt, bossEnemy,
-  addLog, gainExp, HUNT_MAX, HUNT_REFILL_MS, totalTag,
+  addLog, gainExp, HUNT_MAX, HUNT_REFILL_MS,
 };

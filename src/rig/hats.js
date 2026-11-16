@@ -1,4 +1,4 @@
-// 頭飾：每個流派一種帽子，畫成一張獨立的小圖，戴在頭上跟著頭轉。
+// 頭飾：每種帽子外觀（gear.js 的 look）一種畫法，畫成一張獨立的小圖，戴在頭上跟著頭轉。
 //   劍士：皮革冒險帽（帽帶、扣環，稀有度越高羽毛越多）
 //   守衛：騎士頭盔（中央稜線、鉚釘、護頰、護鼻，稀有以上有盔纓，傳說有角）
 //   術士：尖頂巫師帽（寬帽簷、往後垂的尖頂，稀有以上有星星，史詩以上帽尖有寶珠）
@@ -124,13 +124,14 @@ function arcaneHat(g, A, m, r) {
   if (r >= 4) { const mx = Math.round(mid) + (A.side ? -2 : 0), my = B - 9; g.row(mx, mx + 1, my - 1, m.gold); g.set(mx - 1, my, m.gold); g.set(mx - 1, my + 1, m.gold); g.row(mx, mx + 1, my + 2, m.gold); }   // 月亮徽記
 }
 
-const STYLES = { blade: bladeCap, guard: guardHelm, arcane: arcaneHat };
+// 外觀（gear.js 的 look）→ 畫法。新的帽子外觀就在這裡加一種
+const STYLES = { cap: bladeCap, helm: guardHelm, wizard: arcaneHat };
 
 // 畫出帽子。回傳 { canvas, x, y }（x、y 是帽子左上角在角色圖裡的像素位置）與 cut（這一列大格以上的頭髮要藏起來）
 export function hatCanvas(gender, view, it, m, ink, unit) {
   const A = HAT_AT[gender][view];
   const g = grid();
-  (STYLES[it.tag] || bladeCap)(g, A, m, it.rarity || 0);
+  (STYLES[it.look] || bladeCap)(g, A, m, it.rarity || 0);
   const cells = outline(g.cells, ink);
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const k of cells.keys()) { const [x, y] = k.split(',').map(Number); x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }

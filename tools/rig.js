@@ -8,7 +8,7 @@ const cv = document.getElementById('stage'), ctx = cv.getContext('2d');
 cv.width = W; cv.height = H;
 const params = new URLSearchParams(location.search);
 const state = { anim: params.get('anim') || 'idle', view: params.get('view') || 'side', gender: params.get('gender') || 'm', hair: params.get('hair') || '深棕',
-  gear: params.get('gear') ?? 'blade', rarity: +(params.get('rarity') ?? 3), tier: +(params.get('tier') ?? 3) };
+  gear: params.get('gear') ?? 'sword', rarity: +(params.get('rarity') ?? 3), tier: +(params.get('tier') ?? 3) };
 const frozen = params.get('t') !== null ? +params.get('t') : null;   // 截圖用：停在動作的某個時間點（0–1）
 const rig = new Rig(state.view);
 const slime = SP.enemyGrid('slime', '#62c46a');
@@ -17,12 +17,18 @@ let start = performance.now(), base = 'idle', blinkAt = 2;
 function apply() {
   rig.setView(state.view);
   rig.setLook({ gender: state.gender, color: state.hair });
-  const bow = state.gear === 'bow';
-  const it = (type) => ({ type, tag: bow ? 'blade' : state.gear, tier: state.tier, rarity: state.rarity, form: bow && type === 'weapon' ? 'bow' : undefined });
-  const sets = { bare: [{}, true] };
-  const [equip, bare] = sets[state.gear] || [{ weapon: it('weapon'), head: it('head'), body: it('body'), feet: it('feet') }, false];
-  rig.setEquip(equip, bare);
+  const set = OUTFITS[state.gear];
+  if (!set) { rig.setEquip({}, true); return; }
+  const it = (type, look) => ({ type, look, form: type === 'weapon' ? look : undefined, tier: state.tier, rarity: state.rarity });
+  rig.setEquip(Object.fromEntries(Object.entries(set.looks).map(([type, look]) => [type, it(type, look)])), false);
 }
+// 預覽用的整套外觀（gear.js 的 look）；武器的 look 剛好等於它的形態
+const OUTFITS = {
+  sword: { n: '劍＋皮甲', looks: { weapon: 'sword', head: 'cap', body: 'leather', feet: 'boots' } },
+  bow: { n: '弓＋皮甲', looks: { weapon: 'bow', head: 'cap', body: 'leather', feet: 'boots' } },
+  hammer: { n: '鎚＋板甲', looks: { weapon: 'hammer', head: 'helm', body: 'plate', feet: 'greaves' } },
+  staff: { n: '法杖＋法袍', looks: { weapon: 'staff', head: 'wizard', body: 'robe', feet: 'shoes' } },
+};
 function play(name) {
   if (ANIMS[name].loop) base = name;
   state.anim = name; start = performance.now();
@@ -38,7 +44,7 @@ function renderOptions() {
   seg('view', [['side', '側面'], ['front', '正面']], () => state.view, (v) => { state.view = v; apply(); });
   seg('gender', Object.entries(GENDERS), () => state.gender, (v) => { state.gender = v; apply(); });
   seg('hair', Object.entries(HAIR_COLORS).map(([k, v]) => [k, k, v[1]]), () => state.hair, (v) => { state.hair = v; apply(); });
-  seg('gear', [['bare', '沒穿裝備'], ...D.TAG_KEYS.map((t) => [t, D.TAGS[t].n]), ['bow', '劍士（弓）']], () => state.gear, (v) => { state.gear = v; apply(); });
+  seg('gear', [['bare', '沒穿裝備'], ...Object.entries(OUTFITS).map(([k, o]) => [k, o.n])], () => state.gear, (v) => { state.gear = v; apply(); });
   seg('rarity', D.RARITY.map((r, i) => [i, r.n, r.color]), () => state.rarity, (v) => { state.rarity = +v; apply(); });
   seg('tier', [1, 2, 3, 4, 5].map((t) => [t, 'T' + t]), () => state.tier, (v) => { state.tier = +v; apply(); });
 }
