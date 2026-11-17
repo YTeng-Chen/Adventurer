@@ -28,7 +28,7 @@ description: 設計、新增或重畫冒險者遊戲的裝備：單件、整套�
 | 主題套裝 | 美術與跟著角色的特效放在自己的檔案（照 `src/rig/dragon.js`）；套裝效果 `src/core/data.js` 的 `SETS`；套裝光環 `rig.js` 的 `SET_AURAS`（小）、`src/game/stagefx.js` 的 `STAGE_SETS` 與 `update()`（大） |
 | 新武器形態 | `data.js` 的 `FORMS`（職業與職業機制）；`rig.js` 的 `COMBOS`，以及 `ANIMS` 的 `combo_<形態>`、`quick_<形態>`；`src/game/IdleScene.js` 的 `RANGE`、`FINISH_REACH`（掛機時打多遠）；大型特效在 `stagefx.js` 加同名方法並加進 `STAGE_STYLES` |
 
-設定頁的「XX 套裝（測試用）→ 拿到」按鈕、`/tools/rig.html` 的服裝選單，都會自動列出 `SETS` 裡的每一套，不用另外加。
+設定頁的「取得全部裝備」測試按鈕會自動包含 `GEAR` 裡的每一款；`/tools/rig.html` 的服裝選單會自動列出 `SETS` 裡的每一套，不用另外加。
 
 ## 3. 資料與數值
 
@@ -110,4 +110,4 @@ node .claude/skills/gear-design/scripts/fps.mjs --set <套裝>
    ```
    用 Artifact 發佈 `<scratchpad>/preview/adventurer.html`（`root` 設成那個資料夾、`url` 用上面的網址），`files` 列出腳本印出的 assets；上一版的 assets 檔名不同，在 `files` 裡設成 `null` 刪掉。
 4. 做一張展示圖（男女、正面側面、連招的幾個關鍵瞬間），用 SendUserFile 傳給使用者。
-5. 用中文回報：做了什麼（外觀、連招、套裝效果、數值）、怎麼在試玩連結看到（設定 → 套裝 → 拿到）、還沒做或要使用者決定的事。
+5. 用中文回報：做了什麼（外觀、連招、套裝效果、數值）、怎麼在試玩連結看到（設定 → 取得全部裝備，再到背包穿上）、還沒做或要使用者決定的事。

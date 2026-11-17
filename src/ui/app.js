@@ -96,7 +96,8 @@ export function startUI(bus) {
       <div class="card-list">
         <div class="row spread"><span>外觀（性別與髮色）</span><button class="btn ghost small" data-act="look">更換外觀</button></div>
         <div class="row spread"><span>快轉 1 小時<small class="hint">　測試用，馬上看到離線收穫</small></span><button class="btn ghost small" data-act="ff" id="ffBtn">快轉</button></div>
-        ${Object.entries(D.SETS).map(([k, st]) => `<div class="row spread"><span>${esc(st.n)}<small class="hint">　測試用，馬上拿到一整套傳說品質並穿上</small></span><button class="btn ghost small" data-act="give-set" data-k="${k}">拿到</button></div>`).join('')}
+        <div class="row spread"><span>取得全部裝備<small class="hint">　測試用，每一款各拿一件傳說品質放進背包</small></span><button class="btn ghost small" data-act="give-all">取得</button></div>
+        <div class="row spread"><span>刪除全部裝備<small class="hint">　測試用，清空背包和身上的裝備</small></span><button class="btn ghost small" data-act="clear-gear-ask">刪除</button></div>
         <div class="row spread"><span>重新開始<small class="hint">　刪除角色、裝備和進度</small></span><button class="btn ghost small" data-act="reset-ask" id="resetBtn">重新開始</button></div>
       </div>
       <p class="hint">Phaser 版原型・進度存在這個瀏覽器。</p>`;
@@ -555,7 +556,9 @@ export function startUI(bus) {
       case 'train': s.trainDevice = k; break;
       case 'area': if (!W.setArea(s, +i)) toast(needsText(+i)); break;
       case 'forge-up': if (W.upgradeForge(s)) toast(`鍛造室升級為${D.FORGE[s.forge.level].n}`); break;
-      case 'give-set': { const got = W.giveSet(s, k); toast(`穿上${got.map((it) => it.name).join('、')}`); break; }
+      case 'give-all': { const r = W.giveAllGear(s); toast(`拿到 ${r.got} 件裝備${r.left ? `，背包滿了，還有 ${r.left} 件沒放進去` : ''}`); break; }
+      case 'clear-gear-ask': confirmBox('刪除全部裝備？', '背包和身上的裝備都會刪除，無法復原。', 'clear-gear', '全部刪除'); return;
+      case 'clear-gear': { const n = W.clearGear(s); $('#modal').hidden = true; $('#modal').innerHTML = ''; toast(`刪除了 ${n} 件裝備`); break; }
       case 'claim': { const q = W.claimQuest(s, id, now); if (q) toast(`完成委託：金幣 +${fmt(q.reward.gold)}、聲望 +${q.reward.rep}`); break; }
       case 'equip': W.equip(s, id, slotFor(s.bag.find((x) => x.id === id))); break;
       case 'unequip': if (!W.unequip(s, k)) toast('背包滿了，先賣掉一些裝備'); break;

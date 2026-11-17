@@ -309,6 +309,25 @@ function giveSet(s, setKey, rarity = 4) {
   s.seed = rng.state;
   return got;
 }
+// 測試用：每一款裝備各拿一件（傳說品質；限定階級的用那一階，其餘用 T5），放進背包，背包滿了就停。回傳拿到幾件、沒放進去幾件
+function giveAllGear(s, rarity = 4) {
+  const rng = R().make(s.seed);
+  let got = 0, left = 0;
+  for (const g of D.GEAR) {
+    if (s.bag.length >= D.BAG_CAP) { left++; continue; }
+    s.bag.push(I().createItem(rng, { def: g.id, tier: g.tier || 5, rarity, seq: s.itemSeq++ }));
+    got++;
+  }
+  s.seed = rng.state;
+  return { got, left };
+}
+// 測試用：刪除背包和身上的全部裝備。回傳刪掉幾件
+function clearGear(s) {
+  const n = s.bag.length + Object.values(s.equip).filter(Boolean).length;
+  s.bag = [];
+  for (const k of Object.keys(s.equip)) s.equip[k] = null;
+  return n;
+}
 function unequip(s, slot) {
   if (!s.equip[slot] || s.bag.length >= D.BAG_CAP) return false;
   s.bag.push(s.equip[slot]); s.equip[slot] = null; return true;
@@ -441,7 +460,7 @@ function hunt(s, areaIdx, now) {
 
 export const world = {
   expNeed, matKey, matTier, marketBonus, marketSpeed, newGame, hero, settle, catchUp, setLocation, setArea, unlockDevice, upgradeDevice, upgradeForge,
-  equip, unequip, giveSet, sell, sellBelow, rankOf, rank, areaNeeds, areaOpen, topArea, addRep,
+  equip, unequip, giveSet, giveAllGear, clearGear, sell, sellBelow, rankOf, rank, areaNeeds, areaOpen, topArea, addRep,
   dayId, dayResetAt, refreshQuests, questText, questProgress, questReady, claimQuest, refreshTickets, hunt, bossEnemy,
   addLog, gainExp, HUNT_MAX, HUNT_REFILL_MS,
 };
