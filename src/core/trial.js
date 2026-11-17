@@ -30,7 +30,7 @@ function enemy(week, floor) {
   const rng = RNG.make(RNG.hash('trial', week, floor));
   const area = D.AREAS[Math.min(D.AREAS.length - 1, Math.floor((floor - 1) / 6))];
   const boss = floor % 5 === 0;
-  const mon = boss ? { ...area.boss, m: { hp: 2.6, atk: 1.25, crit: 5 } } : rng.pick(area.monsters);
+  const mon = boss ? { ...area.bosses[D.STAGES - 1], m: { hp: 2.6, atk: 1.25, crit: 5 } } : rng.pick(area.monsters);
   const lv = Math.round(2 + floor * 1.3);
   const m = boss ? mon.m : { ...mon.m, hp: (mon.m.hp || 1) * 1.3 };
   return { name: (boss ? '試煉守護者・' : '') + mon.n, shape: mon.shape, c: mon.c, boss, lv,
@@ -66,9 +66,10 @@ function fightFloor(s, now) {
       const gold = 25 * run.floor + (foe.boss ? 150 * run.floor : 0);
       s.gold += gold;
       out.rewards = { gold };
-      if (foe.boss) {
-        const tier = Math.min(5, 1 + Math.floor(run.floor / 8));
-        const key = world.matKey(tier);
+      if (foe.boss) {   // 守護者關卡：那張地圖的一種魔物素材（階級隨關卡提高，不超出那張地圖掉得到的範圍）
+        const ai = Math.min(D.AREAS.length - 1, Math.floor((run.floor - 1) / 6)), a = D.AREAS[ai];
+        const tier = Math.max(a.tier, Math.min(a.tier + D.STAGES - 1, 1 + Math.floor(run.floor / 8)));
+        const key = world.matKey(RNG.make(RNG.hash('trialmat', run.week, run.floor)).pick(a.monsters).mat.id, tier);
         s.mats[key] = (s.mats[key] || 0) + 5;
         out.rewards.mat = { key, n: 5 };
       }

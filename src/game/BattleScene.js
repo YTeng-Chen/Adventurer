@@ -20,7 +20,7 @@ export class BattleScene extends Phaser.Scene {
     const { foe, r, equip, look } = this.payload;
     this.r = r;
 
-    this.scenery = new Scenery(this, this.payload.scene || 0);   // 狩獵用那張地圖的場景，試煉照關卡輪流
+    this.scenery = new Scenery(this, this.payload.scene || 0);   // 頭目用那張地圖的場景，試煉照關卡輪流
     this.add.rectangle(0, 0, W, 64, 0x0a0d13, 0.35).setOrigin(0, 0).setDepth(3);   // 血條後面壓暗一點，比較好讀
 
     this.hero = new RigHero(this, HERO_X, GROUND);

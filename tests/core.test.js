@@ -80,19 +80,39 @@ test('鍛鍊室有上限', () => {
   assert.equal(s.training.atk, D.DEVICES[0].cap * 2);
 });
 
-test('鍛造用材料決定階級、可以指定款式，材料不足就不鍛造', () => {
+test('鍛造：照配方用同一階的素材，同一類可以互相代替；可以指定款式和階級，素材不足就不鍛造', () => {
   const s = W.newGame(NOW, 1);
   s.location = 'forge';
   s.forge.type = 'weapon';
-  s.forge.def = 'staff';
+  s.forge.def = 'staff';   // 法杖：靈材 3、硬材 1
   W.settle(s, 20, NOW);
   assert.equal(s.bag.length, 0);
-  s.mats[W.matKey(2)] = 8;
+  assert.match(s.forge.status, /法杖要 靈材 3、硬材 1/);
+  // T2 的靈材有兩種（發光孢子、魔晶碎片）可以混著用；T1 另外也湊得出一把
+  s.mats[W.matKey('spore', 2)] = 4; s.mats[W.matKey('crystal', 2)] = 2; s.mats[W.matKey('heartwood', 2)] = 2;
+  s.mats[W.matKey('goo', 1)] = 3; s.mats[W.matKey('shell', 1)] = 1;
   W.settle(s, D.FORGE[1].ticks * 2, NOW);
   assert.equal(s.bag.length, 2);
-  assert.ok(s.bag.every((it) => it.def === 'staff' && it.form === 'staff' && it.tier === 2 && it.name.endsWith('森林法杖')));
-  assert.equal(s.mats[W.matKey(2)], 0);
-  assert.equal(s.counters.crafts, 2);
+  assert.ok(s.bag.every((it) => it.def === 'staff' && it.form === 'staff' && it.tier === 2 && it.name.endsWith('森林法杖')), '自動先用最高階');
+  assert.equal((s.mats[W.matKey('spore', 2)] || 0) + (s.mats[W.matKey('crystal', 2)] || 0) + (s.mats[W.matKey('heartwood', 2)] || 0), 0);
+  assert.equal(s.mats[W.matKey('goo', 1)], 3, 'T1 沒動到');
+  s.forge.tier = 1;
+  W.settle(s, D.FORGE[1].ticks, NOW);
+  assert.equal(s.bag.length, 3);
+  assert.equal(s.bag[2].tier, 1);
+  assert.equal(s.mats[W.matKey('goo', 1)] + s.mats[W.matKey('shell', 1)], 0);
+  assert.equal(s.counters.crafts, 3);
+});
+
+test('鍛造加入頭目素材：每件多用一個同階的頭目素材，沒有就照常鍛造', () => {
+  const s = W.newGame(NOW, 1);
+  s.location = 'forge'; s.forge.type = 'acc'; s.forge.boost = true;
+  s.mats[W.matKey('goo', 1)] = 40; s.mats[W.matKey('shell', 1)] = 10; s.mats[W.matKey('wolfhide', 1)] = 10;
+  s.mats[W.matKey('queenshell', 1)] = 2;
+  W.settle(s, D.FORGE[1].ticks * 3, NOW);
+  assert.equal(s.bag.length, 3);
+  assert.equal(s.mats[W.matKey('queenshell', 1)], 0);
+  assert.equal(W.boostKey(s, 1), null);
 });
 
 test('裝備樣式表：id 不重複、部位正確、武器的形態都有職業', () => {
@@ -106,7 +126,7 @@ test('裝備樣式表：id 不重複、部位正確、武器的形態都有職�
   for (const t of D.ITEM_TYPES) assert.ok(I.defsOf(t).length > 0, t);
 });
 
-test('舊存檔（有流派）：材料併成每階一種，裝備對應到樣式', async () => {
+test('舊存檔（有流派）：材料併成每階一種再分給那一階的魔物素材，裝備對應到樣式', async () => {
   const { save } = await import('../src/core/save.js');
   const s = W.newGame(NOW, 1);
   const old = JSON.parse(JSON.stringify(s));
@@ -121,8 +141,9 @@ test('舊存檔（有流派）：材料併成每階一種，裝備對應到樣�
     { id: 'd', name: '冥骨耳飾', type: 'acc', tag: null, tier: 4, rarity: 0, base: { crit: 6 }, affixes: [], effect: null },
   ];
   const m = save.migrate(old, NOW);
-  assert.equal(m.v, 2);
-  assert.deepEqual(m.mats, { [W.matKey(1)]: 7, [W.matKey(3)]: 2 });
+  assert.equal(m.v, 3);
+  // T1 有 7 個、T3 有 2 個：都分給綠風草原的三種魔物素材
+  assert.deepEqual(m.mats, { 'goo.1': 3, 'wolfhide.1': 2, 'shell.1': 2, 'goo.3': 1, 'wolfhide.3': 1 });
   assert.ok(m.guild.quests.every((q) => q.kind === 'kill' || q.kind === 'deliver'), '舊任務換成每日委託');
   assert.equal(m.forge.def, 'auto');
   assert.equal(m.forge.tag, undefined);
@@ -136,19 +157,21 @@ test('舊存檔（有流派）：材料併成每階一種，裝備對應到樣�
   assert.equal(m.bag[2].look, 'earring');
 });
 
-test('市集只賣超過保留數量的材料，公會交付委託要的會留著', () => {
+test('市集只賣超過保留數量的素材，公會交付委託要的會留著，頭目素材不賣', () => {
   const s = W.newGame(NOW, 1);
   s.location = 'market';
   s.guild.quests = [];
-  s.mats[W.matKey(1)] = 20;
+  const k = W.matKey('goo', 1), boss = W.matKey('queenshell', 1);
+  s.mats[k] = 20; s.mats[boss] = 5;
   W.settle(s, 50, NOW);
-  assert.equal(s.mats[W.matKey(1)], s.market.keep);
+  assert.equal(s.mats[k], s.market.keep);
+  assert.equal(s.mats[boss], 5);
   assert.ok(s.gold > 0);
   assert.equal(s.market.rep, 20 - s.market.keep);
-  s.guild.quests = [{ id: 'qd', kind: 'deliver', tier: 1, need: 15, reward: { gold: 1, rep: 1 }, done: false }];
-  s.mats[W.matKey(1)] = 30;
+  s.guild.quests = [{ id: 'qd', kind: 'deliver', mat: k, need: 15, reward: { gold: 1, rep: 1 }, done: false }];
+  s.mats[k] = 30;
   W.settle(s, 50, NOW);
-  assert.equal(s.mats[W.matKey(1)], 15);
+  assert.equal(s.mats[k], 15);
 });
 
 test('公會：每天刷新委託（擊敗指定魔物、交付材料），完成拿金幣與聲望，一天只能領一次', () => {
@@ -160,7 +183,7 @@ test('公會：每天刷新委託（擊敗指定魔物、交付材料），完�
 
   // 擊敗指定魔物：只算接到委託之後、那一種魔物
   const kill = { id: 'qk', kind: 'kill', area: 0, mon: 1, need: 5, base: s.monKills['0-1'] || 0, reward: { gold: 80, rep: 40 }, done: false };
-  const deliver = { id: 'qd', kind: 'deliver', tier: 1, need: 12, reward: { gold: 80, rep: 80 }, done: false };
+  const deliver = { id: 'qd', kind: 'deliver', mat: W.matKey('wolfhide', 1), need: 12, reward: { gold: 80, rep: 80 }, done: false };
   s.guild.quests = [kill, deliver];
   assert.equal(W.questText(kill), '在綠風草原擊敗草原狼');
   assert.equal(W.claimQuest(s, 'qk', NOW), null);
@@ -173,11 +196,11 @@ test('公會：每天刷新委託（擊敗指定魔物、交付材料），完�
   assert.equal(s.guild.rep, 40);
   assert.equal(W.claimQuest(s, 'qk', NOW), null, '一天只能領一次');
 
-  // 交付：材料夠才能交，交了會扣掉
-  s.mats[W.matKey(1)] = 20;
-  assert.equal(W.questText(deliver), '交付獸牙');
+  // 交付：素材夠才能交，交了會扣掉
+  s.mats[W.matKey('wolfhide', 1)] = 20;
+  assert.equal(W.questText(deliver), '交付狼皮 T1');
   assert.ok(W.claimQuest(s, 'qd', NOW));
-  assert.equal(s.mats[W.matKey(1)], 8);
+  assert.equal(s.mats[W.matKey('wolfhide', 1)], 8);
   assert.match(s.log[0].msg, /晉升為初級冒險者/);
 
   // 隔天換一批新的
@@ -186,22 +209,26 @@ test('公會：每天刷新委託（擊敗指定魔物、交付材料），完�
   assert.ok(W.dayResetAt(NOW) > NOW && W.dayResetAt(NOW) - NOW <= 86400e3);
 });
 
-test('委託只出在能去的地圖', () => {
+test('委託只出在能去的段', () => {
   const s = W.newGame(NOW, 1);
   for (let d = 1; d <= 20; d++) {
     W.refreshQuests(s, NOW + d * 86400e3);
     assert.equal(s.guild.quests.length, D.GUILD.quests);
-    assert.ok(s.guild.quests.every((q) => (q.kind === 'kill' ? q.area === 0 : q.tier === 1)));
-    const keys = s.guild.quests.map((q) => (q.kind === 'kill' ? `k${q.mon}` : 'd'));
+    assert.ok(s.guild.quests.every((q) => (q.kind === 'kill' ? q.area === 0 : W.matDef(q.mat).area === 0 && W.matTier(q.mat) === 1)));
+    const keys = s.guild.quests.map((q) => (q.kind === 'kill' ? `k${q.mon}` : q.mat));
     assert.equal(new Set(keys).size, keys.length, '同一天不重複');
   }
-  s.guild.rep = D.RANKS[2].rep; s.bossKills = { 0: 1, 1: 1 };
+  // 中級冒險者、打倒草原前兩個頭目：草原三段、森林和礦坑第一段、墓穴和火山第一段都能去
+  s.guild.rep = D.RANKS[2].rep; s.bossKills = { '0-0': 1, '0-1': 1 };
   const areas = new Set();
   for (let d = 21; d <= 60; d++) {
     W.refreshQuests(s, NOW + d * 86400e3);
-    for (const q of s.guild.quests) if (q.kind === 'kill') areas.add(q.area);
+    for (const q of s.guild.quests) {
+      if (q.kind === 'kill') areas.add(q.area);
+      else { const m = W.matDef(q.mat); assert.ok(W.stageOpen(s, m.area, W.matTier(q.mat) - D.AREAS[m.area].tier), q.mat); }
+    }
   }
-  assert.ok(areas.has(2) && [...areas].every((a) => a <= 2));
+  assert.ok(areas.has(3) || areas.has(4));
 });
 
 test('裝備穿脫：替換下來的回到背包', () => {
@@ -250,21 +277,41 @@ test('祝福會改變戰鬥行為：連鎖只在有暴擊加成時出現', () =>
   assert.ok(storm.log.filter((l) => l.kind === 'chain').length > 0);
 });
 
-test('魔物狩獵：消耗狩獵券，首次擊敗金幣比較多', () => {
+test('頭目：還沒打倒過可以免費挑戰，打倒過之後重打要狩獵券；首次擊敗金幣比較多', () => {
   const s = W.newGame(NOW, 1);
   s.hero.level = 25;
-  const out = W.hunt(s, 0, NOW);
+  const out = W.hunt(s, 0, 0, NOW);
   assert.ok(out.r.win);
-  assert.equal(s.bossKills[0], 1);
+  assert.equal(s.bossKills['0-0'], 1);
+  assert.equal(s.hunt.tickets, W.HUNT_MAX, '第一次不用狩獵券');
+  assert.equal(out.rewards.mats[W.matKey('queenshell', 1)], 3, '掉頭目素材');
+  assert.ok(Object.keys(out.rewards.mats).length >= 2, '也掉這張地圖的魔物素材');
+  assert.equal(s.bag.length, 0, '不掉裝備');
+  const again = W.hunt(s, 0, 0, NOW);
   assert.equal(s.hunt.tickets, W.HUNT_MAX - 1);
-  const again = W.hunt(s, 0, NOW);
   assert.ok(again.rewards.gold < out.rewards.gold);
-  W.hunt(s, 0, NOW);
-  assert.equal(W.hunt(s, 0, NOW), null);
+  W.hunt(s, 0, 0, NOW); W.hunt(s, 0, 0, NOW);
+  assert.equal(s.hunt.tickets, 0);
+  assert.equal(W.hunt(s, 0, 0, NOW), null);
   W.refreshTickets(s, NOW + W.HUNT_REFILL_MS);
   assert.equal(s.hunt.tickets, 1);
 });
 
+test('魔物不掉裝備，掉牠自己的素材；等級跟著主角但不超出那一段', () => {
+  // 主角 40 級在草原第一段（Lv1–10）：魔物都是 10 級，每隻經驗 6 + 3×10
+  const s = W.newGame(NOW, 1);
+  s.hero.level = 40;
+  const sum = W.settle(s, 300, NOW);
+  assert.equal(s.bag.length, 0);
+  assert.deepEqual(Object.keys(s.mats).sort(), ['goo.1', 'shell.1', 'wolfhide.1']);
+  assert.ok(sum.kills > 0);
+  assert.equal(sum.exp, sum.kills * 36);
+  // 主角 1 級：魔物 1–2 級
+  const low = W.newGame(NOW, 2);
+  low.hero.exp = -1e9;   // 不讓它升級，方便算
+  const s2 = W.settle(low, 50, NOW);
+  assert.ok(s2.exp >= s2.kills * 9 && s2.exp <= s2.kills * 12);
+});
 test('新遊戲還沒有外觀，舊存檔也會補上空的外觀欄位（第一次進遊戲時讓玩家選）', async () => {
   const { save } = await import('../src/core/save.js');
   const s = W.newGame(NOW, 1);
@@ -286,66 +333,83 @@ test('武器有形態（決定攻擊動作），其他部位沒有', () => {
   assert.equal(I.createItem(rng, { def: 'huntbow', tier: 1, rarity: 0, seq: 100 }).form, 'bow');
 });
 
-test('地圖和狩獵要兩個條件：冒險者階級夠、打倒前一張地圖的頭目', () => {
-  const s = W.newGame(NOW, 1);
-  s.hero.level = 40;
-  assert.equal(D.RANKS[W.rank(s)].n, '新手');
-  assert.ok(W.areaOpen(s, 0));
-  assert.deepEqual(W.areaNeeds(s, 1), ['初級冒險者', '擊敗史萊姆王']);
-  assert.equal(W.setArea(s, 1), false);
-  assert.equal(W.hunt(s, 1, NOW), null);
-  assert.equal(s.hunt.tickets, W.HUNT_MAX, '還不能去就不會扣狩獵券');
-
-  // 先打倒頭目：階級還不夠，告訴玩家還差什麼
-  const out = W.hunt(s, 0, NOW);
-  assert.ok(out.r.win);
-  assert.equal(out.rewards.unlocked, null);
-  assert.deepEqual(out.rewards.next, { area: '幽暗森林', needs: ['初級冒險者'] });
-  assert.match(s.log[0].msg, /達到初級冒險者就能前往「幽暗森林」/);
-  assert.equal(W.areaOpen(s, 1), false);
-
-  // 再晉升：兩個條件都達成
-  W.addRep(s, D.RANKS[1].rep, NOW);
-  assert.match(s.log[0].msg, /晉升為初級冒險者，可以前往「幽暗森林」/);
-  assert.ok(W.setArea(s, 1));
-  assert.equal(W.topArea(s), 1);
-  assert.ok(W.hunt(s, 1, NOW));
-});
-
-test('階級先到、後打倒頭目：打倒時解鎖下一張地圖', () => {
-  const s = W.newGame(NOW, 1);
-  s.hero.level = 40;
-  W.addRep(s, D.RANKS[1].rep, NOW);
-  assert.equal(s.log[0].msg, '晉升為初級冒險者');
-  assert.deepEqual(W.areaNeeds(s, 1), ['擊敗史萊姆王']);
-  const out = W.hunt(s, 0, NOW);
-  assert.equal(out.rewards.unlocked, '幽暗森林');
-  assert.match(s.log[0].msg, /首次擊敗史萊姆王，可以前往「幽暗森林」/);
-});
-
-test('高級地圖掉高階材料，裝備不限階級都能穿', () => {
+test('地圖的段：冒險者階級要夠、要打倒前一段的頭目；其他地圖的第一段要先打倒前一個等級的頭目', () => {
   const s = W.newGame(NOW, 1);
   s.hero.level = 60;
-  s.guild.rep = D.RANKS[D.AREAS[4].rank].rep;
-  s.bossKills = { 0: 1, 1: 1, 2: 1, 3: 1 };
+  assert.equal(D.RANKS[W.rank(s)].n, '新手');
+  assert.ok(W.stageOpen(s, 0, 0));
+  assert.deepEqual(W.stageNeeds(s, 0, 1), ['初級冒險者', '擊敗甲蟲女王']);
+  assert.deepEqual(W.areaNeeds(s, 1), ['初級冒險者', '擊敗任一隻 Lv10 的頭目']);
+  assert.equal(W.setStage(s, 1), false);
+  assert.equal(W.setArea(s, 1), false);
+  assert.equal(W.hunt(s, 0, 1, NOW), null);
+  assert.equal(s.hunt.tickets, W.HUNT_MAX, '還不能去就不會扣狩獵券');
+
+  // 先打倒第一段的頭目：階級還不夠，告訴玩家還差什麼
+  const out = W.hunt(s, 0, 0, NOW);
+  assert.ok(out.r.win);
+  assert.deepEqual(out.rewards.unlocked, []);
+  assert.deepEqual(out.rewards.next, { stage: '綠風草原 Lv11–20', needs: ['初級冒險者'] });
+  assert.match(s.log[0].msg, /達到初級冒險者就能前往「綠風草原 Lv11–20」/);
+  assert.equal(W.stageOpen(s, 0, 1), false);
+
+  // 再晉升：草原第二段、森林、礦坑的第一段一起開放
+  W.addRep(s, D.RANKS[1].rep, NOW);
+  assert.match(s.log[0].msg, /晉升為初級冒險者，可以前往「綠風草原 Lv11–20」、「幽暗森林 Lv11–20」、「鐵鏽礦坑 Lv11–20」/);
+  assert.ok(W.setArea(s, 1));
+  assert.equal(s.stage, 0);
+  assert.ok(W.setArea(s, 0));
+  assert.equal(s.stage, 1, '換地圖時到那張地圖能去、等級也夠的最後一段');
+  s.hero.level = 5;
+  assert.ok(W.setArea(s, 0));
+  assert.equal(s.stage, 0, '等級不夠第二段（11 級起）：先去第一段');
+  s.hero.level = 60;
+  assert.ok(W.setStage(s, 0));
+  assert.equal(W.bestStage(s).tier, 2);
+});
+
+test('階級先到、後打倒頭目：打倒時開放下一段和其他地圖', () => {
+  const s = W.newGame(NOW, 1);
+  s.hero.level = 60;
+  W.addRep(s, D.RANKS[1].rep, NOW);
+  assert.equal(s.log[0].msg, '晉升為初級冒險者');
+  assert.deepEqual(W.stageNeeds(s, 0, 1), ['擊敗甲蟲女王']);
+  const out = W.hunt(s, 0, 0, NOW);
+  assert.deepEqual(out.rewards.unlocked, ['「綠風草原 Lv11–20」', '「幽暗森林 Lv11–20」', '「鐵鏽礦坑 Lv11–20」']);
+  assert.match(s.log[0].msg, /首次擊敗甲蟲女王，可以前往「綠風草原 Lv11–20」/);
+});
+
+test('高等級的段掉高階素材，裝備不限階級都能穿', () => {
+  const s = W.newGame(NOW, 1);
+  s.hero.level = 60;
+  s.guild.rep = D.RANKS[4].rep;
+  s.bossKills = { '0-0': 1, '0-1': 1, '4-0': 1, '4-1': 1 };
   assert.ok(W.setArea(s, 4));
+  assert.equal(s.stage, 2);
   W.settle(s, 200, NOW);
-  assert.ok(s.mats[W.matKey(5)] > 0);
+  assert.ok(['salamander', 'lavarock', 'flame'].some((id) => s.mats[W.matKey(id, 5)] > 0));
+  assert.equal(s.bag.length, 0);
   const it = I.createItem(R.make(2), { def: 'staff', tier: 5, rarity: 0, seq: 500 });
   const fresh = W.newGame(NOW, 1);
   fresh.bag.push(it);
   assert.ok(W.equip(fresh, it.id), '新手也能穿 T5');
 });
 
-test('舊存檔：打頭目解鎖過的地圖，聲望補到去得了的階級', async () => {
+test('舊存檔：打頭目解鎖過的地圖，聲望補到去得了的階級；換成新的頭目和素材', async () => {
   const { save } = await import('../src/core/save.js');
   const old = JSON.parse(JSON.stringify(W.newGame(NOW, 1)));
-  old.unlockedArea = 2; old.guild.rep = 5; old.bossKills = { 0: 2 };
+  old.v = 2; old.unlockedArea = 2; old.guild.rep = 5; old.bossKills = { 0: 2 };
+  old.mats = { m1: 5, m4: 3 }; delete old.stage;
   const m = save.migrate(old, NOW);
   assert.equal(m.unlockedArea, undefined);
-  assert.deepEqual(m.bossKills, { 0: 2, 1: 1 });
-  assert.ok(W.areaOpen(m, 2));
-  assert.equal(W.areaOpen(m, 3), false);
+  assert.equal(m.v, 3);
+  // 以前能去鐵鏽礦坑（T3）：現在素材 T2 以下的頭目都算打倒過，T3 的段都能去，T4 還不行
+  assert.deepEqual(m.bossKills, { '0-0': 1, '0-1': 1, '1-0': 1, '2-0': 1 });
+  assert.ok(W.stageOpen(m, 2, 1));
+  assert.equal(W.stageOpen(m, 2, 2), false);
+  assert.ok(W.stageOpen(m, 3, 0));
+  assert.deepEqual(m.mats, { 'goo.1': 2, 'wolfhide.1': 2, 'shell.1': 1, 'shadowhide.4': 1, 'heartwood.4': 1, 'spore.4': 1 });
+  assert.equal(m.stage, 0);
 });
 
 test('炎龍套裝：只在 T5 出現，名稱不加階級前綴，大劍是劍士', () => {
@@ -385,18 +449,25 @@ test('套裝效果：2 件、4 件各有加成', () => {
   assert.equal(base.sets.length, 0);
 });
 
-test('鍛造指定只在 T5 的款式：只用 T5 材料', () => {
+test('炎龍套裝要用炎龍鱗，只能用 T5 素材；沒指定款式時不會用掉頭目素材', () => {
   const s = W.newGame(NOW, 1);
   s.location = 'forge'; s.forge.type = 'weapon'; s.forge.def = 'dragonblade';
-  s.mats[W.matKey(3)] = 20;
+  s.mats[W.matKey('lavarock', 5)] = 20; s.mats[W.matKey('salamander', 5)] = 20;
+  s.mats[W.matKey('ironshell', 3)] = 20; s.mats[W.matKey('goblinhide', 3)] = 20;
   W.settle(s, D.FORGE[1].ticks * 2, NOW);
   assert.equal(s.bag.length, 0);
-  assert.match(s.forge.status, /T5/);
-  s.mats[W.matKey(5)] = 4;
+  assert.match(s.forge.status, /炎龍鱗 2/);
+  s.mats[W.matKey('dragonscale', 5)] = 2;
   W.settle(s, D.FORGE[1].ticks, NOW);
   assert.equal(s.bag.length, 1);
-  assert.equal(s.bag[0].name.endsWith('炎龍大劍'), true);
-  assert.equal(s.mats[W.matKey(3)], 20);
+  assert.equal(s.bag[0].name, '炎龍大劍');
+  assert.equal(s.mats[W.matKey('dragonscale', 5)], 0);
+  assert.equal(s.mats[W.matKey('ironshell', 3)], 20, '沒用到 T3 素材');
+  s.forge.def = 'auto'; s.mats[W.matKey('dragonscale', 5)] = 5;
+  W.settle(s, D.FORGE[1].ticks * 3, NOW);
+  assert.equal(s.bag.length, 4);
+  assert.ok(s.bag.slice(1).every((it) => !it.set));
+  assert.equal(s.mats[W.matKey('dragonscale', 5)], 5);
 });
 
 test('測試用：直接拿到整套炎龍套裝並穿上，換下來的放回背包', () => {

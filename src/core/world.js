@@ -1,4 +1,4 @@
-// 遊戲狀態與掛機結算：鍛鍊室、戰鬥地圖、鍛造室、市集，以及魔物狩獵、公會的每日委託、冒險者階級。
+// 遊戲狀態與掛機結算：鍛鍊室、戰鬥地圖（含頭目挑戰）、鍛造室、市集，以及公會的每日委託、冒險者階級。
 // 全部是純函式（改動傳進來的 state），不碰畫面，方便測試與離線結算。
 import { data } from './data.js';
 import { rng as RNG } from './rng.js';
@@ -10,21 +10,27 @@ const R = () => RNG;
 const I = () => items;
 
 const expNeed = (lv) => Math.floor(50 * Math.pow(lv, 2.2));
-const matKey = (tier) => `m${tier}`;          // 材料在 state.mats 裡的鍵：每個階級一種
-const matTier = (key) => +key.slice(1);
+// 素材在 state.mats 裡的鍵：「素材 id.階級」，例如 'goo.2' 是 T2 的史萊姆黏液
+const matKey = (id, tier) => `${id}.${tier}`;
+const matId = (key) => key.split('.')[0];
+const matTier = (key) => +key.split('.')[1];
+const matDef = (key) => D.MATS[matId(key)];
+const isBossMat = (key) => !!matDef(key) && matDef(key).cat === 'boss';
+function matName(key) { const m = matDef(key); return m ? `${m.n} T${matTier(key)}` : key; }
 const HUNT_MAX = 3, HUNT_REFILL_MS = 3600e3;
 
 function newGame(now, seed = (now ^ 0x5eed) >>> 0) {
   const s = {
-    v: 2, seed, createdAt: now, lastTick: now,
+    v: 3, seed, createdAt: now, lastTick: now,
     hero: { level: 1, exp: 0 },
     gold: 0,
     training: Object.fromEntries(D.DEVICES.map((d) => [d.stat, 0])),
     devices: Object.fromEntries(D.DEVICES.map((d) => [d.k, d.unlock === 0 ? 1 : 0])),
     trainDevice: 'dummy',
     location: 'battle',
-    areaIdx: 0, bossKills: {},
-    forge: { level: 1, type: 'auto', def: 'auto', progress: 0, status: '' },
+    areaIdx: 0, stage: 0,   // 在哪一張地圖的第幾段掛機（段從 0 算）
+    bossKills: {},          // 各頭目打倒幾次，鍵是「地圖-段」，例如 '0-1' 是草原狼王
+    forge: { level: 1, type: 'auto', def: 'auto', tier: 'auto', boost: false, progress: 0, status: '' },
     market: { rep: 0, keep: 8 },
     guild: { rep: 0, quests: [], qSeq: 0, day: null },   // 每日委託：day 是委託所屬的那一天（dayId）
     counters: { kills: 0, crafts: 0, sold: 0, trainTicks: 0, bossKills: 0 },
@@ -92,16 +98,20 @@ function tickTraining(s, rng, sum) {
   return gainExp(s, 1, sum);
 }
 
-function battleEnemy(rng, area) {
+// 這一段的魔物：等級跟著主角，但不會超出這一段的範圍
+function battleEnemy(s, rng) {
+  const area = D.AREAS[s.areaIdx], st = D.stageOf(s.areaIdx, s.stage);
   const mi = rng.int(0, area.monsters.length - 1), mon = area.monsters[mi];
-  const lv = area.lv + rng.int(0, 2);
-  return { mon, mi, lv, enemy: { name: mon.n, stats: combat.enemyStats(lv, mon.m, mon.magic) } };
+  const lv = Math.max(st.lo, Math.min(st.hi, s.hero.level - 1 + rng.int(0, 2)));
+  return { mon, mi, lv, st, enemy: { name: mon.n, stats: combat.enemyStats(lv, mon.m, mon.magic) } };
 }
 
 function tickBattle(s, rng, sum, h) {
-  if (!areaOpen(s, s.areaIdx)) s.areaIdx = topArea(s);
-  const area = D.AREAS[s.areaIdx];
-  const { mi, lv, enemy } = battleEnemy(rng, area);
+  if (!stageOpen(s, s.areaIdx, s.stage)) {
+    if (!areaOpen(s, s.areaIdx)) s.areaIdx = bestStage(s).area;
+    s.stage = fitStage(s, s.areaIdx);
+  }
+  const { mon, mi, lv, st, enemy } = battleEnemy(s, rng);
   const r = combat.fight(rng, h, enemy, { maxActions: 40 });
   if (!r.win) { sum.losses++; return 0; }
   sum.kills++;
@@ -110,47 +120,94 @@ function tickBattle(s, rng, sum, h) {
   s.monKills[mk] = (s.monKills[mk] || 0) + 1;
   const gold = 1 + Math.round(lv * 0.6);
   s.gold += gold; sum.gold += gold;
-  if (rng.chance(0.6)) addMat(s, matKey(area.tier), rng.chance(0.15) ? 2 : 1, sum);
-  // 少量機率直接掉落裝備
-  if (rng.chance(0.012) && s.bag.length < D.BAG_CAP) {
-    const it = I().createItem(rng, { type: rng.pick(D.ITEM_TYPES), tier: area.tier,
-      rarity: I().rollRarity(rng, D.FORGE[2].odds), seq: s.itemSeq++ });
-    s.bag.push(it); sum.items.push(it);
-  }
+  // 掉落這隻魔物的素材，階級看在哪一段打到的（魔物不再掉裝備，裝備只能鍛造）
+  if (rng.chance(0.6)) addMat(s, matKey(mon.mat.id, st.tier), rng.chance(0.15) ? 2 : 1, sum);
   return gainExp(s, 6 + 3 * lv, sum);
 }
 
-// 鍛造：用身上最高階、數量夠的材料
-function pickTier(s) {
-  for (let tier = 5; tier >= 1; tier--) if ((s.mats[matKey(tier)] || 0) >= D.CRAFT_COST) return tier;
-  return 0;
+// ---------- 鍛造 ----------
+// 配方（gear.js 的 cost）在 tier 階要用哪些素材：{ 素材鍵: 數量 }，湊不齊回傳 null。
+// 同一類的素材先用數量最多的；頭目素材用它自己的階級
+function recipePlan(s, g, tier) {
+  if (g.tier && g.tier !== tier) return null;
+  const plan = {};
+  for (const [k, n] of Object.entries(g.cost || {})) {
+    const keys = D.MAT_CATS[k]
+      ? Object.keys(D.MATS).filter((id) => D.MATS[id].cat === k).map((id) => matKey(id, tier))
+      : [matKey(k, D.MATS[k].tiers[0])];
+    keys.sort((a, b) => (s.mats[b] || 0) - (s.mats[a] || 0) || (a < b ? -1 : 1));
+    let need = n;
+    for (const key of keys) {
+      const take = Math.min(need, s.mats[key] || 0);
+      if (take > 0) { plan[key] = take; need -= take; }
+      if (!need) break;
+    }
+    if (need > 0) return null;
+  }
+  return plan;
 }
+// 配方的文字：「硬材 3、皮料 1、炎龍鱗 2」
+function recipeText(g) {
+  return Object.entries(g.cost || {}).map(([k, n]) => `${D.MAT_CATS[k] ? D.MAT_CATS[k].n : D.MATS[k].n} ${n}`).join('、');
+}
+const usesBossMat = (g) => Object.keys(g.cost || {}).some((k) => !D.MAT_CATS[k]);
 const AUTO_TYPES = ['weapon', 'body', 'head', 'feet', 'acc'];
+// 這次可以做什麼：先找最高可以做的階級，再從這一階做得出來的款式裡隨機挑。
+// 沒指定款式時，要用頭目素材的款式（炎龍套裝）不會隨機做出來，免得用掉珍貴的素材。rng 為 null 時只檢查做不做得出來
+function forgePlan(s, rng, type) {
+  const f = s.forge, pick = f.type !== 'auto' && D.GEAR_BY_ID[f.def];
+  const cands = pick && pick.type === type ? [pick] : I().defsOf(type).filter((g) => !usesBossMat(g));
+  for (const tier of f.tier === 'auto' ? [5, 4, 3, 2, 1] : [+f.tier]) {
+    const ok = cands.map((g) => ({ g, tier, plan: recipePlan(s, g, tier) })).filter((x) => x.plan);
+    if (ok.length) return rng ? ok[rng.weighted(ok.map((x) => x.g.w ?? 1))] : ok[0];
+  }
+  return null;
+}
+// 自動輪流：從這一輪該做的部位開始，找第一個做得出來的
+function forgeType(s) {
+  const f = s.forge;
+  if (f.type !== 'auto') return f.type;
+  const at = f.autoIdx || 0;
+  for (let i = 0; i < AUTO_TYPES.length; i++) {
+    const type = AUTO_TYPES[(at + i) % AUTO_TYPES.length];
+    if (forgePlan(s, null, type)) return type;
+  }
+  return AUTO_TYPES[at % AUTO_TYPES.length];
+}
+function forgeShort(s, type) {
+  const f = s.forge, g = f.type !== 'auto' && D.GEAR_BY_ID[f.def];
+  const at = f.tier === 'auto' ? '任何一階' : `T${f.tier} `;
+  if (g && g.type === type) return `素材不足：${g.tier ? `T${g.tier} ` : at}${g.n}要 ${recipeText(g)}（同一階）`;
+  return `素材不足：${at}的素材湊不出${f.type === 'auto' ? '任何裝備' : D.TYPE_NAME[type]}的配方`;
+}
+// 頭目素材（同一階、數量最多的一種），鍛造時加進去提高稀有度
+function boostKey(s, tier) {
+  return Object.keys(s.mats).filter((k) => isBossMat(k) && matTier(k) === tier && s.mats[k] > 0)
+    .sort((a, b) => s.mats[b] - s.mats[a] || (a < b ? -1 : 1))[0] || null;
+}
 
 function tickForge(s, rng, sum, now) {
   const f = s.forge;
   if (s.bag.length >= D.BAG_CAP) { f.status = '背包已滿，鍛造暫停'; sum.notes.add(f.status); return 0; }
-  const type = f.type === 'auto' ? AUTO_TYPES[(f.autoIdx || 0) % AUTO_TYPES.length] : f.type;
-  // 指定了只在某一階出現的款式（例如炎龍套裝只在 T5），就只能用那一階的材料
-  const only = f.type !== 'auto' && D.GEAR_BY_ID[f.def] && D.GEAR_BY_ID[f.def].tier;
-  const tier = only ? ((s.mats[matKey(only)] || 0) >= D.CRAFT_COST ? only : 0) : pickTier(s);
-  if (!tier) {
-    f.status = only ? `材料不足：${D.GEAR_BY_ID[f.def].n}要用 ${D.CRAFT_COST} 個 T${only} 材料（${D.MATS[only]}）`
-      : `材料不足：鍛造需要 ${D.CRAFT_COST} 個同階材料`;
-    sum.notes.add(f.status);
-    return 0;
-  }
+  const type = forgeType(s);
+  if (!forgePlan(s, null, type)) { f.status = forgeShort(s, type); sum.notes.add(f.status); return 0; }
   f.progress++;
   f.status = `正在鍛造${D.TYPE_NAME[type]}`;
   if (f.progress < D.FORGE[f.level].ticks) return 0;
   f.progress = 0;
-  s.mats[matKey(tier)] -= D.CRAFT_COST;
-  // 指定了款式就做那一款，否則在這個部位裡隨機
-  const def = f.type !== 'auto' && D.GEAR_BY_ID[f.def] && D.GEAR_BY_ID[f.def].type === type ? f.def : undefined;
-  const it = I().createItem(rng, { def, type, tier, rarity: I().rollRarity(rng, D.FORGE[f.level].odds), seq: s.itemSeq++ });
+  const p = forgePlan(s, rng, type);
+  for (const [k, n] of Object.entries(p.plan)) s.mats[k] -= n;
+  const odds = D.FORGE[f.level].odds;
+  let rarity = I().rollRarity(rng, odds);
+  const bk = f.boost && boostKey(s, p.tier);
+  if (bk) {
+    s.mats[bk]--;
+    for (let i = 1; i < D.BOOST_ROLLS; i++) rarity = Math.max(rarity, I().rollRarity(rng, odds));
+  }
+  const it = I().createItem(rng, { def: p.g.id, tier: p.tier, rarity, seq: s.itemSeq++ });
   s.bag.push(it); sum.items.push(it);
   s.counters.crafts++;
-  if (f.type === 'auto') f.autoIdx = (f.autoIdx || 0) + 1;
+  if (f.type === 'auto') f.autoIdx = AUTO_TYPES.indexOf(type) + 1;
   if (it.rarity >= 3) addLog(s, `鍛造出${D.RARITY[it.rarity].n}裝備「${it.name}」`, now);
   return gainExp(s, 3, sum);
 }
@@ -162,8 +219,9 @@ function tickMarket(s, rng, sum) {
   const m = s.market;
   let cap = marketSpeed(m.rep);
   // 保留數量：玩家設定的，或公會交付委託還需要的，取多的
-  const keep = (k) => Math.max(m.keep, ...s.guild.quests.filter((q) => q.kind === 'deliver' && !q.done && matKey(q.tier) === k).map((q) => q.need));
-  const keys = Object.keys(s.mats).filter((k) => s.mats[k] > keep(k))
+  const keep = (k) => Math.max(m.keep, ...s.guild.quests.filter((q) => q.kind === 'deliver' && !q.done && q.mat === k).map((q) => q.need));
+  // 頭目素材不賣（鍛造要用）
+  const keys = Object.keys(s.mats).filter((k) => !isBossMat(k) && s.mats[k] > keep(k))
     .sort((a, b) => s.mats[b] - s.mats[a]);
   let sold = 0;
   for (const k of keys) {
@@ -173,7 +231,7 @@ function tickMarket(s, rng, sum) {
       s.mats[k]--; s.gold += price; sum.gold += price; cap--; sold++;
     }
   }
-  if (!sold) { sum.notes.add('沒有超過保留數量的材料可以賣'); return 0; }
+  if (!sold) { sum.notes.add('沒有超過保留數量的素材可以賣'); return 0; }
   m.rep += sold; sum.marketRep += sold; sum.sold += sold;
   s.counters.sold += sold;
   return 0;
@@ -186,37 +244,68 @@ function rankOf(rep) {
   return r;
 }
 const rank = (s) => rankOf(s.guild.rep);
-// 這張地圖（和它的頭目）還差哪些條件：冒險者階級要夠，而且要打倒前一張地圖的頭目。回傳空陣列就是可以去
-function areaNeeds(s, i) {
-  const a = D.AREAS[i];
-  if (!a) return ['沒有這張地圖'];
-  const needs = [];
-  if (rank(s) < a.rank) needs.push(D.RANKS[a.rank].n);
-  if (i > 0 && !s.bossKills[i - 1]) needs.push('擊敗' + D.AREAS[i - 1].boss.n);
+// ---------- 地圖的段與頭目 ----------
+const bossKey = (ai, b) => `${ai}-${b}`;
+const bossBeaten = (s, ai, b) => (s.bossKills[bossKey(ai, b)] || 0) > 0;
+// 打倒過的頭目裡，最高的等級
+function topBossLv(s) {
+  let lv = 0;
+  D.AREAS.forEach((a, ai) => a.bosses.forEach((_, b) => { if (bossBeaten(s, ai, b)) lv = Math.max(lv, D.stageOf(ai, b).bossLv); }));
+  return lv;
+}
+// 地圖第 b 段還差哪些條件（回傳空陣列就是可以去）：
+//   冒險者階級要夠（看這一段的素材階級）；第二、三段要打倒這張地圖前一段的頭目；
+//   第一段（草原以外）要先在任何一張地圖打倒前一個等級的頭目
+function stageNeeds(s, ai, b) {
+  const a = D.AREAS[ai];
+  if (!a || !(b >= 0 && b < D.STAGES)) return ['沒有這一段'];
+  const st = D.stageOf(ai, b), needs = [];
+  if (rank(s) < st.rank) needs.push(D.RANKS[st.rank].n);
+  if (b > 0 && !bossBeaten(s, ai, b - 1)) needs.push('擊敗' + a.bosses[b - 1].n);
+  if (b === 0 && st.lo > 1 && topBossLv(s) < st.lo - 1) needs.push(`擊敗任一隻 Lv${st.lo - 1} 的頭目`);
   return needs;
 }
-const areaOpen = (s, i) => areaNeeds(s, i).length === 0;
-const openAreas = (s) => D.AREAS.map((a, i) => areaOpen(s, i));
-// 新開放的地圖寫進紀錄：before 是先前的 openAreas
-function logOpened(s, before, prefix, now) {
-  const opened = D.AREAS.filter((a, i) => !before[i] && areaOpen(s, i)).map((a) => `「${a.n}」`);
-  if (opened.length) addLog(s, `${prefix}，可以前往${opened.join('、')}`, now);
-  return opened.length > 0;
-}
-// 目前能去的最高一張地圖
-function topArea(s) {
-  let top = 0;
-  D.AREAS.forEach((a, i) => { if (areaOpen(s, i)) top = i; });
+const stageOpen = (s, ai, b) => stageNeeds(s, ai, b).length === 0;
+const areaNeeds = (s, ai) => stageNeeds(s, ai, 0);
+const areaOpen = (s, ai) => stageOpen(s, ai, 0);
+// 這張地圖目前能去的最後一段（都不能去是 -1）
+function topStage(s, ai) {
+  let top = -1;
+  for (let b = 0; b < D.STAGES; b++) if (stageOpen(s, ai, b)) top = b;
   return top;
+}
+// 換地圖時預設去哪一段：能去、而且起始等級不超過主角等級 +1 的最後一段（都太高就第一段），免得一過去就一直輸
+function fitStage(s, ai) {
+  let fit = -1;
+  for (let b = 0; b < D.STAGES; b++) if (stageOpen(s, ai, b) && (fit < 0 || D.stageOf(ai, b).lo <= s.hero.level + 1)) fit = b;
+  return fit;
+}
+// 所有能去的段：['0-0', '0-1', '1-0', …]
+function openStages(s) {
+  const out = [];
+  D.AREAS.forEach((a, ai) => { for (let b = 0; b < D.STAGES; b++) if (stageOpen(s, ai, b)) out.push(bossKey(ai, b)); });
+  return out;
+}
+const parseStage = (k) => { const [area, b] = k.split('-').map(Number); return D.stageOf(area, b); };
+const stageLabel = (st) => `${D.AREAS[st.area].n} Lv${st.lo}–${st.hi}`;
+// 素材階級最高的一段（同階取後面的地圖）
+function bestStage(s) {
+  return openStages(s).map(parseStage).reduce((best, st) => (!best || st.tier >= best.tier ? st : best), null);
+}
+// 新開放的段寫進紀錄：before 是先前的 openStages
+function logOpened(s, before, prefix, now) {
+  const opened = openStages(s).filter((k) => !before.includes(k)).map((k) => `「${stageLabel(parseStage(k))}」`);
+  if (opened.length) addLog(s, `${prefix}，可以前往${opened.join('、')}`, now);
+  return opened;
 }
 // 增加冒險者聲望；晉升時記下來，並列出新開放的地圖
 function addRep(s, n, now) {
-  const before = rank(s), was = openAreas(s);
+  const before = rank(s), was = openStages(s);
   s.guild.rep += n;
   const after = rank(s);
   if (after === before) return;
   const msg = '晉升為' + D.RANKS[after].n;
-  if (!logOpened(s, was, msg, now)) addLog(s, msg, now);
+  if (!logOpened(s, was, msg, now).length) addLog(s, msg, now);
 }
 
 
@@ -235,7 +324,6 @@ function settle(s, ticks, now = Date.now()) {
     if (up || s.location === 'training') h = hero(s);
   }
   if (sum.levels) addLog(s, `升到 ${s.hero.level} 級`, now);
-  for (const it of sum.items) if (it.rarity >= 3 && s.location === 'battle') addLog(s, `魔物掉落${D.RARITY[it.rarity].n}裝備「${it.name}」`, now);
   s.seed = rng.state;
   sum.notes = [...sum.notes];
   return sum;
@@ -255,10 +343,15 @@ function catchUp(s, now = Date.now()) {
 
 // ---------- 玩家操作 ----------
 function setLocation(s, k) { if (D.LOCATIONS.some((l) => l.k === k)) s.location = k; }
-// 選擇戰鬥地圖：冒險者階級不夠就不能去
+// 選擇戰鬥地圖：到那張地圖能去、等級也夠的最後一段（fitStage）
 function setArea(s, i) {
   if (!areaOpen(s, i)) return false;
-  s.areaIdx = i; return true;
+  s.areaIdx = i; s.stage = fitStage(s, i); return true;
+}
+// 選擇目前地圖的第幾段
+function setStage(s, b) {
+  if (!stageOpen(s, s.areaIdx, b)) return false;
+  s.stage = b; return true;
 }
 
 function unlockDevice(s, k) {
@@ -345,7 +438,7 @@ function sellBelow(s, rarity) {
 }
 
 // ---------- 公會：每日委託 ----------
-// 公會不能掛機。每天（當地時間 00:00）刷新 GUILD.quests 個委託：擊敗指定魔物，或交付指定的材料。
+// 公會不能掛機。每天（當地時間 00:00）刷新 GUILD.quests 個委託：擊敗指定魔物，或交付指定的素材。
 // 完成後到公會領取金幣與冒險者聲望，每個委託一天只能完成一次。
 function dayId(now) { return Math.floor((now - new Date(now).getTimezoneOffset() * 60000) / 86400000); }
 function dayResetAt(now) {
@@ -353,27 +446,27 @@ function dayResetAt(now) {
   return localMs + new Date(localMs).getTimezoneOffset() * 60000;
 }
 
-// 委託的地圖：多半是目前能去的最高一張，有時是前面的地圖
-function questArea(s, rng) {
-  const open = D.AREAS.map((a, i) => i).filter((i) => areaOpen(s, i));
-  return rng.chance(D.GUILD.topChance) ? open[open.length - 1] : rng.pick(open);
+// 委託的段：多半是目前素材階級最高的段，有時是前面的段
+function questStage(s, rng) {
+  const open = openStages(s).map(parseStage), top = Math.max(...open.map((st) => st.tier));
+  return rng.chance(D.GUILD.topChance) ? rng.pick(open.filter((st) => st.tier === top)) : rng.pick(open);
 }
-// 同一天的委託不重複：擊敗的魔物不同、交付的材料不同。taken 記已經用過的目標
-const questKey = (q) => (q.kind === 'kill' ? `k${q.area}-${q.mon}` : `d${q.tier}`);
+// 同一天的委託不重複：擊敗的魔物不同、交付的素材不同。taken 記已經用過的目標
+const questKey = (q) => (q.kind === 'kill' ? `k${q.area}-${q.mon}` : `d${q.mat}`);
 function makeQuest(s, rng, kind, taken) {
   const G = D.GUILD;
   for (let tries = 0; tries < 20; tries++) {
-    const ai = questArea(s, rng), a = D.AREAS[ai];
-    const reward = { gold: G.gold[a.tier], rep: G.rep[a.tier] };
+    const st = questStage(s, rng), a = D.AREAS[st.area], mon = rng.int(0, a.monsters.length - 1);
+    const reward = { gold: G.gold[st.tier], rep: G.rep[st.tier] };
     const q = kind === 'kill'
-      ? { kind, area: ai, mon: rng.int(0, a.monsters.length - 1), need: rng.pick(G.killNeed), reward, done: false }
-      : { kind, tier: a.tier, need: rng.pick(G.deliverNeed), reward, done: false };
+      ? { kind, area: st.area, mon, need: rng.pick(G.killNeed), reward, done: false }
+      : { kind, mat: matKey(a.monsters[mon].mat.id, st.tier), need: rng.pick(G.deliverNeed), reward, done: false };
     if (taken.has(questKey(q))) continue;
     taken.add(questKey(q));
     if (kind === 'kill') q.base = s.monKills[q.area + '-' + q.mon] || 0;   // 接到之後才開始算
     return { id: 'q' + (++s.guild.qSeq), ...q };
   }
-  return kind === 'deliver' ? makeQuest(s, rng, 'kill', taken) : null;   // 能交付的材料都用過了：改成擊敗
+  return kind === 'deliver' ? makeQuest(s, rng, 'kill', taken) : null;   // 能交付的素材都用過了：改成擊敗
 }
 // 換日就換一批新委託（至少一個擊敗、一個交付）。回傳是否換了
 function refreshQuests(s, now) {
@@ -390,17 +483,17 @@ function refreshQuests(s, now) {
 }
 function questText(q) {
   if (q.kind === 'kill') { const a = D.AREAS[q.area]; return `在${a.n}擊敗${a.monsters[q.mon].n}`; }
-  return `交付${D.MATS[q.tier]}`;
+  return `交付${matName(q.mat)}`;
 }
 function questProgress(s, q) {
-  const have = q.kind === 'kill' ? (s.monKills[q.area + '-' + q.mon] || 0) - q.base : s.mats[matKey(q.tier)] || 0;
+  const have = q.kind === 'kill' ? (s.monKills[q.area + '-' + q.mon] || 0) - q.base : s.mats[q.mat] || 0;
   return Math.max(0, Math.min(q.need, have));
 }
 const questReady = (s, q) => !q.done && questProgress(s, q) >= q.need;
 function claimQuest(s, id, now) {
   const q = s.guild.quests.find((x) => x.id === id);
   if (!q || !questReady(s, q)) return null;
-  if (q.kind === 'deliver') s.mats[matKey(q.tier)] -= q.need;   // 交付：材料交出去
+  if (q.kind === 'deliver') s.mats[q.mat] -= q.need;   // 交付：素材交出去
   q.done = true;
   s.gold += q.reward.gold;
   addLog(s, `完成公會委託「${questText(q)} ${q.need} ${q.kind === 'kill' ? '隻' : '個'}」`, now);
@@ -408,7 +501,9 @@ function claimQuest(s, id, now) {
   return q;
 }
 
-// ---------- 魔物狩獵 ----------
+// ---------- 頭目挑戰 ----------
+// 每一段的段尾有一個頭目。還沒打倒過的頭目隨時可以挑戰（輸了可以馬上再試）；
+// 打倒過之後重打要用一張狩獵券（每小時恢復一張，最多 HUNT_MAX 張），可以再拿頭目素材和魔物素材。
 function refreshTickets(s, now) {
   const h = s.hunt;
   if (h.tickets >= HUNT_MAX) { h.refillAt = now; return; }
@@ -418,49 +513,52 @@ function refreshTickets(s, now) {
     h.refillAt = h.tickets >= HUNT_MAX ? now : h.refillAt + gained * HUNT_REFILL_MS;
   }
 }
-function bossEnemy(areaIdx) {
-  const a = D.AREAS[areaIdx];
-  return { name: a.boss.n, stats: combat.enemyStats(a.lv + 4, { hp: 6, atk: 1.35, crit: 6 }, a.boss.magic) };
+function bossEnemy(ai, b) {
+  const st = D.stageOf(ai, b);
+  return { name: st.boss.n, lv: st.bossLv, stats: combat.enemyStats(st.bossLv, D.BOSS, st.boss.magic) };
 }
-function hunt(s, areaIdx, now) {
+const huntCost = (s, ai, b) => (bossBeaten(s, ai, b) ? 1 : 0);
+function hunt(s, ai, b, now) {
   refreshTickets(s, now);
-  if (s.hunt.tickets <= 0 || !areaOpen(s, areaIdx)) return null;
-  if (s.hunt.tickets === HUNT_MAX) s.hunt.refillAt = now;
-  s.hunt.tickets--;
+  if (!stageOpen(s, ai, b)) return null;
+  const cost = huntCost(s, ai, b);
+  if (s.hunt.tickets < cost) return null;
+  if (cost) {
+    if (s.hunt.tickets === HUNT_MAX) s.hunt.refillAt = now;
+    s.hunt.tickets -= cost;
+  }
   const rng = R().make(s.seed);
-  const enemy = bossEnemy(areaIdx);
-  const r = combat.fight(rng, hero(s), enemy, { maxActions: 30, log: true });
-  const rewards = { gold: 0, mats: {}, item: null, unlocked: null, next: null };
-  const a = D.AREAS[areaIdx];
+  const st = D.stageOf(ai, b), a = D.AREAS[ai];
+  const enemy = bossEnemy(ai, b);
+  const r = combat.fight(rng, hero(s), enemy, { maxActions: D.BOSS.maxActions, log: true });
+  const rewards = { gold: 0, mats: {}, unlocked: [], next: null };
   if (r.win) {
-    const was = openAreas(s);
+    const was = openStages(s);
     s.counters.bossKills++;
-    const first = !s.bossKills[areaIdx];
-    s.bossKills[areaIdx] = (s.bossKills[areaIdx] || 0) + 1;
-    rewards.gold = 60 * a.tier * a.tier * (first ? 3 : 1);
+    const first = !bossBeaten(s, ai, b);
+    s.bossKills[bossKey(ai, b)] = (s.bossKills[bossKey(ai, b)] || 0) + 1;
+    rewards.gold = 60 * st.tier * st.tier * (first ? 3 : 1);
     s.gold += rewards.gold;
-    const k = matKey(a.tier), n = 6 + rng.int(0, 6);
-    addMat(s, k, n); rewards.mats[k] = n;
-    if (s.bag.length < D.BAG_CAP) {
-      const it = I().createItem(rng, { type: rng.pick(D.ITEM_TYPES),
-        tier: a.tier, rarity: Math.max(2, I().rollRarity(rng, D.FORGE[3].odds)), seq: s.itemSeq++ });
-      s.bag.push(it); rewards.item = it;
+    const give = (k, n) => { addMat(s, k, n); rewards.mats[k] = (rewards.mats[k] || 0) + n; };
+    give(matKey(st.boss.mat.id, st.tier), first ? 3 : 1 + rng.int(0, 1));            // 頭目素材
+    for (let i = 0; i < 3; i++) give(matKey(rng.pick(a.monsters).mat.id, st.tier), 2 + rng.int(0, 2));   // 這張地圖的魔物素材
+    const msg = `${first ? '首次' : ''}擊敗${st.boss.n}`;
+    rewards.unlocked = logOpened(s, was, msg, now);
+    if (first && b + 1 < D.STAGES && !stageOpen(s, ai, b + 1)) {          // 下一段還差冒險者階級
+      rewards.next = { stage: stageLabel(D.stageOf(ai, b + 1)), needs: stageNeeds(s, ai, b + 1) };
     }
-    const msg = `${first ? '首次' : ''}擊敗${a.boss.n}`;
-    const nextIdx = areaIdx + 1;
-    if (first && D.AREAS[nextIdx]) {
-      if (!was[nextIdx] && areaOpen(s, nextIdx)) rewards.unlocked = D.AREAS[nextIdx].n;
-      else if (!areaOpen(s, nextIdx)) rewards.next = { area: D.AREAS[nextIdx].n, needs: areaNeeds(s, nextIdx) };   // 還差冒險者階級
-    }
-    if (!logOpened(s, was, msg, now)) addLog(s, msg + (rewards.next ? `；達到${rewards.next.needs.join('、')}就能前往「${rewards.next.area}」` : ''), now);
+    if (!rewards.unlocked.length) addLog(s, msg + (rewards.next ? `；達到${rewards.next.needs.join('、')}就能前往「${rewards.next.stage}」` : ''), now);
   }
   s.seed = rng.state;
-  return { r, rewards, boss: a.boss, enemy };
+  return { r, rewards, boss: st.boss, stage: st, enemy };
 }
 
 export const world = {
-  expNeed, matKey, matTier, marketBonus, marketSpeed, newGame, hero, settle, catchUp, setLocation, setArea, unlockDevice, upgradeDevice, upgradeForge,
-  equip, unequip, giveSet, giveAllGear, clearGear, sell, sellBelow, rankOf, rank, areaNeeds, areaOpen, topArea, addRep,
-  dayId, dayResetAt, refreshQuests, questText, questProgress, questReady, claimQuest, refreshTickets, hunt, bossEnemy,
+  expNeed, matKey, matId, matTier, matDef, matName, isBossMat, marketBonus, marketSpeed, newGame, hero, settle, catchUp,
+  setLocation, setArea, setStage, unlockDevice, upgradeDevice, upgradeForge,
+  recipePlan, recipeText, forgePlan, forgeType, boostKey,
+  equip, unequip, giveSet, giveAllGear, clearGear, sell, sellBelow, rankOf, rank,
+  stageNeeds, stageOpen, areaNeeds, areaOpen, topStage, fitStage, openStages, bestStage, stageLabel, bossBeaten, topBossLv, addRep,
+  dayId, dayResetAt, refreshQuests, questText, questProgress, questReady, claimQuest, refreshTickets, hunt, huntCost, bossEnemy,
   addLog, gainExp, HUNT_MAX, HUNT_REFILL_MS,
 };

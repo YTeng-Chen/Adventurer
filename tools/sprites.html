@@ -61,7 +61,7 @@ const LOOKS_BY_TYPE = {};
 for (const g of D.GEAR) (LOOKS_BY_TYPE[g.type] ||= new Set()).add(g.look);
 for (const [type, looks] of Object.entries(LOOKS_BY_TYPE)) for (const lk of looks) for (const r of type === 'acc' ? [1, 4] : [3]) show(S.itemIconGrid(gear(type, lk, 3, r)), 3, `${type}/${lk}${type === 'acc' ? D.RARITY[r].n : ''}`, icons);
 const mons = section('魔物（放大後）');
-for (const a of D.AREAS) for (const m of [...a.monsters, a.boss]) show(S.enemyGrid(m.shape, m.c), 3, m.n, mons);
+for (const a of D.AREAS) for (const m of [...a.monsters, ...a.bosses]) show(S.enemyGrid(m.shape, m.c), 3, m.n, mons);
 </script>
 </body>
 </html>
