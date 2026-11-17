@@ -1,4 +1,5 @@
-// 戰鬥地圖的掛機畫面：每秒從右邊跑出一隻魔物，主角原地用武器的三段連招打，一次可以打到好幾隻。
+// 戰鬥地圖的掛機畫面：主角往前走（背景跟著捲動），走一段就遇到一群從右邊跑來的魔物，
+// 魔物進到武器打得到的距離就停下來，用武器的三段連招打，一次可以打到好幾隻；打完再繼續往前走。
 // 這裡只是表演：經驗、金幣、掉落還是由 core 每 5 秒結算一次（結算時頭上跳出這次的收穫）。
 import * as Phaser from 'phaser';
 import { data as D } from '../core/data.js';
@@ -7,8 +8,11 @@ import { RigHero, enemyTexture } from './textures.js';
 import { Scenery } from './scenery.js';
 import { W, GROUND, FONT, HERO_X } from './config.js';
 
-const SPAWN_MS = 1000;   // 每隔多久出現一隻
-const MAX_FOES = 9;      // 畫面上最多幾隻（太多就先不生）
+const WALK_SPEED = 40;          // 走路時地面往後退多快（像素／秒），配合走路動作的步伐（一步約 0.35 秒），腳才不會滑
+const WALK_MS = [1600, 3200];   // 打完之後走多久才遇到下一群
+const WAVE = [2, 5];            // 一群有幾隻
+const WAVE_GAP = 420;           // 同一群裡，每隔多久跑出一隻
+const MAX_FOES = 9;             // 畫面上最多幾隻（太多就先不生）
 // 各種魔物的體型（32×32 圖的放大倍率）、要打幾下、跑多快（像素／秒）、跑步的樣子
 const KIND = {
   slime: { size: 0.8, hp: 2, speed: 150, run: 'hop' },
@@ -30,7 +34,8 @@ export class IdleScene extends Phaser.Scene {
     this.getState = this.registry.get('getState');
     this.foes = [];
     this.areaIdx = -1;
-    this.nextSpawn = 0;
+    this.vx = 0;          // 目前場景捲動的速度：走路時是 WALK_SPEED，遇到魔物就停下來
+    this.walk(0);
 
     this.scenery = new Scenery(this, 0);
     this.hero = new RigHero(this, HERO_X, GROUND);
@@ -56,7 +61,46 @@ export class IdleScene extends Phaser.Scene {
       this.scenery.set(s.areaIdx);
       this.foes.forEach((f) => f.img.destroy());
       this.foes = [];
+      this.walk(this.time.now);
     }
+  }
+
+  // ---------- 走路與遇敵 ----------
+  // 開始往前走，走一段時間後遇到下一群魔物
+  walk(time) {
+    this.mode = 'walk';
+    this.waveAt = time + WALK_MS[0] + Math.random() * (WALK_MS[1] - WALK_MS[0]);
+    this.waveLeft = 0;
+    if (this.hero && this.hero.anim === 'idle') this.hero.play('walk');
+  }
+  alive() { return this.foes.filter((f) => !f.dead); }
+  // 一群魔物跑出來：時間到了先放第一隻，之後每隔 WAVE_GAP 放一隻
+  spawnWave(time) {
+    if (this.mode === 'walk' && !this.waveLeft && time >= this.waveAt) {
+      this.waveLeft = WAVE[0] + Math.floor(Math.random() * (WAVE[1] - WAVE[0] + 1));
+      this.nextSpawn = time;
+    }
+    if (this.waveLeft && time >= this.nextSpawn && this.alive().length < MAX_FOES) {
+      this.spawn();
+      this.waveLeft--;
+      this.nextSpawn = time + WAVE_GAP * (0.7 + Math.random() * 0.6);
+    }
+  }
+  // 走路時：最近的魔物進到打得到的距離就停下來；戰鬥時：這一群都打完了，停一下再繼續走
+  checkMode(time) {
+    const style = this.hero.style || 'sword';
+    if (this.mode === 'walk') {
+      if (this.inReach(this.nearest(), style, 16)) {   // 多留一點距離給煞車
+        this.mode = 'fight';
+        this.resumeAt = 0;
+      }
+    } else if (!this.waveLeft && !this.alive().length) {
+      this.resumeAt ||= time + 700;
+      if (time >= this.resumeAt) this.walk(time);
+    }
+    // 走路動作：速度快停下來時換回待機，開始走時換成走路（攻擊動作播完會自己回到待機）
+    if (this.mode === 'fight' && this.hero.anim === 'walk' && this.vx < 10) this.hero.play('idle');
+    if (this.mode === 'walk' && this.hero.anim === 'idle') this.hero.play('walk');
   }
 
   // ---------- 魔物 ----------
@@ -71,13 +115,14 @@ export class IdleScene extends Phaser.Scene {
   }
 
   // 每隻魔物跑到主角前面停下；後來的排在前一隻後面一點，擠成一團
+  // 主角在走路時，地面往後退，魔物也跟著被往後帶（看起來更快衝過來）
   moveFoes(time, dt) {
-    const alive = this.foes.filter((f) => !f.dead).sort((a, b) => a.x - b.x);
+    const alive = this.alive().sort((a, b) => a.x - b.x);
     let front = HERO_X + 22;                    // 這一隻的左緣最多跑到哪裡
     for (const f of alive) {
       const target = front + f.half;
       const running = f.x > target + 0.5;
-      if (running) f.x = Math.max(target, f.x - (f.k.speed * dt) / 1000);
+      if (running) f.x = Math.max(target, f.x - ((f.k.speed + this.vx) * dt) / 1000);
       front = Math.max(front, f.x - f.half) + 8;
       f.kb *= Math.pow(0.002, dt / 1000);        // 被打退的距離慢慢回來
       this.pose(f, time, dt, running);
@@ -104,8 +149,8 @@ export class IdleScene extends Phaser.Scene {
   }
 
   // ---------- 主角攻擊 ----------
-  nearest() { return this.foes.filter((f) => !f.dead).sort((a, b) => a.x - b.x)[0]; }
-  inReach(f, style) { return f && f.x - f.half <= HERO_X + RANGE[style]; }
+  nearest() { return this.alive().sort((a, b) => a.x - b.x)[0]; }
+  inReach(f, style, extra = 0) { return f && f.x - f.half <= HERO_X + RANGE[style] + extra; }
 
   attack() {
     const style = this.hero.style || 'sword';
@@ -178,14 +223,16 @@ export class IdleScene extends Phaser.Scene {
     const s = this.getState();
     if (!s || s.location !== 'battle') return;
     dt = Math.min(dt, 50);                      // 從背景回來時不要一口氣跳太多
-    this.scenery.update(time, dt);
-    if (time >= this.nextSpawn) {
-      this.nextSpawn = time + SPAWN_MS;
-      if (this.foes.filter((f) => !f.dead).length < MAX_FOES) this.spawn();
-    }
+    // 速度慢慢加減，起步和煞車才不會一下子跳
+    const goal = this.mode === 'walk' ? WALK_SPEED : 0;
+    this.vx += (goal - this.vx) * Math.min(1, dt / 140);
+    if (Math.abs(goal - this.vx) < 0.5) this.vx = goal;
+    this.scenery.update(time, dt, this.vx);
+    this.spawnWave(time);
     this.moveFoes(time, dt);
+    this.checkMode(time);
     this.bite(time);
-    if (!(time < this.busyUntil)) this.attack();
+    if (this.mode === 'fight' && this.vx < 10 && !(time < this.busyUntil)) this.attack();   // 停穩了才出手
   }
 
   onTick(sum) {
