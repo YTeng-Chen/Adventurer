@@ -125,6 +125,36 @@ export const GEAR = [
   { id: 'rockplate', type: 'body', n: '岩王重甲', look: 'rockbody', set: 'rock', tier: 3, cost: { hard: 3, hide: 1, lavaheart: 1 }, base: (T) => ({ hp: 60 * T, def: 6 * T }) },
   { id: 'rockboots', type: 'feet', n: '岩王戰靴', look: 'rockfeet', set: 'rock', tier: 3, cost: { hard: 3, hide: 1, lavaheart: 1 }, base: (T) => ({ spd: 4 + T, def: 3 * T, mdef: 2 * T }) },
 
+  // T4 古樹套裝（弓手）
+  { id: 'treebow', type: 'weapon', n: '古木長弓', form: 'bow', look: 'treeweapon', set: 'tree', tier: 4, cost: { hide: 2, hard: 2, treeheart: 2 }, base: (T) => ({ atk: 11 * T + 6, crit: 4, hp: 5 * T }) },
+  { id: 'treecrown', type: 'head', n: '古木冠', look: 'treehelm', set: 'tree', tier: 4, cost: { hide: 2, spirit: 2, treeheart: 1 }, base: (T) => ({ hp: 30 * T, mdef: 4 * T, crit: 2 }) },
+  { id: 'treemail', type: 'body', n: '樹皮甲', look: 'treebody', set: 'tree', tier: 4, cost: { hard: 2, hide: 2, treeheart: 1 }, base: (T) => ({ hp: 50 * T, def: 4 * T, atk: 3 * T }) },
+  { id: 'treeboots', type: 'feet', n: '樹皮靴', look: 'treefeet', set: 'tree', tier: 4, cost: { hide: 3, hard: 1, treeheart: 1 }, base: (T) => ({ spd: 8 + T, def: 2 * T, hp: 5 * T }) },
+
+  // T4 巨像套裝（守衛）
+  { id: 'colossushammer', type: 'weapon', n: '齒輪巨鎚', form: 'hammer', look: 'colossusweapon', set: 'colossus', tier: 4, cost: { hard: 4, rustcore: 2 }, base: (T) => ({ atk: 7 * T + 5, def: 4 * T + 3 }) },
+  { id: 'colossushelm', type: 'head', n: '巨像桶盔', look: 'colossushelm', set: 'colossus', tier: 4, cost: { hard: 3, hide: 1, rustcore: 1 }, base: (T) => ({ hp: 32 * T, mdef: 3 * T, def: 4 * T }) },
+  { id: 'colossusplate', type: 'body', n: '巨像鎧', look: 'colossusbody', set: 'colossus', tier: 4, cost: { hard: 4, rustcore: 1 }, base: (T) => ({ hp: 64 * T, def: 6 * T }) },
+  { id: 'colossusboots', type: 'feet', n: '巨像戰靴', look: 'colossusfeet', set: 'colossus', tier: 4, cost: { hard: 3, hide: 1, rustcore: 1 }, base: (T) => ({ spd: 4 + T, def: 4 * T, mdef: 2 * T }) },
+
+  // T4 怨靈套裝（術士）
+  { id: 'grudgestaff', type: 'weapon', n: '魂籠法杖', form: 'staff', look: 'grudgeweapon', set: 'grudge', tier: 4, cost: { spirit: 3, hard: 1, grudge: 2 }, base: (T) => ({ matk: 11 * T + 6, mpen: 4 }) },
+  { id: 'grudgehood', type: 'head', n: '怨靈兜帽', look: 'grudgehelm', set: 'grudge', tier: 4, cost: { hide: 2, spirit: 2, grudge: 1 }, base: (T) => ({ hp: 26 * T, mdef: 5 * T, matk: 4 * T }) },
+  { id: 'grudgerobe', type: 'body', n: '怨靈長袍', look: 'grudgebody', set: 'grudge', tier: 4, cost: { hide: 2, spirit: 2, grudge: 1 }, base: (T) => ({ hp: 44 * T, def: 4 * T, mdef: 5 * T, matk: 2 * T }) },
+  { id: 'grudgeshoes', type: 'feet', n: '怨靈布鞋', look: 'grudgefeet', set: 'grudge', tier: 4, cost: { hide: 3, spirit: 1, grudge: 1 }, base: (T) => ({ spd: 5 + T, def: 2 * T, matk: 2 * T }) },
+
+  // T4 焰靈套裝（劍士）
+  { id: 'emberblade', type: 'weapon', n: '焰靈劍', form: 'sword', look: 'emberweapon', set: 'ember', tier: 4, cost: { hard: 3, spirit: 1, ember: 2 }, base: (T) => ({ atk: 11 * T + 6, crit: 4, critDmg: 6 }) },
+  { id: 'embercrown', type: 'head', n: '火焰冠', look: 'emberhelm', set: 'ember', tier: 4, cost: { hard: 2, spirit: 2, ember: 1 }, base: (T) => ({ hp: 28 * T, mdef: 3 * T, crit: 3, atk: T }) },
+  { id: 'embermail', type: 'body', n: '焰靈甲', look: 'emberbody', set: 'ember', tier: 4, cost: { hard: 3, spirit: 1, ember: 1 }, base: (T) => ({ hp: 46 * T, def: 4 * T, atk: 3 * T }) },
+  { id: 'emberboots', type: 'feet', n: '焰靈靴', look: 'emberfeet', set: 'ember', tier: 4, cost: { hard: 2, hide: 2, ember: 1 }, base: (T) => ({ spd: 9 + T, def: 2 * T, atk: T }) },
+
+  // T5 亡靈君主套裝（劍士）
+  { id: 'lichblade', type: 'weapon', n: '亡君骨劍', form: 'greatsword', look: 'lichweapon', set: 'lich', tier: 5, cost: { hard: 3, spirit: 1, crown: 2 }, base: (T) => ({ atk: 11 * T + 6, crit: 4, critDmg: 8, hp: 5 * T }) },
+  { id: 'lichcrown', type: 'head', n: '亡靈王冠', look: 'lichhelm', set: 'lich', tier: 5, cost: { hard: 2, spirit: 2, crown: 1 }, base: (T) => ({ hp: 28 * T, mdef: 4 * T, def: 2 * T, crit: 2 }) },
+  { id: 'lichmail', type: 'body', n: '亡君骨鎧', look: 'lichbody', set: 'lich', tier: 5, cost: { hard: 2, hide: 2, crown: 1 }, base: (T) => ({ hp: 52 * T, def: 5 * T, atk: 2 * T }) },
+  { id: 'lichgreaves', type: 'feet', n: '亡君脛甲', look: 'lichfeet', set: 'lich', tier: 5, cost: { hard: 2, hide: 2, crown: 1 }, base: (T) => ({ spd: 7 + T, def: 2 * T, mdef: 2 * T }) },
+
   // ---------- 飾品 ----------
   { id: 'ring', type: 'acc', n: '戒指', look: 'ring', cost: { spirit: 3, hard: 1 }, base: ACC_BASES },
   { id: 'necklace', type: 'acc', n: '項鍊', look: 'necklace', cost: { spirit: 2, hide: 2 }, base: ACC_BASES },

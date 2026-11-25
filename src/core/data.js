@@ -74,6 +74,26 @@ const SETS = {
     { need: 2, d: '防禦、物理攻擊 +10%', pct: { def: 10, atk: 10 } },
     { need: 4, d: '岩王之軀：受到的傷害 -8%、攻擊附加 1 層燃燒、燃燒可以暴擊', eff: { dmgReduce: 0.08, burnStacks: 1, critBurn: 1 } },
   ] },
+  tree: { n: '古樹套裝', pieces: 4, color: '#9ae05a', bonus: [
+    { need: 2, d: '生命 +15%', pct: { hp: 15 } },
+    { need: 4, d: '古樹之息：吸血 +6%、10% 機率再攻擊一次', flat: { lifesteal: 6 }, eff: { doubleChance: 0.1 } },
+  ] },
+  colossus: { n: '巨像套裝', pieces: 4, color: '#ffb040', bonus: [
+    { need: 2, d: '防禦 +15%', pct: { def: 15 } },
+    { need: 4, d: '鋼鐵反擊：反擊機率 +15%、反擊傷害 +30%', eff: { counterChance: 0.15, counterPct: 0.3 } },
+  ] },
+  grudge: { n: '怨靈套裝', pieces: 4, color: '#6ab8e8', bonus: [
+    { need: 2, d: '魔法攻擊 +12%', pct: { matk: 12 } },
+    { need: 4, d: '怨念纏身：攻擊附加 1 層燃燒、燃燒傷害 +10%', eff: { burnStacks: 1, burnPct: 0.1 } },
+  ] },
+  ember: { n: '焰靈套裝', pieces: 4, color: '#f0a030', bonus: [
+    { need: 2, d: '物理攻擊 +12%', pct: { atk: 12 } },
+    { need: 4, d: '不滅之焰：攻擊附加 1 層燃燒、連鎖追加傷害 +30%', eff: { burnStacks: 1, chain: 0.3 } },
+  ] },
+  lich: { n: '亡靈君主套裝', pieces: 4, color: '#8aff9a', bonus: [
+    { need: 2, d: '物理攻擊、生命 +12%', pct: { atk: 12, hp: 12 } },
+    { need: 4, d: '不死君王：受到致命傷時保留 1 點生命並回復 30%（每場一次）、連鎖可以連續觸發', eff: { undying: 1, chainRepeat: 1 } },
+  ] },
 };
 const MECHS = {
   chain: { n: '連鎖', color: '#e0564a' },

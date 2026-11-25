@@ -11,8 +11,13 @@ import shadow from './shadow.js';
 import crystal from './crystal.js';
 import grave from './grave.js';
 import rock from './rock.js';
+import tree from './tree.js';
+import colossus from './colossus.js';
+import grudge from './grudge.js';
+import ember from './ember.js';
+import lich from './lich.js';
 
-const LIST = [beetle, wolf, spore, goblin, slime, shadow, crystal, grave, rock];
+const LIST = [beetle, wolf, spore, goblin, slime, shadow, crystal, grave, rock, tree, colossus, grudge, ember, lich];
 
 export const THEMES = Object.fromEntries(LIST.map((t) => [t.key, t]));
 export const lookOf = (key, part) => key + part;   // part：weapon、helm、body、feet
