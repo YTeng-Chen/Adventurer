@@ -54,6 +54,26 @@ const SETS = {
     { need: 2, d: '物理攻擊 +8%', pct: { atk: 8 } },
     { need: 4, d: '戰團號令：連鎖追加傷害 +30%', eff: { chain: 0.3 } },
   ] },
+  slime: { n: '史萊姆王套裝', pieces: 4, color: '#5ad06a', bonus: [
+    { need: 2, d: '生命 +12%', pct: { hp: 12 } },
+    { need: 4, d: '王之再生：受到致命傷時保留 1 點生命並回復 30%（每場一次）、吸血 +4%', flat: { lifesteal: 4 }, eff: { undying: 1 } },
+  ] },
+  shadow: { n: '影狼套裝', pieces: 4, color: '#9a5aff', bonus: [
+    { need: 2, d: '暴擊 +5、穿透 +4', flat: { crit: 5, pen: 4 } },
+    { need: 4, d: '影襲：15% 機率再攻擊一次、暴擊傷害 +20%', flat: { critDmg: 20 }, eff: { doubleChance: 0.15 } },
+  ] },
+  crystal: { n: '魔晶套裝', pieces: 4, color: '#b89af8', bonus: [
+    { need: 2, d: '魔法攻擊 +10%', pct: { matk: 10 } },
+    { need: 4, d: '魔晶共鳴：魔法穿透 +10、燃燒傷害 +8%', flat: { mpen: 10 }, eff: { burnPct: 0.08 } },
+  ] },
+  grave: { n: '守墓人套裝', pieces: 4, color: '#3ad8a0', bonus: [
+    { need: 2, d: '物理攻擊 +10%', pct: { atk: 10 } },
+    { need: 4, d: '送葬：每次行動傷害 +4%，可疊加', eff: { ramp: 0.04 } },
+  ] },
+  rock: { n: '岩王套裝', pieces: 4, color: '#ff7a1a', bonus: [
+    { need: 2, d: '防禦、物理攻擊 +10%', pct: { def: 10, atk: 10 } },
+    { need: 4, d: '岩王之軀：受到的傷害 -8%、攻擊附加 1 層燃燒、燃燒可以暴擊', eff: { dmgReduce: 0.08, burnStacks: 1, critBurn: 1 } },
+  ] },
 };
 const MECHS = {
   chain: { n: '連鎖', color: '#e0564a' },

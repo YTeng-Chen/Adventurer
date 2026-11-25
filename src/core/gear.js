@@ -95,6 +95,36 @@ export const GEAR = [
   { id: 'goblinarmor', type: 'body', n: '戰團拼皮甲', look: 'goblinbody', set: 'goblin', tier: 2, cost: { hide: 2, hard: 2, goblinbadge: 1 }, base: (T) => ({ hp: 45 * T, def: 5 * T, atk: 2 * T }) },
   { id: 'goblinboots', type: 'feet', n: '戰團鐵靴', look: 'goblinfeet', set: 'goblin', tier: 2, cost: { hard: 3, hide: 1, goblinbadge: 1 }, base: (T) => ({ spd: 4 + T, def: 3 * T, mdef: 2 * T }) },
 
+  // T3 史萊姆王套裝（守衛）
+  { id: 'slimehammer', type: 'weapon', n: '凝膠王鎚', form: 'hammer', look: 'slimeweapon', set: 'slime', tier: 3, cost: { hard: 2, spirit: 2, slimecore: 2 }, base: (T) => ({ atk: 7 * T + 4, def: 4 * T + 2, hp: 6 * T }) },
+  { id: 'slimecrown', type: 'head', n: '凝膠王冠', look: 'slimehelm', set: 'slime', tier: 3, cost: { spirit: 2, hard: 2, slimecore: 1 }, base: (T) => ({ hp: 30 * T, mdef: 3 * T, def: 3 * T }) },
+  { id: 'slimemail', type: 'body', n: '凝膠鎧', look: 'slimebody', set: 'slime', tier: 3, cost: { hard: 2, spirit: 2, slimecore: 1 }, base: (T) => ({ hp: 62 * T, def: 5 * T }) },
+  { id: 'slimeboots', type: 'feet', n: '凝膠靴', look: 'slimefeet', set: 'slime', tier: 3, cost: { hide: 2, spirit: 2, slimecore: 1 }, base: (T) => ({ spd: 4 + T, def: 3 * T, mdef: 2 * T, hp: 8 * T }) },
+
+  // T3 影狼套裝（劍士）
+  { id: 'shadowblade', type: 'weapon', n: '影爪刃', form: 'sword', look: 'shadowweapon', set: 'shadow', tier: 3, cost: { hard: 3, hide: 1, shadowclaw: 2 }, base: (T) => ({ atk: 11 * T + 5, crit: 4, pen: 2 }) },
+  { id: 'shadowhood', type: 'head', n: '影狼兜帽', look: 'shadowhelm', set: 'shadow', tier: 3, cost: { hide: 3, spirit: 1, shadowclaw: 1 }, base: (T) => ({ hp: 26 * T, mdef: 3 * T, crit: 3 }) },
+  { id: 'shadowgarb', type: 'body', n: '影狼夜行衣', look: 'shadowbody', set: 'shadow', tier: 3, cost: { hide: 3, hard: 1, shadowclaw: 1 }, base: (T) => ({ hp: 42 * T, def: 4 * T, atk: 3 * T, crit: 2 }) },
+  { id: 'shadowboots', type: 'feet', n: '影狼靴', look: 'shadowfeet', set: 'shadow', tier: 3, cost: { hide: 3, spirit: 1, shadowclaw: 1 }, base: (T) => ({ spd: 9 + T, def: 2 * T }) },
+
+  // T3 魔晶套裝（術士）
+  { id: 'crystalrod', type: 'weapon', n: '魔晶法杖', form: 'staff', look: 'crystalweapon', set: 'crystal', tier: 3, cost: { spirit: 3, hard: 1, purecrystal: 2 }, base: (T) => ({ matk: 11 * T + 5, mpen: 4 }) },
+  { id: 'crystalcrown', type: 'head', n: '魔晶冠', look: 'crystalhelm', set: 'crystal', tier: 3, cost: { spirit: 3, hard: 1, purecrystal: 1 }, base: (T) => ({ hp: 24 * T, mdef: 4 * T, matk: 4 * T }) },
+  { id: 'crystalrobe', type: 'body', n: '魔晶法袍', look: 'crystalbody', set: 'crystal', tier: 3, cost: { spirit: 2, hide: 2, purecrystal: 1 }, base: (T) => ({ hp: 42 * T, def: 4 * T, mdef: 5 * T, matk: T }) },
+  { id: 'crystalshoes', type: 'feet', n: '魔晶鞋', look: 'crystalfeet', set: 'crystal', tier: 3, cost: { spirit: 2, hide: 2, purecrystal: 1 }, base: (T) => ({ spd: 4 + T, def: 2 * T, mdef: T, matk: 2 * T }) },
+
+  // T3 守墓人套裝（弓手）
+  { id: 'gravebow', type: 'weapon', n: '提燈弓', form: 'bow', look: 'graveweapon', set: 'grave', tier: 3, cost: { hide: 2, hard: 2, lantern: 2 }, base: (T) => ({ atk: 11 * T + 5, crit: 4 }) },
+  { id: 'gravehat', type: 'head', n: '守墓人寬簷帽', look: 'gravehelm', set: 'grave', tier: 3, cost: { hide: 3, spirit: 1, lantern: 1 }, base: (T) => ({ hp: 26 * T, mdef: 4 * T, crit: 2 }) },
+  { id: 'gravecoat', type: 'body', n: '守墓人長大衣', look: 'gravebody', set: 'grave', tier: 3, cost: { hide: 3, hard: 1, lantern: 1 }, base: (T) => ({ hp: 46 * T, def: 4 * T, mdef: 3 * T, atk: 2 * T }) },
+  { id: 'graveboots', type: 'feet', n: '守墓人皮靴', look: 'gravefeet', set: 'grave', tier: 3, cost: { hide: 3, hard: 1, lantern: 1 }, base: (T) => ({ spd: 8 + T, def: 2 * T }) },
+
+  // T3 岩王套裝（劍士）
+  { id: 'rockblade', type: 'weapon', n: '岩王巨劍', form: 'greatsword', look: 'rockweapon', set: 'rock', tier: 3, cost: { hard: 3, spirit: 1, lavaheart: 2 }, base: (T) => ({ atk: 11 * T + 6, crit: 3, def: 2 * T }) },
+  { id: 'rockhelm', type: 'head', n: '岩王盔', look: 'rockhelm', set: 'rock', tier: 3, cost: { hard: 3, hide: 1, lavaheart: 1 }, base: (T) => ({ hp: 30 * T, mdef: 3 * T, def: 3 * T }) },
+  { id: 'rockplate', type: 'body', n: '岩王重甲', look: 'rockbody', set: 'rock', tier: 3, cost: { hard: 3, hide: 1, lavaheart: 1 }, base: (T) => ({ hp: 60 * T, def: 6 * T }) },
+  { id: 'rockboots', type: 'feet', n: '岩王戰靴', look: 'rockfeet', set: 'rock', tier: 3, cost: { hard: 3, hide: 1, lavaheart: 1 }, base: (T) => ({ spd: 4 + T, def: 3 * T, mdef: 2 * T }) },
+
   // ---------- 飾品 ----------
   { id: 'ring', type: 'acc', n: '戒指', look: 'ring', cost: { spirit: 3, hard: 1 }, base: ACC_BASES },
   { id: 'necklace', type: 'acc', n: '項鍊', look: 'necklace', cost: { spirit: 2, hide: 2 }, base: ACC_BASES },

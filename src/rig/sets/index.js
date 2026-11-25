@@ -6,8 +6,13 @@ import beetle from './beetle.js';
 import wolf from './wolf.js';
 import spore from './spore.js';
 import goblin from './goblin.js';
+import slime from './slime.js';
+import shadow from './shadow.js';
+import crystal from './crystal.js';
+import grave from './grave.js';
+import rock from './rock.js';
 
-const LIST = [beetle, wolf, spore, goblin];
+const LIST = [beetle, wolf, spore, goblin, slime, shadow, crystal, grave, rock];
 
 export const THEMES = Object.fromEntries(LIST.map((t) => [t.key, t]));
 export const lookOf = (key, part) => key + part;   // part：weapon、helm、body、feet
@@ -29,4 +34,14 @@ export const SET_AURA_FNS = Object.fromEntries(LIST.filter((t) => t.aura).map((t
 // 給 hats.js：頭飾的畫法（全罩式的另外列出）
 export const SET_HATS = Object.fromEntries(LIST.filter((t) => t.helm).map((t) => [lookOf(t.key, 'helm'), (g, A, m, r) => t.helm(g, A, r)]));
 export const SET_FULL_HATS = LIST.filter((t) => t.helmFull).map((t) => lookOf(t.key, 'helm'));
+export const SET_OPEN_HATS = LIST.filter((t) => t.helmOpen).map((t) => lookOf(t.key, 'helm'));   // 頭冠：不壓頭髮
 export const SET_ICON_LOOKS = Object.keys(BY_LOOK);
+
+// 給戰鬥畫面的大型特效（src/game/stagefx.js）：這一套的特效色（數字）、終結技的組成、大劍終結技召喚什麼
+// 只有 stage 的套裝（T3 以上）才有戰鬥畫面尺度的特效
+const hexNum = (h) => parseInt(h.slice(1), 16);
+export function stageTheme(key) {
+  const t = THEMES[key];
+  if (!t || !t.stage) return null;
+  return { key, F: t.pal.fx.map(hexNum), stage: t.stage, beast: t.stage.beast || null, bladeFire: !!t.bladeFire, tier: t.tier };
+}
