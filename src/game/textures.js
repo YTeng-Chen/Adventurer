@@ -4,7 +4,8 @@ import * as Phaser from 'phaser';
 import { sprites } from '../ui/sprites.js';
 import { Rig, ANIMS, attackStyle } from '../rig/rig.js';
 import { HERO_SCALE } from './config.js';
-import { StageFx, STAGE_STYLES, STAGE_SETS } from './stagefx.js';
+import { StageFx } from './stagefx.js';
+import { stageTheme } from '../rig/sets/index.js';
 
 export function gridTexture(scene, key, grid) {
   if (scene.textures.exists(key)) return key;
@@ -64,9 +65,17 @@ export class RigHero {
   }
   setLook(equip, look) {
     this.rig.setEquip(equip); this.rig.setLook(look); this.style = attackStyle(equip && equip.weapon);
-    // 拿有大型特效的武器、或某一套穿 2 件以上，才建立戰鬥畫面尺度的特效（stagefx.js）
-    const sets = this.rig.setCount || {};
-    if (!this.fx && (STAGE_STYLES.has(this.style) || Object.keys(sets).some((k) => STAGE_SETS.has(k) && sets[k] >= 2))) this.fx = new StageFx(this.scene, this);
+    // 戰鬥畫面尺度的特效（stagefx.js）：炎龍大劍、T3 以上主題套裝的武器，或某一套（有大型特效的）穿 2 件以上
+    const sets = this.rig.setCount || {}, w = equip && equip.weapon;
+    let theme = null;
+    if (w && w.look === 'dragonblade') theme = 'dragon';
+    else if (w && w.set && stageTheme(w.set)) theme = w.set;
+    else theme = Object.keys(sets).find((k) => sets[k] >= 2 && (k === 'dragon' || stageTheme(k))) || null;
+    this.stageWeapon = !!(w && theme && w.set === theme);   // 武器本身有大型連招特效
+    if (theme !== (this.fx && this.fx.theme.key)) {
+      if (this.fx) { this.fx.destroy(); this.fx = null; }
+      if (theme) this.fx = new StageFx(this.scene, this, theme === 'dragon' ? undefined : stageTheme(theme));
+    }
     if (this.fx) this.fx.setSets(sets);
   }
   // 目標在畫面上的 x（魔物中心）：魔法球、箭、命中的爆光會飛到那裡
@@ -76,7 +85,11 @@ export class RigHero {
     const name = `${full ? 'combo' : 'quick'}_${this.style || 'sword'}`, anim = ANIMS[name];
     this.play(name, speed);
     const ms = (anim.dur * 1000) / speed;
-    if (this.fx && STAGE_STYLES.has(this.style)) { if (full) this.fx[this.style](ms, this.scene.sys.settings.key === 'Idle'); else this.fx.quick(ms); }
+    if (this.fx && this.stageWeapon) {
+      const calm = this.scene.sys.settings.key === 'Idle', ft = this.fx.theme;
+      if (this.style === 'greatsword' && ft.beast) { if (full) this.fx.greatsword(ms, calm); else this.fx.quick(ms); }   // 大劍：火龍（骷髏、隕石）那一套
+      else if (ft.stage) { if (full) this.fx.finisher(ms, calm, anim.hits); else this.fx.quickHit(ms, anim.hits); }
+    }
     return anim.hits.map((h) => ({ ms: (h.t * anim.dur * 1000) / speed, w: h.w, power: h.power }));
   }
   // 命中時停頓一下（動作停住，之後接著播）

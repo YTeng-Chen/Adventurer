@@ -481,7 +481,7 @@ test('測試用：直接拿到整套炎龍套裝並穿上，換下來的放回�
   assert.deepEqual(W.hero(s).sets[0].bonus.map((b) => b.on), [true, true]);
 });
 
-test('測試用：取得全部裝備，每一款各一件放進背包，背包滿了就停', () => {
+test('測試用：取得全部裝備，每一款各一件放進背包（可以超過背包上限）', () => {
   const s = W.newGame(NOW, 1);
   s.bag = [];
   const r = W.giveAllGear(s);
@@ -489,9 +489,7 @@ test('測試用：取得全部裝備，每一款各一件放進背包，背包�
   assert.equal(r.left, 0);
   assert.deepEqual(new Set(s.bag.map((it) => it.def)).size, D.GEAR.length);
   assert.ok(s.bag.every((it) => it.rarity === 4));
-  const full = W.giveAllGear(s);
-  assert.equal(s.bag.length, D.BAG_CAP);
-  assert.equal(full.got + full.left, D.GEAR.length);
+  assert.ok(s.bag.every((it) => it.tier === (D.GEAR_BY_ID[it.def].tier || 5)), '限定階級的用那一階');
 });
 
 test('測試用：刪除全部裝備，背包和身上都清空', () => {

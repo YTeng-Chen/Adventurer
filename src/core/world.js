@@ -402,12 +402,11 @@ function giveSet(s, setKey, rarity = 4) {
   s.seed = rng.state;
   return got;
 }
-// 測試用：每一款裝備各拿一件（傳說品質；限定階級的用那一階，其餘用 T5），放進背包，背包滿了就停。回傳拿到幾件、沒放進去幾件
+// 測試用：每一款裝備各拿一件（傳說品質；限定階級的用那一階，其餘用 T5），放進背包（可以超過上限）。回傳拿到幾件、沒放進去幾件（固定 0）
 function giveAllGear(s, rarity = 4) {
   const rng = R().make(s.seed);
   let got = 0, left = 0;
-  for (const g of D.GEAR) {
-    if (s.bag.length >= D.BAG_CAP) { left++; continue; }
+  for (const g of D.GEAR) {   // 款式比背包格子多（頭目套裝），測試時可以超過背包上限；超過時要先賣掉才能繼續鍛造
     s.bag.push(I().createItem(rng, { def: g.id, tier: g.tier || 5, rarity, seq: s.itemSeq++ }));
     got++;
   }
