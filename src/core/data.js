@@ -42,6 +42,18 @@ const SETS = {
     { need: 2, d: '防禦、生命 +6%', pct: { def: 6, hp: 6 } },
     { need: 4, d: '女王之殼：反擊機率 +10%、受到的傷害 -5%', eff: { counterChance: 0.1, dmgReduce: 0.05 } },
   ] },
+  wolf: { n: '狼王套裝', pieces: 4, color: '#c2bcb8', bonus: [
+    { need: 2, d: '速度 +6、暴擊 +3', flat: { spd: 6, crit: 3 } },
+    { need: 4, d: '狼群突襲：12% 機率再攻擊一次', eff: { doubleChance: 0.12 } },
+  ] },
+  spore: { n: '菇母套裝', pieces: 4, color: '#5ae0c0', bonus: [
+    { need: 2, d: '魔法攻擊 +8%', pct: { matk: 8 } },
+    { need: 4, d: '孢子瘴氣：攻擊附加 1 層燃燒、燃燒傷害 +5%', eff: { burnStacks: 1, burnPct: 0.05 } },
+  ] },
+  goblin: { n: '戰團套裝', pieces: 4, color: '#9adf4a', bonus: [
+    { need: 2, d: '物理攻擊 +8%', pct: { atk: 8 } },
+    { need: 4, d: '戰團號令：連鎖追加傷害 +30%', eff: { chain: 0.3 } },
+  ] },
 };
 const MECHS = {
   chain: { n: '連鎖', color: '#e0564a' },

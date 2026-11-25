@@ -77,6 +77,24 @@ export const GEAR = [
   { id: 'beetlemail', type: 'body', n: '女王甲殼鎧', look: 'beetlebody', set: 'beetle', tier: 1, cost: { hard: 3, hide: 1, queenshell: 1 }, base: (T) => ({ hp: 60 * T, def: 5 * T }) },
   { id: 'beetlegreaves', type: 'feet', n: '女王脛甲', look: 'beetlefeet', set: 'beetle', tier: 1, cost: { hard: 2, hide: 2, queenshell: 1 }, base: (T) => ({ spd: 4 + T, def: 3 * T, mdef: 2 * T }) },
 
+  // T2 狼王套裝（弓手）
+  { id: 'wolfbow', type: 'weapon', n: '狼牙長弓', form: 'bow', look: 'wolfweapon', set: 'wolf', tier: 2, cost: { hide: 3, hard: 1, wolffang: 2 }, base: (T) => ({ atk: 11 * T + 4, crit: 4 }) },
+  { id: 'wolfhood', type: 'head', n: '狼王頭罩', look: 'wolfhelm', set: 'wolf', tier: 2, cost: { hide: 3, spirit: 1, wolffang: 1 }, base: (T) => ({ hp: 26 * T, mdef: 3 * T, crit: 2 }) },
+  { id: 'wolfpelt', type: 'body', n: '狼王毛皮甲', look: 'wolfbody', set: 'wolf', tier: 2, cost: { hide: 3, hard: 1, wolffang: 1 }, base: (T) => ({ hp: 42 * T, def: 4 * T, atk: 3 * T }) },
+  { id: 'wolfboots', type: 'feet', n: '狼王毛皮靴', look: 'wolffeet', set: 'wolf', tier: 2, cost: { hide: 3, spirit: 1, wolffang: 1 }, base: (T) => ({ spd: 8 + T, def: 2 * T }) },
+
+  // T2 菇母套裝（術士）
+  { id: 'sporestaff', type: 'weapon', n: '菇母法杖', form: 'staff', look: 'sporeweapon', set: 'spore', tier: 2, cost: { spirit: 3, hide: 1, sporesac: 2 }, base: (T) => ({ matk: 11 * T + 4, mpen: 3 }) },
+  { id: 'sporecap', type: 'head', n: '菇母傘帽', look: 'sporehelm', set: 'spore', tier: 2, cost: { spirit: 2, hide: 2, sporesac: 1 }, base: (T) => ({ hp: 26 * T, mdef: 4 * T, matk: 3 * T }) },
+  { id: 'sporerobe', type: 'body', n: '菇母孢衣', look: 'sporebody', set: 'spore', tier: 2, cost: { hide: 3, spirit: 1, sporesac: 1 }, base: (T) => ({ hp: 42 * T, def: 4 * T, mdef: 4 * T, matk: T }) },
+  { id: 'sporeshoes', type: 'feet', n: '菇母軟鞋', look: 'sporefeet', set: 'spore', tier: 2, cost: { spirit: 2, hide: 2, sporesac: 1 }, base: (T) => ({ spd: 4 + T, def: 2 * T, matk: 2 * T }) },
+
+  // T2 戰團套裝（劍士）
+  { id: 'goblinblade', type: 'weapon', n: '戰團鋸刃', form: 'sword', look: 'goblinweapon', set: 'goblin', tier: 2, cost: { hard: 3, hide: 1, goblinbadge: 2 }, base: (T) => ({ atk: 11 * T + 4, crit: 3, pen: 2 }) },
+  { id: 'goblinhelm', type: 'head', n: '戰團角盔', look: 'goblinhelm', set: 'goblin', tier: 2, cost: { hard: 3, hide: 1, goblinbadge: 1 }, base: (T) => ({ hp: 26 * T, mdef: 3 * T, def: 2 * T, crit: 1 }) },
+  { id: 'goblinarmor', type: 'body', n: '戰團拼皮甲', look: 'goblinbody', set: 'goblin', tier: 2, cost: { hide: 2, hard: 2, goblinbadge: 1 }, base: (T) => ({ hp: 45 * T, def: 5 * T, atk: 2 * T }) },
+  { id: 'goblinboots', type: 'feet', n: '戰團鐵靴', look: 'goblinfeet', set: 'goblin', tier: 2, cost: { hard: 3, hide: 1, goblinbadge: 1 }, base: (T) => ({ spd: 4 + T, def: 3 * T, mdef: 2 * T }) },
+
   // ---------- 飾品 ----------
   { id: 'ring', type: 'acc', n: '戒指', look: 'ring', cost: { spirit: 3, hard: 1 }, base: ACC_BASES },
   { id: 'necklace', type: 'acc', n: '項鍊', look: 'necklace', cost: { spirit: 2, hide: 2 }, base: ACC_BASES },

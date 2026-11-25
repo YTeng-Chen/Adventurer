@@ -3,8 +3,11 @@
 // 要新增一套：寫一個檔案，加進 LIST；data.js 的 SETS、gear.js 各加對應的資料。
 import { weaponCanvas, aura } from './kit.js';
 import beetle from './beetle.js';
+import wolf from './wolf.js';
+import spore from './spore.js';
+import goblin from './goblin.js';
 
-const LIST = [beetle];
+const LIST = [beetle, wolf, spore, goblin];
 
 export const THEMES = Object.fromEntries(LIST.map((t) => [t.key, t]));
 export const lookOf = (key, part) => key + part;   // part：weapon、helm、body、feet
