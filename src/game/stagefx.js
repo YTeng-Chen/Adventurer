@@ -5,8 +5,8 @@
 // 混色：火焰本體（火柱、火龍、新月斬、火焰粒子）用一般混色，才保得住火的顏色；加亮混色只用在小亮點和光暈，
 // 不然疊在白天的天空上會整片變白。
 // 時間點都用連招的進度（0–1）表示，跟著 rig.js 的 COMBOS.greatsword 走。
-// 擴充：新的武器形態要有大型特效，就在 StageFx 加一個和形態同名的方法（例如 greatsword(ms, calm)），
-// 並把形態加進 STAGE_STYLES；RigHero 播連招時會自動呼叫。套裝的畫面光環寫在 update() 裡，看 this.sets。
+// 擴充：主題套裝的大型特效由 src/rig/sets/<套裝>.js 的 stage 設定（stageTheme），RigHero.attack 會自動呼叫
+// greatsword()（大劍）或 finisher()（其他形態）。套裝的畫面光環寫在 update() 裡，看 this.sets。
 import * as Phaser from 'phaser';
 import { W, H, GROUND } from './config.js';
 

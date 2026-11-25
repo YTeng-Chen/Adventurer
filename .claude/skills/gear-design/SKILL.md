@@ -25,8 +25,8 @@ description: 設計、新增或重畫冒險者遊戲的裝備：單件、整套�
 | --- | --- |
 | 新款式（沿用現有外觀） | `src/core/gear.js` 加一列（記得寫 `cost`），其他自動出現（鍛造、背包、鍛造室款式選單） |
 | 新外觀 | 武器 `src/rig/rig.js` 的 `WEAPON_LOOKS`；上衣 `BODY_LOOKS`；鞋子 `FEET_LOOKS`；超出身體輪廓的部分（護肩、披風、爪）`EXTRAS`；頭飾 `src/rig/hats.js` 的 `STYLES`（全罩式另外加進 `FULL`）；背包圖示把外觀加進 `rig.js` 的 `RIG_ICON_LOOKS` |
-| 主題套裝 | 美術與跟著角色的特效放在自己的檔案（照 `src/rig/dragon.js`）；套裝效果 `src/core/data.js` 的 `SETS`；套裝光環 `rig.js` 的 `SET_AURAS`（小）、`src/game/stagefx.js` 的 `STAGE_SETS` 與 `update()`（大） |
-| 新武器形態 | `data.js` 的 `FORMS`（職業與職業機制）；`rig.js` 的 `COMBOS`，以及 `ANIMS` 的 `combo_<形態>`、`quick_<形態>`；`src/game/IdleScene.js` 的 `RANGE`、`FINISH_REACH`（掛機時打多遠）；大型特效在 `stagefx.js` 加同名方法並加進 `STAGE_STYLES` |
+| 主題套裝 | 在 `src/rig/sets/` 寫一個檔案（照現有的，例如 `beetle.js`、`lich.js`；共用畫法在 `kit.js`），加進 `index.js` 的 `LIST`：外觀代號自動是「套裝代號＋weapon／helm／body／feet」，畫法、背包圖示、光環（`aura`）、戰鬥畫面特效（`stage`，T3 以上）自動接上；套裝效果 `src/core/data.js` 的 `SETS`；`helmFull` 全罩、`helmOpen` 頭冠（不壓頭髮）、`bladeFire` 大劍劍身一直燒 |
+| 新武器形態 | `data.js` 的 `FORMS`（職業與職業機制）；`rig.js` 的 `COMBOS`，以及 `ANIMS` 的 `combo_<形態>`、`quick_<形態>`；`src/game/IdleScene.js` 的 `RANGE`、`FINISH_REACH`（掛機時打多遠）；大型特效在 `stagefx.js` 加同名方法，並在 `src/game/textures.js` 的 `RigHero.attack` 呼叫 |
 
 設定頁的「取得全部裝備」測試按鈕會自動包含 `GEAR` 裡的每一款；`/tools/rig.html` 的服裝選單會自動列出 `SETS` 裡的每一套，不用另外加。
 
