@@ -276,8 +276,8 @@ export function dragonFeetExtras(P, view, it, ink) {
 // env：{ ox, oy（腳底的畫面位置）, cx, cy（肩膀）, dot(x, y, 顏色, 寬, 高), time（秒）, blade（劍身兩端的畫面座標，沒拿大劍時是 null） }
 // 回傳 true 表示這個特效由這裡畫好了
 export function fireFx(ctx, f, env) {
-  const { ox, oy, dot, time } = env, tick = Math.floor(time * 18);
-  const fireAt = (k) => FIRE[Math.max(0, Math.min(4, Math.round(k * 4)))];   // 0 → 核心、1 → 邊緣
+  const { ox, oy, dot, time } = env, tick = Math.floor(time * 18), F = env.fire || FIRE;   // env.fire：主題大劍換成自己的特效色
+  const fireAt = (k) => F[Math.max(0, Math.min(4, Math.round(k * 4)))];   // 0 → 核心、1 → 邊緣
   switch (f.type) {
     case 'flamearc': {                         // 火焰劍光：越靠近劍的那一端越粗、越亮，外緣竄出火舌
       const span = f.to - f.from, n = Math.max(1, Math.round(Math.abs(span) / 1.1));
@@ -292,7 +292,7 @@ export function fireFx(ctx, f, env) {
           const len = Math.round((2 + 9 * hash(s, tick)) * k * (f.width / 14));
           for (let j = 1; j <= len; j++) {
             ctx.globalAlpha = f.alpha * k * (1 - j / (len + 1));
-            dot(env.cx + ux * (f.r + j), env.cy + uy * (f.r + j) - j * 0.7, j < len / 2 ? FIRE[2] : FIRE[3], 1, 2);
+            dot(env.cx + ux * (f.r + j), env.cy + uy * (f.r + j) - j * 0.7, j < len / 2 ? F[2] : F[3], 1, 2);
           }
         }
       }
@@ -313,13 +313,13 @@ export function fireFx(ctx, f, env) {
           const d = Math.abs(x) / wy;
           if (y > H - 16 && hash(x * 3 + y, tick) < (y - (H - 16)) / 16) continue;   // 頂端的火舌
           ctx.globalAlpha = f.alpha;
-          dot(ox + f.x + x + wob, oy - y, d < 0.3 && y < H * 0.8 ? FIRE[0] : fireAt(d * 0.8 + (y / f.h) * 0.3), 2, 1);   // 中心是白熱的
+          dot(ox + f.x + x + wob, oy - y, d < 0.3 && y < H * 0.8 ? F[0] : fireAt(d * 0.8 + (y / f.h) * 0.3), 2, 1);   // 中心是白熱的
         }
       }
       ctx.globalAlpha = f.alpha;                // 底部的衝擊光圈（兩圈），兩側噴出的火舌
       for (let a = 0; a < 360; a += 4) {
-        dot(ox + f.x + Math.cos(a * RAD) * (half + 22 * f.p), oy - 1 + Math.sin(a * RAD) * 4, FIRE[1], 2, 1);
-        dot(ox + f.x + Math.cos(a * RAD) * (half + 44 * f.p), oy - 1 + Math.sin(a * RAD) * 6, FIRE[3], 1, 1);
+        dot(ox + f.x + Math.cos(a * RAD) * (half + 22 * f.p), oy - 1 + Math.sin(a * RAD) * 4, F[1], 2, 1);
+        dot(ox + f.x + Math.cos(a * RAD) * (half + 44 * f.p), oy - 1 + Math.sin(a * RAD) * 6, F[3], 1, 1);
       }
       for (let i = 0; i < 10; i++) {
         const s = i % 2 ? 1 : -1, h0 = H * (0.2 + 0.6 * hash(i, 11)), len = 8 + 14 * hash(i, tick);
@@ -343,7 +343,7 @@ export function fireFx(ctx, f, env) {
           const d = Math.hypot(dx, dy) / rr;
           if (d <= 1) dot(ox + x + dx, oy - y + dy, fireAt(d * 0.7 + i / N * 0.4));
         }
-        if (i % 3 === 0) dot(ox + x - 2, oy - y - rr - 2 - hash(i, tick) * 4, FIRE[2], 1, 2);   // 背上的火鬃
+        if (i % 3 === 0) dot(ox + x - 2, oy - y - rr - 2 - hash(i, tick) * 4, F[2], 1, 2);   // 背上的火鬃
       }
       // 龍頭：朝前進方向，上顎、張開的下顎、眼睛、往後的角
       const [hx, hy] = P(f.k), [bx, by] = P(Math.max(0, f.k - 0.03));
@@ -358,8 +358,8 @@ export function fireFx(ctx, f, env) {
         put(lx, ly, fireAt(edgeK * 0.8 + Math.max(0, lx) / 30));
       }
       put(3, 4, '#ffffff'); put(4, 4, '#ffffff');                                         // 眼睛
-      for (let i = 0; i < 9; i++) put(-4 - i, 6 + i * 0.7, i > 5 ? FIRE[0] : FIRE[1]);      // 龍角
-      for (let i = 0; i < 5; i++) put(-2 - i * 2, -3 - i * 0.8, FIRE[3]);                 // 下巴的火鬚
+      for (let i = 0; i < 9; i++) put(-4 - i, 6 + i * 0.7, i > 5 ? F[0] : F[1]);      // 龍角
+      for (let i = 0; i < 5; i++) put(-2 - i * 2, -3 - i * 0.8, F[3]);                 // 下巴的火鬚
       return true;
     }
     case 'lavacrack': {                        // 熔岩裂縫：從 x0 裂到 x1，縫裡發光
@@ -369,8 +369,8 @@ export function fireFx(ctx, f, env) {
       for (let s = 0; s <= len; s += 1) {
         y += (hash(s, 3) - 0.5) * 1.4; y = Math.max(-2, Math.min(2, y));
         const glow = 0.5 + 0.5 * Math.sin(s * 0.4 - time * 14);
-        dot(ox + f.x0 + s, oy + 1 + y, glow > 0.6 ? FIRE[1] : FIRE[2], 1, 2);
-        if (s % 9 === 4) for (let b = 1; b < 7; b++) dot(ox + f.x0 + s + b, oy + 1 + y + (s % 18 === 4 ? b * 0.5 : -b * 0.4), FIRE[3]);   // 分岔
+        dot(ox + f.x0 + s, oy + 1 + y, glow > 0.6 ? F[1] : F[2], 1, 2);
+        if (s % 9 === 4) for (let b = 1; b < 7; b++) dot(ox + f.x0 + s + b, oy + 1 + y + (s % 18 === 4 ? b * 0.5 : -b * 0.4), F[3]);   // 分岔
       }
       return true;
     }
@@ -379,7 +379,7 @@ export function fireFx(ctx, f, env) {
         const ph = (time * (f.speed || 0.8) + hash(i, 1)) % 1;
         const x = f.x + (hash(i, 2) - 0.5) * f.w + Math.sin(ph * 6 + i) * 3, y = f.y + ph * f.h;
         ctx.globalAlpha = (f.alpha ?? 1) * Math.sin(ph * Math.PI);
-        dot(ox + x, oy - y, i % 3 ? FIRE[1] : FIRE[2], i % 4 === 0 ? 2 : 1);
+        dot(ox + x, oy - y, i % 3 ? F[1] : F[2], i % 4 === 0 ? 2 : 1);
       }
       return true;
     }
@@ -387,7 +387,7 @@ export function fireFx(ctx, f, env) {
       for (let i = 0; i < f.n; i++) {
         const a = (i * 137 + time * 520) * RAD, rr = f.r * (1 - f.p) * (0.35 + 0.65 * hash(i, 5)) + 2;
         ctx.globalAlpha = 0.35 + 0.65 * f.p;
-        for (let j = 0; j < 3; j++) dot(ox + f.x + Math.cos(a - j * 0.18) * rr, oy - f.y + Math.sin(a - j * 0.18) * rr * 0.8, FIRE[Math.min(4, j + (i % 2))], j ? 1 : 2);
+        for (let j = 0; j < 3; j++) dot(ox + f.x + Math.cos(a - j * 0.18) * rr, oy - f.y + Math.sin(a - j * 0.18) * rr * 0.8, F[Math.min(4, j + (i % 2))], j ? 1 : 2);
       }
       return true;
     }
@@ -395,8 +395,8 @@ export function fireFx(ctx, f, env) {
       ctx.globalAlpha = f.alpha;
       for (let a = 0; a < 360; a += 3) {
         const x = Math.cos(a * RAD), y = Math.sin(a * RAD) * 0.25;
-        dot(ox + f.x + x * f.rx, oy + 1 + y * f.rx, FIRE[a % 9 === 0 ? 1 : 2], 2, 1);
-        if (a % 12 === 0) dot(ox + f.x + x * f.rx * 0.7, oy + 1 + y * f.rx * 0.7, FIRE[3]);
+        dot(ox + f.x + x * f.rx, oy + 1 + y * f.rx, F[a % 9 === 0 ? 1 : 2], 2, 1);
+        if (a % 12 === 0) dot(ox + f.x + x * f.rx * 0.7, oy + 1 + y * f.rx * 0.7, F[3]);
       }
       return true;
     }
@@ -411,7 +411,7 @@ export function fireFx(ctx, f, env) {
           ctx.globalAlpha = Math.min(1, p * 1.3) * (1 - j / (len + 1));
           dot(x + Math.sin(i + time * 9) * j * 0.25, y - j, fireAt(j / Math.max(1, len) * 0.8 + 0.15), j < 2 ? 2 : 1, 1);
         }
-        if (p > 0.5 && hash(i, tick + 7) > 0.7) { ctx.globalAlpha = 0.8; dot(x + (hash(i, tick) - 0.5) * 6, y - 10 - hash(i, tick + 3) * 12, FIRE[1]); }
+        if (p > 0.5 && hash(i, tick + 7) > 0.7) { ctx.globalAlpha = 0.8; dot(x + (hash(i, tick) - 0.5) * 6, y - 10 - hash(i, tick + 3) * 12, F[1]); }
       }
       return true;
     }
@@ -422,6 +422,7 @@ export function fireFx(ctx, f, env) {
 // 套裝光環：穿越多件，身邊飄的火星越多；穿齊時腳下有熔岩光
 export function dragonAura(ctx, env, count) {
   if (count < 2) return;
+  env = { ...env, fire: null };   // 光環一定是炎龍的火
   fireFx(ctx, { type: 'embers', x: 0, y: 4, w: 46, h: 96, n: count >= 4 ? 16 : 6, speed: 0.6, alpha: count >= 4 ? 0.95 : 0.7 }, env);
   if (count >= 4) fireFx(ctx, { type: 'heat', x: 0, rx: 22 + Math.sin(env.time * 3) * 2, alpha: 0.55 }, env);
 }

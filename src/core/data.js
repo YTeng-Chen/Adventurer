@@ -37,6 +37,11 @@ const SETS = {
     { need: 2, d: '物理攻擊、生命 +12%', pct: { atk: 12, hp: 12 } },
     { need: 4, d: '炎龍之怒：攻擊附加 1 層燃燒、燃燒傷害 +10%、暴擊傷害 +30%', flat: { critDmg: 30 }, eff: { burnStacks: 1, burnPct: 0.1 } },
   ] },
+  // 頭目套裝（gear.js 的「頭目套裝」、外觀在 src/rig/sets/）
+  beetle: { n: '甲蟲女王套裝', pieces: 4, color: '#7fd05a', bonus: [
+    { need: 2, d: '防禦、生命 +6%', pct: { def: 6, hp: 6 } },
+    { need: 4, d: '女王之殼：反擊機率 +10%、受到的傷害 -5%', eff: { counterChance: 0.1, dmgReduce: 0.05 } },
+  ] },
 };
 const MECHS = {
   chain: { n: '連鎖', color: '#e0564a' },

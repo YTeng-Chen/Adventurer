@@ -69,6 +69,14 @@ export const GEAR = [
 
   { id: 'dragonclaw', type: 'feet', n: '炎龍爪靴', look: 'dragonclaw', set: 'dragon', tier: 5, cost: { hide: 2, hard: 2, dragonscale: 1 }, base: (T) => ({ spd: 7 + T, def: 2 * T, mdef: 2 * T }) },
 
+  // ---------- 頭目套裝：每一隻頭目一套（武器、頭飾、上衣、鞋子），只在頭目那一階出現，配方要那隻頭目的素材 ----------
+  // 外觀在 src/rig/sets/<套裝>.js；外觀代號是「套裝代號＋部位」。套裝效果在 data.js 的 SETS。
+  // T1 甲蟲女王套裝（守衛）
+  { id: 'beetlehammer', type: 'weapon', n: '女王甲殼鎚', form: 'hammer', look: 'beetleweapon', set: 'beetle', tier: 1, cost: { hard: 3, hide: 1, queenshell: 2 }, base: (T) => ({ atk: 7 * T + 4, def: 4 * T + 2 }) },
+  { id: 'beetlehelm', type: 'head', n: '女王角盔', look: 'beetlehelm', set: 'beetle', tier: 1, cost: { hard: 2, hide: 2, queenshell: 1 }, base: (T) => ({ hp: 27 * T, mdef: 3 * T, def: 3 * T }) },
+  { id: 'beetlemail', type: 'body', n: '女王甲殼鎧', look: 'beetlebody', set: 'beetle', tier: 1, cost: { hard: 3, hide: 1, queenshell: 1 }, base: (T) => ({ hp: 60 * T, def: 5 * T }) },
+  { id: 'beetlegreaves', type: 'feet', n: '女王脛甲', look: 'beetlefeet', set: 'beetle', tier: 1, cost: { hard: 2, hide: 2, queenshell: 1 }, base: (T) => ({ spd: 4 + T, def: 3 * T, mdef: 2 * T }) },
+
   // ---------- 飾品 ----------
   { id: 'ring', type: 'acc', n: '戒指', look: 'ring', cost: { spirit: 3, hard: 1 }, base: ACC_BASES },
   { id: 'necklace', type: 'acc', n: '項鍊', look: 'necklace', cost: { spirit: 2, hide: 2 }, base: ACC_BASES },

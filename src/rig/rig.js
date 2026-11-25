@@ -11,6 +11,7 @@ import { gearMats } from '../art/palette.js';
 import { CHIBI } from '../art/chibi-data.js';
 import { hatCanvas } from './hats.js';
 import { DRAGON_BODY, DRAGON_FEET, dragonBodyExtras, dragonFeetExtras, drawDragonBlade, BLADE_SIZE, BLADE_PIVOT, BLADE_POINTS, fireFx, dragonAura } from './dragon.js';
+import { SET_BODY_LOOKS, SET_FEET_LOOKS, SET_EXTRAS, SET_WEAPONS, SET_AURA_FNS, SET_ICON_LOOKS, themeOfLook } from './sets/index.js';
 
 const RAD = Math.PI / 180;
 const INK = RIG_PARTS.m.front.ink;
@@ -117,17 +118,19 @@ const BODY_LOOKS = {
   },
   // 炎龍鱗甲（dragon.js）：own 為 true 表示衣領、腰帶、裙甲都自己畫，pants 是底下的褲子顏色
   dragonmail: DRAGON_BODY,
+  ...SET_BODY_LOOKS,   // 其他主題套裝（src/rig/sets/）
 };
 // 裝備的額外零件（超出身體輪廓的部分，例如護肩尖刺、披風、龍爪）：外觀 → 產生零件的函式
-const EXTRAS = { dragonmail: dragonBodyExtras, dragonclaw: dragonFeetExtras };
+const EXTRAS = { dragonmail: dragonBodyExtras, dragonclaw: dragonFeetExtras, ...SET_EXTRAS };
 // 套裝的光環（跟著角色的小特效）：套裝代號 → (ctx, env, 穿了幾件) => 畫出來。新套裝在這裡加一種
-const SET_AURAS = { dragon: dragonAura };
+const SET_AURAS = { dragon: dragonAura, ...SET_AURA_FNS };
 // 鞋子的外觀 → 鞋筒從哪裡開始（相對 L.boot）、用哪種材質
 const FEET_LOOKS = {
   boots: { start: 0, mat: 'leather' },
   greaves: { start: -2, mat: 'metal' },
   shoes: { start: 2, mat: 'cloth' },
   dragonclaw: DRAGON_FEET,   // 炎龍爪靴：及膝的鱗甲脛甲，自己上色（paint）
+  ...SET_FEET_LOOKS,
 };
 
 // 每個零件一個上色函式。equip = { head, body, feet }（遊戲裡的裝備物件）；沒穿裝備的部位維持參考圖原本的樣子。
@@ -163,6 +166,7 @@ function painters(L, view, BASIC, skin, equip, bare) {
       if (y === start && feet.m.trim) return feet.m.trim;
       return y >= L.sole ? c.d : shadeX(L, x, c);
     }
+    if (robe && y <= L.robe && body.look.skirt) return body.look.skirt(L, x, y, body.it);           // 自己畫的長袍下襬
     if (robe && y <= L.robe) return y === L.robe ? (body.m.trim || body.m.cloth.d) : shadeX(L, x, body.m.cloth);   // 法袍下襬蓋到膝蓋
     const pants = body && body.look.pants;
     return body ? (L.dark(x) ? (pants ? pants[1] : BASIC.pantsD) : pants ? pants[0] : BASIC.pants) : null;   // 長褲跟著上衣；只穿鞋子時腿還是原樣
@@ -211,6 +215,7 @@ function weaponCanvas(it) {
     drawDragonBlade(c.getContext('2d'), it, INK);
     return { canvas: c, pivot: BLADE_PIVOT, points: BLADE_POINTS };
   }
+  if (it && SET_WEAPONS[it.look]) return SET_WEAPONS[it.look](it, INK);   // 主題套裝的武器（src/rig/sets/）
   const m = it ? mats(it) : null;
   const metal = m ? m.metal : { l: '#eef3f8', b: '#b9c7d8', d: '#8fa0b6' }, grip = m ? m.leather : { b: '#84502c', d: '#5e3a1e' };
   const gold = m && it.rarity >= 4 ? m.gold : m && m.trim ? m.trim : m ? metal.b : '#f2c14e';
@@ -609,9 +614,13 @@ export class Rig {
     const cx = ox - this.foot[0] + pose.x + sh.x + sh.pivot[0], cy = oy - this.foot[1] + pose.y + pose.bodyY + sh.y + sh.pivot[1];
     const dot = (x, y, col, w = 1, h = w) => { ctx.fillStyle = col; ctx.fillRect(Math.round(x), Math.round(y), w, h); };
     // 套裝光環、炎龍大劍上一直燒著的火（連招自己有 bladefire 時用連招的）
-    const env = { ox: ox + pose.x, oy, cx, cy, dot, time, blade: this.bladeAt() };
+    // 主題套裝的武器：刀光、魔法球、箭換成這一套的顏色（arc），火焰特效換成這一套的特效色（fx）
+    const theme = this.weapon && this.equip.weapon ? themeOfLook(this.equip.weapon.look) : null;
+    const env = { ox: ox + pose.x, oy, cx, cy, dot, time, blade: this.bladeAt(), fire: theme && theme.pal.fx };
     for (const k in this.setCount) if (SET_AURAS[k]) SET_AURAS[k](ctx, env, this.setCount[k]);
-    if (env.blade && !pose.fx.some((f) => f.type === 'bladefire')) fireFx(ctx, { type: 'bladefire', p: 0.3 + 0.08 * (this.equip.weapon.rarity || 0) }, env);
+    const burns = env.blade && (!theme || theme.bladeFire);   // 劍身一直燒著的火：炎龍大劍，或有 bladeFire 的主題大劍
+    if (burns && !pose.fx.some((f) => f.type === 'bladefire')) fireFx(ctx, { type: 'bladefire', p: 0.3 + 0.08 * (this.equip.weapon.rarity || 0) }, env);
+    const arcs = theme && theme.pal.arc, big = [C.gold, C.dragon];
     env.ox = ox;
     ctx.globalAlpha = 1;
     if (this.glow) {
@@ -623,8 +632,9 @@ export class Rig {
       ctx.globalAlpha = 1;
     }
     for (const f of pose.fx) {
+      if (f.type === 'bladefire' && env.blade && theme && !theme.bladeFire) continue;
       if (fireFx(ctx, f, env)) { ctx.globalAlpha = 1; continue; }   // 火焰特效（dragon.js）
-      const [core, edge] = f.c || ['#ffffff', '#8fd3ff'];
+      const [core, edge] = arcs && f.c ? arcs[big.includes(f.c) ? 1 : 0] : f.c || ['#ffffff', '#8fd3ff'];
       if (f.type === 'arc') {
         // 刀光：沿著揮砍的弧線（可以順時針也可以逆時針），越靠近武器這一端越亮、越寬；尾端變細變淡
         const span = f.to - f.from, n = Math.max(1, Math.round(Math.abs(span) / 1.2));
@@ -722,7 +732,7 @@ export class Rig {
 
 // ---------- 背包圖示：用角色身上真正的畫法 ----------
 // 舊的圖示（src/art/chibi.js）畫不出來的外觀才用這裡：武器斜放、頭盔單獨畫、上衣和鞋子只畫裝備那一層
-export const RIG_ICON_LOOKS = new Set(['bow', 'dragonblade', 'dragonhelm', 'dragonmail', 'dragonclaw']);
+export const RIG_ICON_LOOKS = new Set(['bow', 'dragonblade', 'dragonhelm', 'dragonmail', 'dragonclaw', ...SET_ICON_LOOKS]);
 function cropAlpha(c) {
   const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
   let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1;

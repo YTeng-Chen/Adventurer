@@ -503,3 +503,41 @@ test('測試用：刪除全部裝備，背包和身上都清空', () => {
   assert.equal(s.bag.length, 0);
   assert.ok(Object.values(s.equip).every((x) => x === null));
 });
+
+// ---------- 頭目套裝（每一隻頭目一套） ----------
+const BOSS_SETS = Object.keys(D.SETS).filter((k) => k !== 'dragon');
+test('頭目套裝：每一套四件，只在頭目那一階出現，名稱不加階級前綴，配方要那隻頭目的素材', () => {
+  const rng = R.make(77);
+  const bossMats = {};
+  D.AREAS.forEach((a) => a.bosses.forEach((b, i) => { bossMats[b.mat.id] = a.tier + i; }));
+  for (const k of BOSS_SETS) {
+    const pieces = D.GEAR.filter((g) => g.set === k);
+    assert.deepEqual(pieces.map((g) => g.type).sort(), ['body', 'feet', 'head', 'weapon'], k + ' 四個部位');
+    const T = pieces[0].tier;
+    for (const g of pieces) {
+      assert.equal(g.tier, T, g.id + ' 同一階');
+      const boss = Object.keys(g.cost).filter((m) => bossMats[m]);
+      assert.equal(boss.length, 1, g.id + ' 要一種頭目素材');
+      assert.equal(bossMats[boss[0]], T, g.id + ' 的頭目素材和套裝同一階');
+      const it = I.createItem(rng, { def: g.id, tier: T, rarity: 0, seq: 1 });
+      assert.equal(it.name, g.n, '名稱不加階級前綴');
+      assert.equal(it.set, k);
+      assert.ok(!/^(新手|森林|礦鐵|冥骨|熔岩)/.test(g.n), g.n + ' 不和階級前綴重複');
+    }
+    const w = pieces.find((g) => g.type === 'weapon');
+    assert.ok(D.FORMS[w.form], w.id + ' 的形態');
+    // 只在那一階隨機鍛造得到（不指定款式時不會出現：要頭目素材）
+    for (let i = 0; i < 200; i++) assert.notEqual(I.createItem(rng, { type: 'head', tier: T === 1 ? 2 : 1, rarity: 0, seq: i }).set, k);
+  }
+});
+test('頭目套裝：2 件、4 件效果都會生效', () => {
+  for (const k of BOSS_SETS) {
+    const s = W.newGame(NOW, 1);
+    W.giveSet(s, k);
+    const st = W.hero(s).sets.find((x) => x.k === k);
+    assert.equal(st.count, 4, k);
+    assert.ok(st.bonus.every((b) => b.on), k + ' 全部生效');
+    s.equip.weapon = null; s.equip.feet = null;
+    assert.deepEqual(W.hero(s).sets.find((x) => x.k === k).bonus.map((b) => b.on), [true, false], k + ' 兩件');
+  }
+});
