@@ -182,8 +182,17 @@ export class StageFx {
     this.objs = [this.drops, this.leaves, this.embers, this.flames, this.column, this.sparks, this.debris, this.smoke, this.inward, this.dark, this.halo, this.flashRect, this.aura];
   }
   key(name) { return name + '-' + this.theme.key; }
-  // 換了一套特效（換武器、換套裝）時，把舊的整組拿掉
-  destroy() { for (const o of this.objs) o.destroy(); }
+  // 換了一套特效（換武器、換套裝）時，把舊的整組拿掉。
+  // 不能馬上銷毀：連招放到一半時，還有排好的計時器、補間會繼續往粒子發射器噴東西，
+  // 發射器已經銷毀的話 Phaser 會丟錯誤，整個遊戲迴圈就停住（換裝備時當機）。
+  // 所以先把常駐的光環、暗場藏起來、停止發射，等排好的特效都播完（最長約 3 秒）再真的銷毀。
+  destroy() {
+    if (this.dead) return;
+    this.dead = true;
+    this.aura.setVisible(false); this.halo.setAlpha(0);
+    const sc = this.scene, kill = () => { for (const o of this.objs) if (o.scene) o.destroy(); };
+    if (sc.sys.isActive()) sc.time.delayedCall(5000, kill); else kill();
+  }
 
   // 每一格：劍上的火、套裝光環
   update(time) {

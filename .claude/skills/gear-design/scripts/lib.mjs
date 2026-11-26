@@ -27,7 +27,7 @@ export async function testSave(o) {
   s.appearance = { gender: o.gender || 'm', color: '深棕' };
   s.hero.level = 60;
   s.guild.rep = D.RANKS[D.RANKS.length - 1].rep;
-  s.bossKills = Object.fromEntries(D.AREAS.map((a, i) => [i, 1]));
+  s.bossKills = Object.fromEntries(D.AREAS.flatMap((a, i) => a.bosses.map((bo, b) => [`${i}-${b}`, 1])));   // 每張地圖每一段的頭目都打倒過（鍵是「地圖-段」）
   s.areaIdx = +(o.area ?? 0);
   if (o.set) W.giveSet(s, o.set, +(o.rarity ?? 4));
   return s;
